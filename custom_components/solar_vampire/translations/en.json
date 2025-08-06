@@ -1,0 +1,131 @@
+{
+  "component.name": "SolarVampire Energy Excess Sensor",
+  "component.description": "Sensor for calculating excess solar energy.",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Solar Panel Configuration",
+        "description": "Configure your solar panel parameters"
+      },
+      "devices": {
+        "title": "Device Management",
+        "description": "Manage your ESPHome devices"
+      },
+      "device_config": {
+        "title": "{action} Device: {device_name}",
+        "description": "Configure device settings. {ui_note}"
+      },
+      "main_menu": {
+        "title": "SolarVampire Configuration",
+        "description": "Choose an option to configure your SolarVampire integration"
+      },
+      "settings": {
+        "title": "Solar Panel Settings",
+        "description": "Configure your solar panel parameters"
+      },
+      "manage_devices": {
+        "title": "Device Management",
+        "description": "Manage your devices by type"
+      },
+      "device_name_type": {
+        "title": "{action} Device: {device_name}",
+        "description": "Configure device name and type"
+      },
+      "device_selection": {
+        "title": "Device Selection: {device_name}",
+        "description": "Select entities for {device_type}"
+      },
+      "device_basic_settings": {
+        "title": "Basic Settings: {device_name}",
+        "description": "Configure basic settings for this device"
+      },
+      "device_schedule": {
+        "title": "Schedule: {device_name}",
+        "description": "Configure schedule for this device"
+      },
+      "temperature_compensation": {
+        "title": "Temperature Compensation",
+        "description": "Configure temperature compensation for solar panels"
+      }
+    },
+    "error": {
+      "invalid_start_time": "Invalid start time format",
+      "invalid_end_time": "Invalid end time format",
+      "no_devices": "No devices found. Click Submit to return to the main menu.",
+      "voc_equal_to_vmp": "Voc cannot equal Vmp. Voc should typically be 15-25% higher than Vmp.",
+      "invalid_panel_count": "Invalid panel count",
+      "invalid_vmp": "Invalid Vmp value",
+      "invalid_imp": "Invalid Imp value",
+      "invalid_values": "Invalid values",
+      "device_name_required": "Device name is required",
+      "invalid_priority": "Invalid priority",
+      "invalid_min_power": "Invalid minimum power",
+      "invalid_time_format": "Invalid time format",
+      "invalid_voc_coefficient": "Invalid Voc coefficient",
+      "invalid_pmax_coefficient": "Invalid Pmax coefficient",
+      "temperature_sensor_required": "Temperature sensor is required"
+    },
+    "field": {
+      "temperature_compensation_enabled": "Enable Temperature Compensation",
+      "temperature_sensor": "Temperature Sensor",
+      "temp_coefficient_voc": "Voc Temperature Coefficient (%/°C)",
+      "temp_coefficient_pmax": "Pmax Temperature Coefficient (%/°C)",
+      "curve_factor_k": "I-V Curve Factor (k)",
+      "efficiency_correction_factor": "Efficiency Correction Factor",
+      "min_inverter_voltage": "Minimum Inverter Voltage (V)",
+      "pv_power": "PV Power",
+      "pv_voltage": "PV Voltage",
+      "consumption": "Consumption",
+      "vmp": "Maximum Power Voltage (Vmp)",
+      "imp": "Maximum Power Current (Imp)",
+      "voc": "Open Circuit Voltage (Voc)",
+      "isc": "Short Circuit Current (Isc)",
+      "panel_count": "Panel Count",
+      "panel_configuration": "Panel Configuration",
+      "device_name": "Device Name",
+      "device_type": "Device Type",
+      "esphome_relay_entity": "ESPHome Relay Entity",
+      "esphome_mode_select_entity": "ESPHome Mode Select Entity",
+      "auto_control_enabled": "Enable Auto Control",
+      "min_excess_power": "Minimum Excess Power",
+      "device_priority": "Device Priority",
+      "schedule_enabled": "Enable Schedule",
+      "start_time": "Start Time",
+      "end_time": "End Time",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "sunday": "Sunday"
+    },
+    "selector": {
+      "panel_configuration": {
+        "options": {
+          "series": "Series",
+          "parallel": "Parallel",
+          "parallel-series": "Parallel-Series"
+        }
+      },
+      "device_type": {
+        "options": {
+          "standard": "Standard Switch/Light (On/Off only)",
+          "custom": "Custom ESPHome Relay (On/Off/Proportional)"
+        }
+      },
+      "action": {
+        "options": {
+          "add": "Add Device",
+          "edit": "Edit",
+          "remove": "Remove",
+          "finish": "Finish Configuration",
+          "settings": "Settings",
+          "add_device": "Add Device",
+          "manage_devices": "Manage Devices",
+          "back": "Back to Main Menu"
+        }
+      }
+    }
+  }
+}

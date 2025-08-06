@@ -1,0 +1,30 @@
+type: entities
+entities:
+  - entity: sensor.solarvampire_excess_1
+    name: Untapped Potential (W)
+  - entity: sensor.solarvampire_max_power_1
+    name: Max Power (W)
+  - entity: sensor.solarvampire_current_max_power_1
+    name: Current Max Power (W)
+  - entity: sensor.solarvampire_usage_percent_1
+    name: PV Usage (%)
+  - type: attribute
+    entity: sensor.solarvampire_excess_1
+    name: PV Power (W)
+    attribute: pv_power
+  - type: attribute
+    entity: sensor.solarvampire_excess_1
+    name: PV Voltage (V)
+    attribute: pv_voltage
+  - type: attribute
+    entity: sensor.solarvampire_excess_1
+    name: Consumption (W)
+    attribute: consumption
+  - type: attribute
+    entity: sensor.solarvampire_excess_1
+    name: Excess Possible
+    attribute: excess_possible
+  - type: attribute
+    entity: sensor.solarvampire_excess_1
+    name: Panel Configuration
+    attribute: panel_configuration

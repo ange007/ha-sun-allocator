@@ -1,0 +1,36 @@
+# Python bytecode and cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python/
+
+# Virtual environment
+venv/
+.venv/
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*~
+.#*
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Home Assistant specific files
+# Configuration files that might contain sensitive data or be specific to your setup
+configuration.yaml
+secrets.yaml
+# Database files
+home-assistant_v2.db
+home-assistant_v2.db-wal
+home-assistant_v2.db-shm
+# Log files
+home-assistant.log
+# Custom component specific cache/data
+custom_components/*/cache/
+custom_components/*/data/

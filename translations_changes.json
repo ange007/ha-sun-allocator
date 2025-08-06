@@ -1,0 +1,34 @@
+{
+  "config": {
+    "step": {
+      "main_menu": {
+        "title": "SolarVampire Configuration",
+        "description": "Choose an option to configure your SolarVampire integration"
+      },
+      "settings": {
+        "title": "Solar Panel Settings",
+        "description": "Configure your solar panel parameters"
+      },
+      "manage_devices": {
+        "title": "Device Management",
+        "description": "Manage your devices by type"
+      },
+      "device_name_type": {
+        "title": "{action} Device: {device_name}",
+        "description": "Configure device name and type"
+      },
+      "device_selection": {
+        "title": "Device Selection: {device_name}",
+        "description": "Select entities for {device_type}"
+      },
+      "device_basic_settings": {
+        "title": "Basic Settings: {device_name}",
+        "description": "Configure basic settings for this device"
+      },
+      "device_schedule": {
+        "title": "Schedule: {device_name}",
+        "description": "Configure schedule for this device"
+      }
+    }
+  }
+}

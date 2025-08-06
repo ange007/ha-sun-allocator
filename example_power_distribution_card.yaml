@@ -1,0 +1,70 @@
+title: Solar Vampire Power Distribution
+type: vertical-stack
+cards:
+  - type: entities
+    title: Power Distribution Overview
+    entities:
+      - entity: sensor.solarvampire_power_distribution
+        name: Total Allocated Power
+        secondary_info: last-changed
+      - type: attribute
+        entity: sensor.solarvampire_power_distribution
+        attribute: total_power
+        name: Total Available Power
+      - type: attribute
+        entity: sensor.solarvampire_power_distribution
+        attribute: remaining_power
+        name: Remaining Power
+      - type: attribute
+        entity: sensor.solarvampire_power_distribution
+        attribute: allocated_power
+        name: Allocated Power
+  
+  - type: custom:bar-card
+    title: Power Allocation
+    entity: sensor.solarvampire_power_distribution
+    positions:
+      icon: outside
+      indicator: 'off'
+      name: inside
+      value: inside
+    severity:
+      - color: '#00ba47'
+        value: 0
+      - color: '#f39c12'
+        value: 50
+      - color: '#d35400'
+        value: 80
+    max: 500
+    min: 0
+    unit_of_measurement: W
+    
+  - type: custom:apexcharts-card
+    title: Device Power Allocation
+    graph_span: 24h
+    header:
+      show: true
+      title: Device Power Allocation
+      show_states: true
+    series:
+      # Replace these with your actual device power sensors
+      - entity: sensor.solarvampire_device_power_device1
+        name: Water Heater
+      - entity: sensor.solarvampire_device_power_device2
+        name: Space Heater
+      - entity: sensor.solarvampire_device_power_device3
+        name: Pool Pump
+        
+  - type: custom:mini-graph-card
+    title: Power Distribution History
+    entities:
+      - entity: sensor.solarvampire_power_distribution
+        name: Allocated Power
+      - entity: sensor.solarvampire_excess_1
+        name: Available Power
+    hours_to_show: 24
+    points_per_hour: 4
+    line_width: 2
+    show:
+      fill: true
+      legend: true

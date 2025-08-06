@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+  <!-- Solar panel -->
+  <rect x="2" y="8" width="20" height="12" rx="1" fill="#1976d2" stroke="#0d47a1" stroke-width="0.5"/>
+  <g stroke="#0d47a1" stroke-width="0.3" fill="none">
+    <line x1="6" y1="8" x2="6" y2="20"/>
+    <line x1="10" y1="8" x2="10" y2="20"/>
+    <line x1="14" y1="8" x2="14" y2="20"/>
+    <line x1="18" y1="8" x2="18" y2="20"/>
+    <line x1="2" y1="12" x2="22" y2="12"/>
+    <line x1="2" y1="16" x2="22" y2="16"/>
+  </g>
+  
+  <!-- Sun -->
+  <circle cx="12" cy="4" r="2" fill="#ffc107"/>
+  <g stroke="#ffc107" stroke-width="1" fill="none">
+    <line x1="12" y1="0.5" x2="12" y2="1.5"/>
+    <line x1="12" y1="6.5" x2="12" y2="7.5"/>
+    <line x1="8.5" y1="4" x2="9.5" y2="4"/>
+    <line x1="14.5" y1="4" x2="15.5" y2="4"/>
+    <line x1="9.76" y1="1.76" x2="10.47" y2="2.47"/>
+    <line x1="13.53" y1="5.53" x2="14.24" y2="6.24"/>
+    <line x1="14.24" y1="1.76" x2="13.53" y2="2.47"/>
+    <line x1="10.47" y1="5.53" x2="9.76" y2="6.24"/>
+  </g>
+  
+  <!-- Lightning bolt (energy) -->
+  <path d="M16 21L12 15H15L13 9L17 15H14L16 21Z" fill="#ff9800" stroke="#f57c00" stroke-width="0.5"/>
+</svg>
