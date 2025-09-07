@@ -1,0 +1,35 @@
+{
+  "domain": "sun_allocator",
+  "name": "SunAllocator Energy Excess Sensor",
+  "version": "1.0.0",
+  "documentation": "https://github.com/ange007/ha-sun-allocator",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@ange007"],
+  "config_flow": true,
+  "iot_class": "local_polling",
+  "integration_type": "hub",
+  "icon": "mdi:solar-power",
+  "suggested_lovelace_cards": [
+    {
+      "type": "gauge",
+      "entity": "sensor.sunallocator_excess_{{ entry_id }}",
+      "name": "Надлишок сонячної енергії (Вт)",
+      "min": 0,
+      "max": 1000,
+      "severity": {"green": 0, "yellow": 100, "red": 500}
+    },
+    {
+      "type": "entities",
+      "entities": [
+        {"entity": "sensor.sunallocator_excess_{{ entry_id }}", "name": "Надлишок (Вт)"},
+        {"attribute": "pv_power", "entity": "sensor.sunallocator_excess_{{ entry_id }}", "name": "Потужність PV (Вт)"},
+        {"attribute": "pv_voltage", "entity": "sensor.sunallocator_excess_{{ entry_id }}", "name": "Напруга PV (В)"},
+        {"attribute": "pmax", "entity": "sensor.sunallocator_excess_{{ entry_id }}", "name": "Максимальна потужність (Вт)"},
+        {"attribute": "usage_percent", "entity": "sensor.sunallocator_excess_{{ entry_id }}", "name": "Використання PV (%)"}
+      ]
+    }
+  ]
+}
+
+

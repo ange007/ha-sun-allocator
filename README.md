@@ -1,4 +1,6 @@
-# SolarVampire Home Assistant Custom Component
+# SunAllocator Home Assistant Custom Component
+
+![logo](/custom_components/sun_allocator/icons/logo.png)
 
 **Features:**
 - Calculates untapped potential solar energy (excess) and % usage.
@@ -12,16 +14,16 @@
 
 ## Installation
 
-1. Copy `custom_components/solarvampire` to your `config/custom_components` folder.
+1. Copy `custom_components/sun_allocator` to your `config/custom_components` folder.
 2. Restart Home Assistant.
 3. Go to **Settings → Devices & Services**.
 4. Click **"+ ADD INTEGRATION"**.
-5. Search for **"SolarVampire"** and select it.
+5. Search for **"SunAllocator"** and select it.
 6. Follow the configuration wizard to set up your solar panels and devices.
 
 ## Configuration
 
-SolarVampire uses a **graphical configuration interface** - no YAML editing required! The setup process is divided into several steps:
+SunAllocator uses a **graphical configuration interface** - no YAML editing required! The setup process is divided into several steps:
 
 ### Step 1: Solar Panel Configuration
 
@@ -44,14 +46,14 @@ Add and configure ESPHome devices to utilize excess solar energy:
 - **Configure device types**: No Device, Standard Switch/Light, or Custom ESPHome Relay
 - **Set priorities** to control which devices get power first
 - **Enable scheduling** for time-based control
-- **Configure auto-control** with minimum power thresholds
+- **Configure auto-control** with expected load limits (Min/Max Expected Load)
 
 ### Managing Your Configuration
 
 After initial setup, you can modify your configuration:
 
 1. Go to **Settings → Devices & Services**
-2. Find your **SolarVampire** integration
+2. Find your **SunAllocator** integration
 3. Click the **"CONFIGURE"** button
 4. Choose from the main menu:
    - **Settings**: Modify solar panel configuration and MPPT parameters
@@ -60,12 +62,12 @@ After initial setup, you can modify your configuration:
 
 ## Usage
 
-- Use `sensor.solarvampire_excess_1` in Lovelace gauge or automations. This sensor shows the untapped potential power - how many additional watts could be extracted from the panel at the current voltage.
+- Use `sensor.sunallocator_excess_1` in Lovelace gauge or automations. This sensor shows the untapped potential power - how many additional watts could be extracted from the panel at the current voltage.
 - Other available sensors: 
-  - `sensor.solarvampire_max_power_1`: Rated maximum power of the panel (Vmp × Imp × panel_count)
-  - `sensor.solarvampire_usage_percent_1`: Current power usage as percentage of maximum power
-  - `sensor.solarvampire_current_max_power_1`: Maximum possible power at current voltage (based on MPPT principles)
-- Attributes of `sensor.solarvampire_excess_1`: 
+  - `sensor.sunallocator_max_power_1`: Rated maximum power of the panel (Vmp × Imp × panel_count)
+  - `sensor.sunallocator_usage_percent_1`: Current power usage as percentage of maximum power
+  - `sensor.sunallocator_current_max_power_1`: Maximum possible power at current voltage (based on MPPT principles)
+- Attributes of `sensor.sunallocator_excess_1`: 
   - `pv_power`: Current power from the solar panel
   - `pv_voltage`: Current voltage from the solar panel
   - `consumption`: Current power consumption
@@ -90,7 +92,7 @@ Choosing the correct configuration is important for accurate power calculations,
 
 ### Excess Power Calculation
 
-The `solarvampire_excess_1` sensor calculates the untapped potential power that could be extracted from your solar panel. It is calculated as:
+The `sunallocator_excess_1` sensor calculates the untapped potential power that could be extracted from your solar panel. It is calculated as:
 
 ```
 Excess = Maximum Possible Power at Current Voltage - Current Power Output
@@ -140,7 +142,7 @@ The `current_max_power` value estimates the maximum power that could be extracte
 
 #### Technical Details of the MPPT Algorithm
 
-SolarVampire uses an advanced model to estimate maximum possible power at any voltage:
+SunAllocator uses an advanced model to estimate maximum possible power at any voltage:
 
 1. **Relative Voltage Calculation**:
    ```
@@ -176,7 +178,7 @@ automation:
   - alias: "Enable relay on excess"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.solarvampire_excess_1
+        entity_id: sensor.sunallocator_excess_1
         above: 50
     action:
       - service: switch.turn_on
@@ -191,7 +193,7 @@ automation:
   - alias: "Enable relay on high usage"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.solarvampire_usage_percent_1
+        entity_id: sensor.sunallocator_usage_percent_1
         above: 90
     action:
       - service: switch.turn_on
@@ -210,7 +212,7 @@ automation:
       - platform: template
         value_template: >
           {% set current_power = states('sensor.pv_power_1') | float(0) %}
-          {% set max_power = states('sensor.solarvampire_current_max_power_1') | float(0) %}
+          {% set max_power = states('sensor.sunallocator_current_max_power_1') | float(0) %}
           {% set power_difference = max_power - current_power %}
           {{ power_difference > 100 }}
     action:
@@ -227,14 +229,14 @@ Here's an example of a Lovelace card that displays the current max power and eff
 type: entities
 title: Solar Panel Performance
 entities:
-  - entity: sensor.solarvampire_current_max_power_1
+  - entity: sensor.sunallocator_current_max_power_1
     name: Maximum Possible Power (W)
   - entity: sensor.pv_power_1
     name: Current Power (W)
-  - entity: sensor.solarvampire_usage_percent_1
+  - entity: sensor.sunallocator_usage_percent_1
     name: Efficiency (%)
   - type: custom:bar-card
-    entity: sensor.solarvampire_usage_percent_1
+    entity: sensor.sunallocator_usage_percent_1
     title: Panel Efficiency
     max: 100
     severity:
@@ -245,11 +247,11 @@ entities:
 
 ## ESPHome Integration
 
-SolarVampire can directly control multiple ESPHome devices to utilize excess solar energy. This integration allows you to automatically adjust the power of solid-state relays based on the available untapped potential, with priority-based power distribution.
+SunAllocator can directly control multiple ESPHome devices to utilize excess solar energy. This integration allows you to automatically adjust the power of solid-state relays based on the available untapped potential, with priority-based power distribution.
 
 ### Multiple Device Support
 
-SolarVampire now supports configuring and controlling multiple ESPHome devices. Key features include:
+SunAllocator now supports configuring and controlling multiple ESPHome devices. Key features include:
 
 - **Add multiple devices**: Configure any number of ESPHome devices to utilize excess solar energy
 - **Priority-based power distribution**: Assign priorities to devices to control which ones get power first
@@ -258,7 +260,7 @@ SolarVampire now supports configuring and controlling multiple ESPHome devices. 
 
 ### Configuration
 
-When setting up the SolarVampire integration, you'll first configure your solar panel settings, then you can add and manage your ESPHome devices:
+When setting up the SunAllocator integration, you'll first configure your solar panel settings, then you can add and manage your ESPHome devices:
 
 1. **Solar Panel Configuration**:
    - Configure your solar panel sensors, voltage/current parameters, etc.
@@ -270,8 +272,9 @@ When setting up the SolarVampire integration, you'll first configure your solar 
      - **Device Type**: Choose between No Device, Standard Switch/Light, or Custom ESPHome Relay
      - **ESPHome Relay Entity** (optional): The light entity that controls the solid-state relay
      - **ESPHome Mode Select Entity** (optional): The select entity that controls the operation mode
-     - **Auto Control Enabled**: Whether SolarVampire should automatically control this device
-     - **Minimum Excess Power**: The minimum excess power required to activate this device
+     - **Auto Control Enabled**: Whether SunAllocator should automatically control this device
+     - **Min Expected Load (W)**: Device’s useful minimum. Below this threshold the device stays off (with hysteresis)
+     - **Max Expected Load (W)**: Device’s physical/logical maximum; 100% in proportional mode corresponds to this value and allocation is capped by it
      - **Priority**: A value from 1-100 that determines which devices get power first (higher = higher priority)
      - **Schedule Enabled**: Whether to enable time-based scheduling for this device
      - **Start Time**: The time when the device should start operating (if scheduling is enabled)
@@ -282,7 +285,7 @@ When setting up the SolarVampire integration, you'll first configure your solar 
 
 ### Device Types
 
-SolarVampire supports three types of devices:
+SunAllocator supports three types of devices:
 
 1. **No Device (Placeholder)**: A placeholder entry with no actual control entities. Useful for planning or testing.
 
@@ -315,9 +318,9 @@ The scheduling feature supports overnight schedules (when end time is earlier th
 
 ### Services
 
-SolarVampire provides two services to control ESPHome devices:
+SunAllocator provides two services to control ESPHome devices:
 
-#### `solarvampire.set_relay_mode`
+#### `sun_allocator.set_relay_mode`
 
 Sets the operation mode of one or more relays.
 
@@ -332,7 +335,7 @@ Examples for setting relay mode:
 
 For a specific entity:
 ```yaml
-service: solarvampire.set_relay_mode
+service: sun_allocator.set_relay_mode
 data:
   entity_id: select.relay_mode_1
   mode: Proportional
@@ -340,7 +343,7 @@ data:
 
 For a specific device:
 ```yaml
-service: solarvampire.set_relay_mode
+service: sun_allocator.set_relay_mode
 data:
   device_id: 3f7b2a1c-e8d9-4f5a-b6c7-8d9e0f1a2b3c
   mode: On
@@ -348,12 +351,12 @@ data:
 
 For all devices:
 ```yaml
-service: solarvampire.set_relay_mode
+service: sun_allocator.set_relay_mode
 data:
   mode: Off
 ```
 
-#### `solarvampire.set_relay_power`
+#### `sun_allocator.set_relay_power`
 
 Sets the power level of one or more relays.
 
@@ -368,15 +371,15 @@ Examples for setting relay power:
 
 For a specific entity:
 ```yaml
-service: solarvampire.set_relay_power
+service: sun_allocator.set_relay_power
 data:
-  entity_id: light.solar_vampire_relay_1
+  entity_id: light.sunallocator_relay_1
   power: 75
 ```
 
 For a specific device:
 ```yaml
-service: solarvampire.set_relay_power
+service: sun_allocator.set_relay_power
 data:
   device_id: 3f7b2a1c-e8d9-4f5a-b6c7-8d9e0f1a2b3c
   power: 50
@@ -384,14 +387,14 @@ data:
 
 For all devices:
 ```yaml
-service: solarvampire.set_relay_power
+service: sun_allocator.set_relay_power
 data:
   power: 100
 ```
 
 ### Priority-Based Power Distribution
 
-When multiple devices are configured with auto-control enabled, SolarVampire distributes the available excess power based on device priorities:
+When multiple devices are configured with auto-control enabled, SunAllocator distributes the available excess power based on device priorities:
 
 1. Devices are sorted by priority (higher priority first)
 2. The device with the highest priority gets power first
@@ -407,11 +410,11 @@ This allows you to create a hierarchy of loads. For example:
 
 ### Automatic Control
 
-When auto-control is enabled for a device, SolarVampire will automatically adjust its relay power based on the available excess power:
+When auto-control is enabled (Variant A), SunAllocator adjusts each device using expected load limits and hysteresis:
 
-1. If the excess power is below the device's minimum threshold, the relay is turned off
-2. If the excess power is above the minimum threshold, the relay power is set proportionally
-3. The power level is scaled so that the minimum threshold corresponds to 5% power, and 3 times the minimum threshold corresponds to 100% power
+1. Effective start threshold: the device becomes active when available excess exceeds `max(min_expected_w, Default Min Start (W))` with hysteresis. It turns on above `+H/2` and turns off below `−H/2` around that threshold.
+2. Proportional devices (Custom, mode = Proportional): target power percentage is scaled linearly to the device capability: `target% = clamp(5..90, 100 × available_excess / max_expected_w)`. Allocated watts are capped by `max_expected_w`.
+3. On/Off devices (Standard or mode = On): the device turns ON when active, OFF otherwise. Allocation is capped by `max_expected_w` (if set), or by a small internal fallback cap. Percent actual is reflected as 100% when ON, 0% when OFF.
 
 ### Behavior with Optional Entities
 
@@ -435,12 +438,12 @@ This flexibility allows you to create placeholder devices or devices that only u
 
 ### ESPHome Component
 
-To use this integration, you need ESPHome devices with solid-state relays and mode select components. You can use the provided `solar_vampire_relay.yaml` configuration as a starting point:
+To use this integration, you need ESPHome devices with solid-state relays and mode select components. You can use the provided `sun_allocator_relay.yaml` configuration as a starting point:
 
 ```yaml
 # Basic ESPHome configuration
 esphome:
-  name: solar_vampire_relay
+  name: sun_allocator_relay
   platform: ESP8266
   board: d1_mini
 
@@ -464,7 +467,7 @@ output:
 # Define a custom PWM light to control the relay
 light:
   - platform: monochromatic
-    name: "Solar Vampire Relay"
+    name: "Sun Allocator Relay"
     output: relay_output
     id: relay_light
     restore_mode: ALWAYS_OFF
@@ -484,19 +487,19 @@ select:
 
 ### Example Dashboard
 
-Here's an example of a Lovelace card that displays the SolarVampire data and controls for multiple ESPHome devices:
+Here's an example of a Lovelace card that displays the SunAllocator data and controls for multiple ESPHome devices:
 
 ```yaml
 type: vertical-stack
 cards:
   - type: entities
-    title: Solar Vampire Status
+    title: SunAllocator Status
     entities:
-      - entity: sensor.solarvampire_excess_1
+      - entity: sensor.sunallocator_excess_1
         name: Untapped Potential (W)
-      - entity: sensor.solarvampire_current_max_power_1
+      - entity: sensor.sunallocator_current_max_power_1
         name: Current Max Power (W)
-      - entity: sensor.solarvampire_usage_percent_1
+      - entity: sensor.sunallocator_usage_percent_1
         name: PV Usage (%)
   
   - type: entities
@@ -525,7 +528,7 @@ cards:
   
   - type: gauge
     name: Untapped Potential
-    entity: sensor.solarvampire_excess_1
+    entity: sensor.sunallocator_excess_1
     min: 0
     max: 500
     severity:
@@ -546,7 +549,7 @@ automation:
         event: sunrise
         offset: "01:00:00"
     action:
-      - service: solarvampire.set_relay_mode
+      - service: sun_allocator.set_relay_mode
         data:
           device_id: 3f7b2a1c-e8d9-4f5a-b6c7-8d9e0f1a2b3c
           mode: Proportional
@@ -557,7 +560,7 @@ automation:
         event: sunset
         offset: "-00:30:00"
     action:
-      - service: solarvampire.set_relay_mode
+      - service: sun_allocator.set_relay_mode
         data:
           device_id: 3f7b2a1c-e8d9-4f5a-b6c7-8d9e0f1a2b3c
           mode: Off
@@ -565,16 +568,16 @@ automation:
 
 ### Power Distribution Visualization
 
-SolarVampire provides sensors for visualizing how power is distributed among devices:
+SunAllocator provides sensors for visualizing how power is distributed among devices:
 
 #### Power Distribution Sensors
 
-1. **Main Power Distribution Sensor**: `sensor.solarvampire_power_distribution`
+1. **Main Power Distribution Sensor**: `sensor.sunallocator_power_distribution_1`
    - Shows the total allocated power across all devices
    - Provides attributes for total power, remaining power, and allocation per device
    - Updates automatically when power distribution changes
 
-2. **Device Power Allocation Sensors**: `sensor.solarvampire_device_power_[device_id]`
+2. **Device Power Allocation Sensors**: `sensor.sunallocator_device_power_[device_id]`
    - One sensor is created for each device
    - Shows the power allocated to that specific device
    - Updates automatically when power allocation changes
@@ -584,31 +587,31 @@ SolarVampire provides sensors for visualizing how power is distributed among dev
 You can create various visualizations using these sensors. Here's an example of a comprehensive power distribution dashboard:
 
 ```yaml
-title: Solar Vampire Power Distribution
+title: Sun Allocator Power Distribution
 type: vertical-stack
 cards:
   - type: entities
     title: Power Distribution Overview
     entities:
-      - entity: sensor.solarvampire_power_distribution
+      - entity: sensor.sunallocator_power_distribution_1
         name: Total Allocated Power
         secondary_info: last-changed
       - type: attribute
-        entity: sensor.solarvampire_power_distribution
+        entity: sensor.sunallocator_power_distribution_1
         attribute: total_power
         name: Total Available Power
       - type: attribute
-        entity: sensor.solarvampire_power_distribution
+        entity: sensor.sunallocator_power_distribution_1
         attribute: remaining_power
         name: Remaining Power
       - type: attribute
-        entity: sensor.solarvampire_power_distribution
+        entity: sensor.sunallocator_power_distribution_1
         attribute: allocated_power
         name: Allocated Power
   
   - type: custom:bar-card
     title: Power Allocation
-    entity: sensor.solarvampire_power_distribution
+    entity: sensor.sunallocator_power_distribution_1
     positions:
       icon: outside
       indicator: 'off'
@@ -634,11 +637,11 @@ cards:
       show_states: true
     series:
       # Replace these with your actual device power sensors
-      - entity: sensor.solarvampire_device_power_device1
+      - entity: sensor.sunallocator_device_power_device1
         name: Water Heater
-      - entity: sensor.solarvampire_device_power_device2
+      - entity: sensor.sunallocator_device_power_device2
         name: Space Heater
-      - entity: sensor.solarvampire_device_power_device3
+      - entity: sensor.sunallocator_device_power_device3
         name: Pool Pump
 ```
 
@@ -652,9 +655,9 @@ You can also track power distribution over time using the history graph card:
 type: custom:mini-graph-card
 title: Power Distribution History
 entities:
-  - entity: sensor.solarvampire_power_distribution
+  - entity: sensor.sunallocator_power_distribution_1
     name: Allocated Power
-  - entity: sensor.solarvampire_excess_1
+  - entity: sensor.sunallocator_excess_1
     name: Available Power
 hours_to_show: 24
 points_per_hour: 4

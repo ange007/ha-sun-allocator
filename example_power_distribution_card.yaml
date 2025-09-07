@@ -1,28 +1,28 @@
-title: Solar Vampire Power Distribution
+title: SunAllocator Power Distribution
 type: vertical-stack
 cards:
   - type: entities
     title: Power Distribution Overview
     entities:
-      - entity: sensor.solarvampire_power_distribution
+      - entity: sensor.sunallocator_power_distribution_1
         name: Total Allocated Power
         secondary_info: last-changed
       - type: attribute
-        entity: sensor.solarvampire_power_distribution
+        entity: sensor.sunallocator_power_distribution_1
         attribute: total_power
         name: Total Available Power
       - type: attribute
-        entity: sensor.solarvampire_power_distribution
+        entity: sensor.sunallocator_power_distribution_1
         attribute: remaining_power
         name: Remaining Power
       - type: attribute
-        entity: sensor.solarvampire_power_distribution
+        entity: sensor.sunallocator_power_distribution_1
         attribute: allocated_power
         name: Allocated Power
   
   - type: custom:bar-card
     title: Power Allocation
-    entity: sensor.solarvampire_power_distribution
+    entity: sensor.sunallocator_power_distribution_1
     positions:
       icon: outside
       indicator: 'off'
@@ -48,19 +48,19 @@ cards:
       show_states: true
     series:
       # Replace these with your actual device power sensors
-      - entity: sensor.solarvampire_device_power_device1
+      - entity: sensor.sunallocator_device_power_device1
         name: Water Heater
-      - entity: sensor.solarvampire_device_power_device2
+      - entity: sensor.sunallocator_device_power_device2
         name: Space Heater
-      - entity: sensor.solarvampire_device_power_device3
+      - entity: sensor.sunallocator_device_power_device3
         name: Pool Pump
         
   - type: custom:mini-graph-card
     title: Power Distribution History
     entities:
-      - entity: sensor.solarvampire_power_distribution
+      - entity: sensor.sunallocator_power_distribution_1
         name: Allocated Power
-      - entity: sensor.solarvampire_excess_1
+      - entity: sensor.sunallocator_excess_1
         name: Available Power
     hours_to_show: 24
     points_per_hour: 4

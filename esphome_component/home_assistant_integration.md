@@ -1,10 +1,10 @@
 # Home Assistant Integration Guide
 
-This guide explains how to integrate the Solar Vampire Relay ESPHome component with Home Assistant and set up automations to make the most of your excess solar energy.
+This guide explains how to integrate the Sun Allocator Relay ESPHome component with Home Assistant and set up automations to make the most of your excess solar energy.
 
 ## Basic Integration
 
-After flashing your ESP device with the Solar Vampire Relay firmware, it will automatically be discovered by Home Assistant if you have the ESPHome integration installed. If not, you can add it manually:
+After flashing your ESP device with the Sun Allocator Relay firmware, it will automatically be discovered by Home Assistant if you have the ESPHome integration installed. If not, you can add it manually:
 
 1. Go to **Settings** > **Devices & Services**
 2. Click **+ Add Integration**
@@ -16,13 +16,13 @@ After flashing your ESP device with the Solar Vampire Relay firmware, it will au
 
 Once integrated, you'll have the following entities in Home Assistant:
 
-- **Light Entity**: light.solar_vampire_relay - Used to manually control the relay
-- **Select Entity**: select.relay_mode - Choose between Off, On, and Proportional modes
+- **Light Entity**: light.sun_allocator_relay — manual/proportional brightness control
+- **Select Entity**: select.sunallocator_mode — Off / On / Proportional
 - **Sensor Entities**:
-  - sensor.untapped_potential - Shows the current untapped potential from SolarVampire
-  - sensor.max_power - Shows the maximum power from SolarVampire
-  - sensor.untapped_percentage - Shows the percentage of untapped potential
-- **Text Sensor**: 	ext_sensor.relay_status - Shows the current status and power level
+  - sensor.untapped_potential — Untapped potential from SunAllocator
+  - sensor.max_power — Maximum power from SunAllocator
+  - sensor.untapped_percentage — Percentage of untapped potential
+- **Text Sensor**: sensor.relay_status — Current status and power level
 
 ## Dashboard Integration
 
@@ -32,10 +32,10 @@ Add this card to your dashboard for basic control:
 
 `yaml
 type: entities
-title: Solar Vampire Relay
+title: Sun Allocator Relay
 entities:
-  - entity: select.relay_mode
-  - entity: light.solar_vampire_relay
+  - entity: select.sunallocator_mode
+  - entity: light.sun_allocator_relay
   - entity: sensor.untapped_potential
   - entity: sensor.untapped_percentage
   - entity: text_sensor.relay_status
@@ -49,10 +49,10 @@ For a more comprehensive view, use this card:
 type: vertical-stack
 cards:
   - type: entities
-    title: Solar Vampire Relay Control
+    title: Sun Allocator Relay Control
     entities:
       - entity: select.relay_mode
-      - entity: light.solar_vampire_relay
+      - entity: light.sun_allocator_relay
       - entity: text_sensor.relay_status
   
   - type: history-graph
@@ -175,7 +175,7 @@ automation:
       - service: notify.mobile_app
         data:
           title: "Safety Shutdown Activated"
-          message: "Solar Vampire Relay turned off due to high temperature ({{ states('sensor.load_temperature') }}�C)"
+          message: "Sun Allocator Relay turned off due to high temperature ({{ states('sensor.load_temperature') }}�C)"
 `
 
 ## Scripts
@@ -184,8 +184,8 @@ automation:
 
 `yaml
 script:
-  solar_vampire_auto_mode:
-    alias: "Solar Vampire Auto Mode"
+  sun_allocator_auto_mode:
+    alias: "Sun Allocator Auto Mode"
     sequence:
       - variables:
           current_hour: "{{ now().hour }}"
@@ -218,12 +218,12 @@ script:
 
 ## Energy Dashboard Integration
 
-To track the energy used by your Solar Vampire Relay, you can create a virtual power sensor:
+To track the energy used by your Sun Allocator Relay, you can create a virtual power sensor:
 
 `yaml
 template:
   - sensor:
-      - name: "Solar Vampire Relay Power"
+      - name: "Sun Allocator Relay Power"
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
@@ -255,11 +255,11 @@ If the relay is not responding to commands:
 3. Test the relay with a simple on/off command
 4. Check the ESPHome logs for any error messages related to the relay output
 
-### SolarVampire Sensors Not Updating
+### SunAllocator Sensors Not Updating
 
-If the SolarVampire sensor values are not updating:
+If the SunAllocator sensor values are not updating:
 
-1. Verify that the SolarVampire component is properly set up in Home Assistant
+1. Verify that the SunAllocator component is properly set up in Home Assistant
 2. Check that the sensor entities exist and are providing data
 3. Restart Home Assistant
-4. Check the Home Assistant logs for any error messages related to the SolarVampire component
+4. Check the Home Assistant logs for any error messages related to the SunAllocator component

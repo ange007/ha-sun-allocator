@@ -1,0 +1,151 @@
+{
+  "config": {
+    "step": {
+      "main_menu": {
+        "data": {
+          "action": "Action",
+          "action": {
+            "options": {
+              "settings": "Settings",
+              "add_device": "Add Device",
+              "manage_devices": "Manage Devices"
+            }
+          }
+        }
+      },
+      "devices": {
+        "data": {
+          "id": "Device",
+          "action": "Action",
+          "action": {
+            "options": {
+              "add": "Add Device",
+              "edit": "Edit",
+              "remove": "Remove",
+              "finish": "Finish Configuration"
+            }
+          }
+        }
+      },
+      "manage_devices": {
+        "data": {
+          "id": "Device",
+          "action": "Action",
+          "action": {
+            "options": {
+              "edit": "Edit",
+              "remove": "Remove",
+              "back": "Back to Main Menu"
+            }
+          }
+        }
+      },
+      "settings": {
+        "data": {
+          "advanced_settings_enabled": "Enable Advanced Settings",
+          "battery_power_reversed": "Reverse Battery Power Values (consumption is positive, charging is negative)",
+          "temperature_compensation_enabled": "Enable Temperature Compensation",
+          "temperature_sensor": "Temperature Sensor",
+          "temp_coefficient_voc": "Voc Temperature Coefficient (%/°C)",
+          "temp_coefficient_pmax": "Pmax Temperature Coefficient (%/°C)",
+          "curve_factor_k": "I-V Curve Factor (k)",
+          "efficiency_correction_factor": "Efficiency Correction Factor",
+          "min_inverter_voltage": "Minimum Inverter Voltage (V)",
+          "pv_power": "PV Power",
+          "pv_voltage": "PV Voltage",
+          "consumption": "Consumption",
+          "battery_power": "Battery Power",
+          "vmp": "Maximum Power Voltage (Vmp)",
+          "imp": "Maximum Power Current (Imp)",
+          "voc": "Open Circuit Voltage (Voc)",
+          "isc": "Short Circuit Current (Isc)",
+          "panel_count": "Panel Count",
+          "panel_configuration": "Panel Configuration",
+          "panel_configuration": {
+            "options": {
+              "series": "Series",
+              "parallel": "Parallel",
+              "parallel-series": "Parallel-Series"
+            }
+          }
+        }
+      },
+      "device_name_type": {
+        "data": {
+          "name": "Device Name",
+          "device_type": "Device Type",
+          "device_type": {
+            "options": {
+              "standard": "Standard Switch/Light (On/Off only)",
+              "custom": "Custom ESPHome Relay (On/Off/Proportional)"
+            }
+          }
+        }
+      },
+      "device_selection": {
+        "data": {
+          "esphome_relay_entity": "ESPHome Relay Entity",
+          "esphome_mode_select_entity": "ESPHome Mode Select Entity"
+        }
+      },
+      "device_basic_settings": {
+        "data": {
+          "auto_control_enabled": "Enable Auto Control",
+          "min_expected_w": "Minimum Expected Load (W)",
+          "max_expected_w": "Maximum Expected Load (W)",
+          "priority": "Device Priority",
+          "schedule_enabled": "Enable Schedule"
+        }
+      },
+      "device_schedule": {
+        "data": {
+          "start_time": "Start Time",
+          "end_time": "End Time",
+          "monday": "Monday",
+          "tuesday": "Tuesday",
+          "wednesday": "Wednesday",
+          "thursday": "Thursday",
+          "friday": "Friday",
+          "saturday": "Saturday",
+          "sunday": "Sunday"
+        }
+      },
+      "temperature_compensation": {
+        "data": {
+          "temperature_sensor": "Temperature Sensor",
+          "temp_coefficient_voc": "Voc Temperature Coefficient (%/°C)",
+          "temp_coefficient_pmax": "Pmax Temperature Coefficient (%/°C)"
+        }
+      },
+      "advanced_settings": {
+        "data": {
+          "curve_factor_k": "I-V Curve Factor (k)",
+          "efficiency_correction_factor": "Efficiency Correction Factor",
+          "min_inverter_voltage": "Minimum Inverter Voltage (V)",
+          "ramp_up_step": "Ramp Up Step (% per tick)",
+          "ramp_down_step": "Ramp Down Step (% per tick)",
+          "ramp_deadband": "Ramp Deadband (%)",
+          "default_min_start_w": "Default Min Start (W)",
+          "hysteresis_w": "Hysteresis (W)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power_distribution": {
+        "name": "Power Distribution",
+        "state": {
+        },
+        "attributes": {
+          "total_power": "Total Available Power",
+          "remaining_power": "Remaining Power",
+          "allocated_power": "Allocated Power",
+          "allocation_w": "Allocation (W)",
+          "allocation_percent": "Allocation (%)",
+          "device_meta": "Device metadata"
+        }
+      }
+    }
+  }
+}

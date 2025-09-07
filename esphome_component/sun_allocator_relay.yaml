@@ -1,0 +1,188 @@
+# Sun Allocator Relay ESPHome Component
+# This component controls a solid-state relay based on SunAllocator sensor data
+
+# Basic ESPHome configuration
+esphome:
+  name: sun_allocator_relay
+  platform: ESP8266
+  board: d1_mini
+
+# WiFi connection
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  
+  # Enable fallback hotspot in case WiFi connection fails
+  ap:
+    ssid: "SunAllocatorRelay Fallback"
+    password: !secret fallback_password
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_encryption_key
+  on_client_disconnected:
+    then:
+      - logger.log: "API disconnected → turning relay OFF (fail-safe)"
+      - light.turn_off: relay_light
+      - select.set_option:
+          id: sv_mode_select
+          option: "Off"
+
+# Enable OTA updates
+ota:
+  password: !secret ota_password
+
+# Enable logging
+logger:
+
+# Web server for status and control
+web_server:
+  port: 80
+
+# Define the solid-state relay output (DC SSR default: fast PWM)
+output:
+  - platform: esp8266_pwm
+    id: relay_output
+    pin: D1
+    frequency: 1000 Hz  # 1 kHz PWM frequency
+  # On-board status LED (Wemos D1 mini: D4 / GPIO2, active-low)
+  - platform: gpio
+    id: sv_status_led_out
+    pin: D4
+    inverted: true
+
+# Alternative for AC SSR — use slow_pwm (uncomment to use)
+# output:
+#   - platform: slow_pwm
+#     id: relay_output
+#     pin: D1
+#     period: 1.5s
+
+# Define a custom PWM light to control the relay
+light:
+  - platform: monochromatic
+    name: "SunAllocator Relay"
+    output: relay_output
+    id: relay_light
+    restore_mode: ALWAYS_OFF  # Start with relay off
+
+# Sensors to monitor
+sensor:
+    
+    
+
+  # Actual relay output percent (from light brightness)
+  - platform: template
+    id: sv_relay_percent
+    name: "SA Relay Percent"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 2s
+    lambda: |-
+      return id(relay_light).current_values.is_on()
+        ? (id(relay_light).current_values.get_brightness() * 100.0f)
+        : 0.0f;
+
+# Switch for mode selection
+select:
+  - platform: template
+    name: "SunAllocator Mode"
+    id: sv_mode_select
+    options:
+      - "Off"
+      - "On"
+      - "Proportional"
+    initial_option: "Off"
+    optimistic: true
+    set_action:
+      then:
+        - lambda: |-
+            auto opt = id(sv_mode_select).state.c_str();
+            if (strcmp(opt, "Off") == 0) {
+              id(relay_light).turn_off();
+            } else if (strcmp(opt, "On") == 0) {
+              auto call = id(relay_light).turn_on();
+              call.set_brightness(1.0f);
+              call.perform();
+            } else if (strcmp(opt, "Proportional") == 0) {
+              // Proportional: turn on; HA SunAllocator will set brightness
+              auto call = id(relay_light).turn_on();
+              call.perform();
+            }
+
+# Script to update relay based on mode and untapped potential
+script:
+  - id: update_relay
+    then:
+      - lambda: |-
+          std::string mode = id(sv_mode_select).state;
+          if (mode == "Off") {
+            // Turn off relay
+            id(relay_light).turn_off();
+          } else if (mode == "On") {
+            // Turn on relay at full power
+            id(relay_light).turn_on();
+            id(relay_light).set_brightness(1.0);
+          } else if (mode == "Proportional") {
+            // Proportional mode: brightness is controlled by Home Assistant integration
+            // No local action here to avoid conflicts
+          }
+  - id: sv_led_pulse
+    then:
+      - output.turn_on: sv_status_led_out
+      - delay: 200ms
+      - output.turn_off: sv_status_led_out
+
+# Automation: LED status + periodic proportional update
+interval:
+  # Fast blink every 2s when in Proportional mode and power > 0%
+  - interval: 2s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(sv_mode_select).state == "Proportional" && id(relay_light).current_values.get_brightness() > 0.0f;'
+          then:
+            - script.execute: sv_led_pulse
+
+  # Solid ON when enabled but not actively outputting proportional power (>0%)
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: |
+              bool prop_active = (id(sv_mode_select).state == "Proportional") && (id(relay_light).current_values.get_brightness() > 0.0f);
+              bool enabled = (id(sv_mode_select).state == "On") || (id(sv_mode_select).state == "Proportional");
+              return enabled && !prop_active;
+          then:
+            - output.turn_on: sv_status_led_out
+          else:
+            - output.turn_off: sv_status_led_out
+
+  # Heartbeat: pulse once every 10 seconds when fully Off
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(sv_mode_select).state == "Off";'
+          then:
+            - script.execute: sv_led_pulse
+
+# Text sensor to display current status
+text_sensor:
+  - platform: template
+    name: "Relay Status"
+    lambda: |-
+      std::string mode = id(sv_mode_select).state;
+      if (mode == "Off") {
+        return "Off";
+      } else if (mode == "On") {
+        return "On (100%)";
+      } else if (mode == "Proportional") {
+        float percentage = id(sv_relay_percent).state;
+        char buffer[32];
+        sprintf(buffer, "Proportional (%.0f%%)", percentage);
+        return buffer;
+      }
+      return "Unknown";
+    update_interval: 5s

@@ -1,0 +1,56 @@
+set_relay_mode:
+  name: Set Relay Mode
+  description: Set the operating mode for SunAllocator relay devices
+  fields:
+    entity_id:
+      name: Entity ID
+      description: Target entity ID (optional - if not provided, applies to all devices)
+      example: "select.sunallocator_mode"
+      selector:
+        entity:
+          domain: select
+    device_id:
+      name: Device ID
+      description: Target device ID from SunAllocator configuration (optional)
+      example: "device_123"
+      selector:
+        text:
+    mode:
+      name: Mode
+      description: Relay operating mode
+      required: true
+      example: "Proportional"
+      selector:
+        select:
+          options:
+            - "Off"
+            - "On" 
+            - "Proportional"
+
+set_relay_power:
+  name: Set Relay Power
+  description: Set the power level for SunAllocator relay devices (0-100%)
+  fields:
+    entity_id:
+      name: Entity ID
+      description: Target entity ID (optional - if not provided, applies to all devices)
+      example: "light.sunallocator_relay"
+      selector:
+        entity:
+          domain: light
+    device_id:
+      name: Device ID
+      description: Target device ID from SunAllocator configuration (optional)
+      example: "device_123"
+      selector:
+        text:
+    power:
+      name: Power Level
+      description: Power level as percentage (0-100%)
+      required: true
+      example: 75
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"

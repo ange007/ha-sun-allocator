@@ -1,0 +1,146 @@
+# SunAllocator SSR controller — ESP32‑C3 single‑channel (AC SSR by default)
+# Use slow_pwm for AC zero‑cross SSR. For DC SSR, see comments below.
+
+esphome:
+  name: sunallocator-relay-c3
+  comment: "SunAllocator custom SSR controller (ESP32-C3)"
+  platformio_options:
+    board_build.flash_mode: dio
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: ESP32C3
+  framework:
+    type: esp-idf
+
+logger:
+api:
+  on_client_disconnected:
+    then:
+      - logger.log: "API disconnected → turning relays OFF (fail-safe)"
+      - light.turn_off: sv_relay_light_1
+      - select.set_option:
+          id: sv_mode_select_1
+          option: "Off"
+ota:
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "SA-SSR-Setup"
+
+# OUTPUT (AC SSR default)
+output:
+  - platform: slow_pwm
+    id: sv_ssr_output_1
+    pin: GPIO4          # Safe default pin on ESP32-C3 DevKitM-1
+    period: 1.5s        # 1.0–2.0s good for AC zero-cross SSR
+    min_power: 0%
+    max_power: 100%
+  # On-board status LED (ESP32-C3 DevKitM-1 commonly uses GPIO8)
+  - platform: gpio
+    id: sv_status_led_out
+    pin: GPIO8
+
+# DC SSR (fast PWM) alternative — uncomment and comment slow_pwm above
+# output:
+#   - platform: ledc
+#     id: sv_ssr_output_1
+#     pin: GPIO4
+#     frequency: 1000 Hz
+
+light:
+  - platform: monochromatic
+    name: "SunAllocator Relay 1"
+    id: sv_relay_light_1
+    output: sv_ssr_output_1
+    restore_mode: ALWAYS_OFF
+
+select:
+  - platform: template
+    name: "SunAllocator Mode 1"
+    id: sv_mode_select_1
+    optimistic: true
+    options:
+      - "Off"
+      - "On"
+      - "Proportional"
+    initial_option: "Off"
+    set_action:
+      then:
+        - lambda: |-
+            auto opt = id(sv_mode_select_1).state.c_str();
+            if (strcmp(opt, "Off") == 0) {
+              id(sv_relay_light_1).turn_off();
+            } else if (strcmp(opt, "On") == 0) {
+              auto call = id(sv_relay_light_1).turn_on();
+              call.set_brightness(1.0f);
+              call.perform();
+            } else if (strcmp(opt, "Proportional") == 0) {
+              // Proportional: turn on; HA SunAllocator will set brightness
+              auto call = id(sv_relay_light_1).turn_on();
+              call.perform();
+            }
+
+script:
+  - id: sv_led_pulse
+    then:
+      - output.turn_on: sv_status_led_out
+      - delay: 200ms
+      - output.turn_off: sv_status_led_out
+
+interval:
+  # Fast blink every 2s when in Proportional mode and power > 0%
+  - interval: 2s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(sv_mode_select_1).state == "Proportional" && id(sv_relay_light_1).current_values.get_brightness() > 0.0f;'
+          then:
+            - script.execute: sv_led_pulse
+
+  # Solid ON when enabled but not actively outputting proportional power (>0%)
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: |
+              bool prop_active = (id(sv_mode_select_1).state == "Proportional") && (id(sv_relay_light_1).current_values.get_brightness() > 0.0f);
+              bool enabled = (id(sv_mode_select_1).state == "On") || (id(sv_mode_select_1).state == "Proportional");
+              return enabled && !prop_active;
+          then:
+            - output.turn_on: sv_status_led_out
+          else:
+            - output.turn_off: sv_status_led_out
+
+  # Heartbeat: pulse once every 10 seconds when fully Off
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(sv_mode_select_1).state == "Off";'
+          then:
+            - script.execute: sv_led_pulse
+
+# Optional diagnostics
+sensor:
+  - platform: wifi_signal
+    name: "SV C3 WiFi Signal"
+    update_interval: 30s
+  - platform: uptime
+    name: "SV C3 Uptime"
+  - platform: template
+    name: "SA Relay 1 Percent"
+    id: sv_relay_1_percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 2s
+    lambda: |-
+      return id(sv_relay_light_1).current_values.is_on()
+        ? (id(sv_relay_light_1).current_values.get_brightness() * 100.0f)
+        : 0.0f;
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "SV C3 IP"

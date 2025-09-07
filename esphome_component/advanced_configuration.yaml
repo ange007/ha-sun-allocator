@@ -1,13 +1,13 @@
-# Advanced Solar Vampire Relay Configuration
+# Advanced Sun Allocator Relay Configuration
 # This configuration adds more features and customization options
 
 # Basic ESPHome configuration
 esphome:
-  name: solar_vampire_relay_advanced
+  name: sun_allocator_relay_advanced
   platform: ESP8266
   board: d1_mini
   includes:
-    - solar_vampire_relay.h
+    - sun_allocator_relay.h
   libraries:
     - ESP8266WiFi
     - ESPAsyncTCP
@@ -20,13 +20,20 @@ wifi:
   
   # Enable fallback hotspot in case WiFi connection fails
   ap:
-    ssid: "SolarVampireRelay Fallback"
+    ssid: "SunAllocatorRelay Fallback"
     password: !secret fallback_password
 
 # Enable Home Assistant API
 api:
   encryption:
     key: !secret api_encryption_key
+  on_client_disconnected:
+    then:
+      - logger.log: "API disconnected → turning relay OFF (fail-safe)"
+      - light.turn_off: relay_light
+      - select.set_option:
+          id: relay_mode
+          option: "Off"
 
 # Enable OTA updates
 ota:
@@ -45,7 +52,7 @@ output:
   - platform: custom
     type: float
     lambda: |-
-      auto relay = new solar_vampire_relay::SolarVampireRelay(new GPIOOutputPin(D1));
+      auto relay = new sunallocator_relay::SunAllocatorRelay(new GPIOOutputPin(D1));
       relay->set_frequency(1000);  # 1kHz PWM frequency
       return {relay};
     outputs:
@@ -54,7 +61,7 @@ output:
 # Define a custom PWM light to control the relay
 light:
   - platform: monochromatic
-    name: "Solar Vampire Relay"
+    name: "SunAllocator Relay"
     output: relay_output
     id: relay_light
     restore_mode: ALWAYS_OFF  # Start with relay off
@@ -64,7 +71,7 @@ sensor:
   # Sensor to receive untapped potential from Home Assistant
   - platform: homeassistant
     id: untapped_potential
-    entity_id: sensor.solarvampire_excess_1
+    entity_id: sensor.sunallocator_excess_1
     name: "Untapped Potential"
     unit_of_measurement: "W"
     accuracy_decimals: 1
@@ -72,7 +79,7 @@ sensor:
   # Sensor to receive maximum power from Home Assistant
   - platform: homeassistant
     id: max_power
-    entity_id: sensor.solarvampire_max_power_1
+    entity_id: sensor.sunallocator_max_power_1
     name: "Max Power"
     unit_of_measurement: "W"
     accuracy_decimals: 1
@@ -80,7 +87,7 @@ sensor:
   # Sensor to receive current max power from Home Assistant
   - platform: homeassistant
     id: current_max_power
-    entity_id: sensor.solarvampire_current_max_power_1
+    entity_id: sensor.sunallocator_current_max_power_1
     name: "Current Max Power"
     unit_of_measurement: "W"
     accuracy_decimals: 1
@@ -88,7 +95,7 @@ sensor:
   # Sensor to receive usage percentage from Home Assistant
   - platform: homeassistant
     id: usage_percent
-    entity_id: sensor.solarvampire_usage_percent_1
+    entity_id: sensor.sunallocator_usage_percent_1
     name: "Usage Percent"
     unit_of_measurement: "%"
     accuracy_decimals: 1
@@ -159,7 +166,7 @@ number:
 # Switch for mode selection
 select:
   - platform: template
-    name: "Relay Mode"
+    name: "SunAllocator Mode"
     id: relay_mode
     options:
       - "Off"
@@ -251,7 +258,7 @@ interval:
                 counter++;
                 if (counter >= speed) {
                   counter = 0;
-                  id(script_update_relay).execute();
+                  id(update_relay).execute();
                 }
 
 # Time-based automations

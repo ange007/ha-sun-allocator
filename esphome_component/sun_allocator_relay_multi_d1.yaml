@@ -1,0 +1,290 @@
+# SunAllocator SSR controller — Wemos D1 mini, 4 channels (DC SSR by default)
+# For AC zero‑cross SSRs, consider using slow_pwm (see commented alternative).
+
+esphome:
+  name: sunallocator-relay-d1-4ch
+  comment: "SunAllocator SSR controller (D1 mini, 4 channels)"
+
+esp8266:
+  board: d1_mini
+
+logger:
+api:
+  on_client_disconnected:
+    then:
+      - logger.log: "API disconnected → turning relays OFF (fail-safe)"
+      - light.turn_off: sv_relay_light_1
+      - light.turn_off: sv_relay_light_2
+      - light.turn_off: sv_relay_light_3
+      - light.turn_off: sv_relay_light_4
+      - select.set_option:
+          id: sv_mode_select_1
+          option: "Off"
+      - select.set_option:
+          id: sv_mode_select_2
+          option: "Off"
+      - select.set_option:
+          id: sv_mode_select_3
+          option: "Off"
+      - select.set_option:
+          id: sv_mode_select_4
+          option: "Off"
+ota:
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "SA-SSR-Setup"
+
+# OUTPUTS (DC SSR default, fast PWM)
+output:
+  - platform: esp8266_pwm
+    id: sv_ssr_out_1
+    pin: D1          # GPIO5
+    frequency: 1000 Hz
+  - platform: esp8266_pwm
+    id: sv_ssr_out_2
+    pin: D2          # GPIO4
+    frequency: 1000 Hz
+  - platform: esp8266_pwm
+    id: sv_ssr_out_3
+    pin: D6          # GPIO12
+    frequency: 1000 Hz
+  - platform: esp8266_pwm
+    id: sv_ssr_out_4
+    pin: D7          # GPIO13
+    frequency: 1000 Hz
+  # On-board status LED (Wemos D1 mini: D4 / GPIO2, active-low)
+  - platform: gpio
+    id: sv_status_led_out
+    pin: D4
+    inverted: true
+
+# Alternative for AC SSR — comment the esp8266_pwm above and use slow_pwm below
+# output:
+#   - platform: slow_pwm
+#     id: sv_ssr_out_1
+#     pin: D1
+#     period: 1.5s
+#   - platform: slow_pwm
+#     id: sv_ssr_out_2
+#     pin: D2
+#     period: 1.5s
+#   - platform: slow_pwm
+#     id: sv_ssr_out_3
+#     pin: D6
+#     period: 1.5s
+#   - platform: slow_pwm
+#     id: sv_ssr_out_4
+#     pin: D7
+#     period: 1.5s
+
+light:
+  - platform: monochromatic
+    name: "SunAllocator Relay 1"
+    id: sv_relay_light_1
+    output: sv_ssr_out_1
+    restore_mode: ALWAYS_OFF
+  - platform: monochromatic
+    name: "SunAllocator Relay 2"
+    id: sv_relay_light_2
+    output: sv_ssr_out_2
+    restore_mode: ALWAYS_OFF
+  - platform: monochromatic
+    name: "SunAllocator Relay 3"
+    id: sv_relay_light_3
+    output: sv_ssr_out_3
+    restore_mode: ALWAYS_OFF
+  - platform: monochromatic
+    name: "SunAllocator Relay 4"
+    id: sv_relay_light_4
+    output: sv_ssr_out_4
+    restore_mode: ALWAYS_OFF
+
+select:
+  - platform: template
+    name: "SunAllocator Mode 1"
+    id: sv_mode_select_1
+    optimistic: true
+    options: ["Off", "On", "Proportional"]
+    initial_option: "Off"
+    set_action:
+      then:
+        - lambda: |-
+            auto opt = id(sv_mode_select_1).state.c_str();
+            if (strcmp(opt, "Off") == 0) {
+              id(sv_relay_light_1).turn_off();
+            } else if (strcmp(opt, "On") == 0) {
+              auto call = id(sv_relay_light_1).turn_on();
+              call.set_brightness(1.0f);
+              call.perform();
+            } else if (strcmp(opt, "Proportional") == 0) {
+              auto call = id(sv_relay_light_1).turn_on();
+              call.perform();
+            }
+  - platform: template
+    name: "SunAllocator Mode 2"
+    id: sv_mode_select_2
+    optimistic: true
+    options: ["Off", "On", "Proportional"]
+    initial_option: "Off"
+    set_action:
+      then:
+        - lambda: |-
+            auto opt = id(sv_mode_select_2).state.c_str();
+            if (strcmp(opt, "Off") == 0) {
+              id(sv_relay_light_2).turn_off();
+            } else if (strcmp(opt, "On") == 0) {
+              auto call = id(sv_relay_light_2).turn_on();
+              call.set_brightness(1.0f);
+              call.perform();
+            } else if (strcmp(opt, "Proportional") == 0) {
+              auto call = id(sv_relay_light_2).turn_on();
+              call.perform();
+            }
+  - platform: template
+    name: "SunAllocator Mode 3"
+    id: sv_mode_select_3
+    optimistic: true
+    options: ["Off", "On", "Proportional"]
+    initial_option: "Off"
+    set_action:
+      then:
+        - lambda: |-
+            auto opt = id(sv_mode_select_3).state.c_str();
+            if (strcmp(opt, "Off") == 0) {
+              id(sv_relay_light_3).turn_off();
+            } else if (strcmp(opt, "On") == 0) {
+              auto call = id(sv_relay_light_3).turn_on();
+              call.set_brightness(1.0f);
+              call.perform();
+            } else if (strcmp(opt, "Proportional") == 0) {
+              auto call = id(sv_relay_light_3).turn_on();
+              call.perform();
+            }
+  - platform: template
+    name: "SunAllocator Mode 4"
+    id: sv_mode_select_4
+    optimistic: true
+    options: ["Off", "On", "Proportional"]
+    initial_option: "Off"
+    set_action:
+      then:
+        - lambda: |-
+            auto opt = id(sv_mode_select_4).state.c_str();
+            if (strcmp(opt, "Off") == 0) {
+              id(sv_relay_light_4).turn_off();
+            } else if (strcmp(opt, "On") == 0) {
+              auto call = id(sv_relay_light_4).turn_on();
+              call.set_brightness(1.0f);
+              call.perform();
+            } else if (strcmp(opt, "Proportional") == 0) {
+              auto call = id(sv_relay_light_4).turn_on();
+              call.perform();
+            }
+
+script:
+  - id: sv_led_pulse
+    then:
+      - output.turn_on: sv_status_led_out
+      - delay: 200ms
+      - output.turn_off: sv_status_led_out
+
+interval:
+  # Fast blink every 2s when any channel is in Proportional mode and power > 0%
+  - interval: 2s
+    then:
+      - if:
+          condition:
+            lambda: |
+              bool p1 = (id(sv_mode_select_1).state == "Proportional") && (id(sv_relay_light_1).current_values.get_brightness() > 0.0f);
+              bool p2 = (id(sv_mode_select_2).state == "Proportional") && (id(sv_relay_light_2).current_values.get_brightness() > 0.0f);
+              bool p3 = (id(sv_mode_select_3).state == "Proportional") && (id(sv_relay_light_3).current_values.get_brightness() > 0.0f);
+              bool p4 = (id(sv_mode_select_4).state == "Proportional") && (id(sv_relay_light_4).current_values.get_brightness() > 0.0f);
+              return p1 || p2 || p3 || p4;
+          then:
+            - script.execute: sv_led_pulse
+
+  # Solid ON when any channel enabled (On/Proportional) but none currently outputting proportional power
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: |
+              bool p1 = (id(sv_mode_select_1).state == "Proportional") && (id(sv_relay_light_1).current_values.get_brightness() > 0.0f);
+              bool p2 = (id(sv_mode_select_2).state == "Proportional") && (id(sv_relay_light_2).current_values.get_brightness() > 0.0f);
+              bool p3 = (id(sv_mode_select_3).state == "Proportional") && (id(sv_relay_light_3).current_values.get_brightness() > 0.0f);
+              bool p4 = (id(sv_mode_select_4).state == "Proportional") && (id(sv_relay_light_4).current_values.get_brightness() > 0.0f);
+              bool prop_active = p1 || p2 || p3 || p4;
+              auto s1 = id(sv_mode_select_1).state;
+              auto s2 = id(sv_mode_select_2).state;
+              auto s3 = id(sv_mode_select_3).state;
+              auto s4 = id(sv_mode_select_4).state;
+              bool enabled = (s1 == "On" || s1 == "Proportional" || s2 == "On" || s2 == "Proportional" || s3 == "On" || s3 == "Proportional" || s4 == "On" || s4 == "Proportional");
+              return enabled && !prop_active;
+          then:
+            - output.turn_on: sv_status_led_out
+          else:
+            - output.turn_off: sv_status_led_out
+
+  # Heartbeat: blink every 10 seconds when all channels Off
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            lambda: |
+              return id(sv_mode_select_1).state == "Off" && id(sv_mode_select_2).state == "Off" && id(sv_mode_select_3).state == "Off" && id(sv_mode_select_4).state == "Off";
+          then:
+            - script.execute: sv_led_pulse
+
+sensor:
+  - platform: wifi_signal
+    name: "SV D1 WiFi Signal"
+    update_interval: 30s
+  - platform: uptime
+    name: "SV D1 Uptime"
+  - platform: template
+    name: "SA Relay 1 Percent"
+    id: sv_relay_1_percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 2s
+    lambda: |-
+      return id(sv_relay_light_1).current_values.is_on()
+        ? (id(sv_relay_light_1).current_values.get_brightness() * 100.0f)
+        : 0.0f;
+  - platform: template
+    name: "SA Relay 2 Percent"
+    id: sv_relay_2_percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 2s
+    lambda: |-
+      return id(sv_relay_light_2).current_values.is_on()
+        ? (id(sv_relay_light_2).current_values.get_brightness() * 100.0f)
+        : 0.0f;
+  - platform: template
+    name: "SA Relay 3 Percent"
+    id: sv_relay_3_percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 2s
+    lambda: |-
+      return id(sv_relay_light_3).current_values.is_on()
+        ? (id(sv_relay_light_3).current_values.get_brightness() * 100.0f)
+        : 0.0f;
+  - platform: template
+    name: "SA Relay 4 Percent"
+    id: sv_relay_4_percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 2s
+    lambda: |-
+      return id(sv_relay_light_4).current_values.is_on()
+        ? (id(sv_relay_light_4).current_values.get_brightness() * 100.0f)
+        : 0.0f;
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "SV D1 IP"

@@ -1,14 +1,9 @@
 {
-  "name": "SolarVampire Energy Excess Sensor",
+  "name": "SunAllocator Energy Excess Sensor",
   "content_in_root": false,
-  "filename": "solarvampire.zip",
+  "filename": "sun_allocator.zip",
   "render_readme": true,
-  "domains": ["sensor"],
-  "homeassistant": "2023.1.0",
-  "iot_class": "Local Polling",
   "zip_release": true,
-  "hide_default_branch": false,
-  "category": "integration",
-  "country": ["UA", "US", "GB", "DE", "FR", "IT", "ES", "PL"],
-  "hacs": "1.6.0"
+  "homeassistant": "2024.1.0",
+  "category": "integration"
 }

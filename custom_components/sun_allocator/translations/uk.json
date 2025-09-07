@@ -1,0 +1,152 @@
+{
+  "config": {
+    "step": {
+      "main_menu": {
+        "data": {
+          "action": "Дія",
+          "action": {
+            "options": {
+              "settings": "Налаштування",
+              "add_device": "Додати Пристрій",
+              "manage_devices": "Керувати Пристроями"
+            }
+          }
+        }
+      },
+      "devices": {
+        "data": {
+          "id": "Пристрій",
+          "action": "Дія",
+          "action": {
+            "options": {
+              "add": "Додати Пристрій",
+              "edit": "Редагувати",
+              "remove": "Видалити",
+              "finish": "Завершити Налаштування"
+            }
+          }
+        }
+      },
+      "manage_devices": {
+        "data": {
+          "id": "Пристрій",
+          "action": "Дія",
+          "action": {
+            "options": {
+              "edit": "Редагувати",
+              "remove": "Видалити",
+              "back": "Повернутися до Головного Меню"
+            }
+          }
+        }
+      },
+      "settings": {
+        "data": {
+          "advanced_settings_enabled": "Увімкнути Розширені Налаштування",
+          "battery_power_reversed": "Інвертувати Значення Потужності Акумулятора (споживання позитивне, заряджання негативне)",
+          "temperature_compensation_enabled": "Увімкнути Температурну Компенсацію",
+          "temperature_sensor": "Датчик Температури",
+          "temp_coefficient_voc": "Температурний Коефіцієнт Voc (%/°C)",
+          "temp_coefficient_pmax": "Температурний Коефіцієнт Pmax (%/°C)",
+          "curve_factor_k": "Фактор I-V Кривої (k)",
+          "efficiency_correction_factor": "Фактор Корекції Ефективності",
+          "min_inverter_voltage": "Мінімальна Напруга Інвертора (В)",
+          "pv_power": "Потужність PV",
+          "pv_voltage": "Напруга PV",
+          "consumption": "Споживання",
+          "battery_power": "Потужність Акумулятора",
+          "vmp": "Напруга Максимальної Потужності (Vmp)",
+          "imp": "Струм Максимальної Потужності (Imp)",
+          "voc": "Напруга Холостого Ходу (Voc)",
+          "isc": "Струм Короткого Замикання (Isc)",
+          "panel_count": "Кількість Панелей",
+          "panel_configuration": "Конфігурація Панелей",
+          "panel_configuration": {
+            "options": {
+              "series": "Послідовно",
+              "parallel": "Паралельно",
+              "parallel-series": "Паралельно-Послідовно"
+            }
+          }
+        }
+      },
+      "device_name_type": {
+        "data": {
+          "name": "Назва Пристрою",
+          "device_type": "Тип Пристрою",
+          "device_type": {
+            "options": {
+              "standard": "Стандартний Перемикач/Світло (Тільки Вкл/Викл)",
+              "custom": "Користувацьке ESPHome Реле (Вкл/Викл/Пропорційно)"
+            }
+          }
+        }
+      },
+      "device_selection": {
+        "data": {
+          "esphome_relay_entity": "Сутність ESPHome Реле",
+          "esphome_mode_select_entity": "Сутність Вибору Режиму ESPHome"
+        }
+      },
+      "device_basic_settings": {
+        "data": {
+          "auto_control_enabled": "Увімкнути Автоматичне Керування",
+          "min_excess_power": "Мінімальна Надлишкова Потужність",
+          "min_expected_w": "Мінімальне Очікуване Навантаження (Вт)",
+          "max_expected_w": "Максимальне Очікуване Навантаження (Вт)",
+          "priority": "Пріоритет Пристрою",
+          "schedule_enabled": "Увімкнути Розклад"
+        }
+      },
+      "device_schedule": {
+        "data": {
+          "start_time": "Час Початку",
+          "end_time": "Час Закінчення",
+          "monday": "Понеділок",
+          "tuesday": "Вівторок",
+          "wednesday": "Середа",
+          "thursday": "Четвер",
+          "friday": "П'ятниця",
+          "saturday": "Субота",
+          "sunday": "Неділя"
+        }
+      },
+      "temperature_compensation": {
+        "data": {
+          "temperature_sensor": "Датчик Температури",
+          "temp_coefficient_voc": "Температурний Коефіцієнт Voc (%/°C)",
+          "temp_coefficient_pmax": "Температурний Коефіцієнт Pmax (%/°C)"
+        }
+      },
+      "advanced_settings": {
+        "data": {
+          "curve_factor_k": "Фактор I-V Кривої (k)",
+          "efficiency_correction_factor": "Фактор Корекції Ефективності",
+          "min_inverter_voltage": "Мінімальна Напруга Інвертора (В)",
+          "ramp_up_step": "Крок Підвищення (% за тик)",
+          "ramp_down_step": "Крок Зниження (% за тик)",
+          "ramp_deadband": "Мертва Зона Рампера (%)",
+          "default_min_start_w": "Стартовий Поріг За Замовчуванням (Вт)",
+          "hysteresis_w": "Гістерезис (Вт)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power_distribution": {
+        "name": "Розподіл потужності",
+        "state": {
+        },
+        "attributes": {
+          "total_power": "Доступна потужність",
+          "remaining_power": "Залишок потужності",
+          "allocated_power": "Виділена потужність",
+          "allocation_w": "Розподіл (Вт)",
+          "allocation_percent": "Розподіл (%)",
+          "device_meta": "Мета-дані пристроїв"
+        }
+      }
+    }
+  }
+}
