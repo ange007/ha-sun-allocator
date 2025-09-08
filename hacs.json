@@ -1,9 +1,5 @@
 {
   "name": "SunAllocator Energy Excess Sensor",
-  "content_in_root": false,
-  "filename": "sun_allocator.zip",
-  "render_readme": true,
-  "zip_release": true,
   "homeassistant": "2024.1.0",
   "category": "integration"
 }
