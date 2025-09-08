@@ -3,8 +3,8 @@
     "step": {
       "main_menu": {
         "data": {
-          "action": "Дія",
           "action": {
+            "name": "Дія",
             "options": {
               "settings": "Налаштування",
               "add_device": "Додати Пристрій",
@@ -16,8 +16,8 @@
       "devices": {
         "data": {
           "id": "Пристрій",
-          "action": "Дія",
           "action": {
+            "name": "Дія",
             "options": {
               "add": "Додати Пристрій",
               "edit": "Редагувати",
@@ -30,8 +30,8 @@
       "manage_devices": {
         "data": {
           "id": "Пристрій",
-          "action": "Дія",
           "action": {
+            "name": "Дія",
             "options": {
               "edit": "Редагувати",
               "remove": "Видалити",
@@ -60,8 +60,8 @@
           "voc": "Напруга Холостого Ходу (Voc)",
           "isc": "Струм Короткого Замикання (Isc)",
           "panel_count": "Кількість Панелей",
-          "panel_configuration": "Конфігурація Панелей",
           "panel_configuration": {
+            "name": "Конфігурація Панелей",
             "options": {
               "series": "Послідовно",
               "parallel": "Паралельно",
@@ -73,8 +73,8 @@
       "device_name_type": {
         "data": {
           "name": "Назва Пристрою",
-          "device_type": "Тип Пристрою",
           "device_type": {
+            "name": "Тип Пристрою",
             "options": {
               "standard": "Стандартний Перемикач/Світло (Тільки Вкл/Викл)",
               "custom": "Користувацьке ESPHome Реле (Вкл/Викл/Пропорційно)"

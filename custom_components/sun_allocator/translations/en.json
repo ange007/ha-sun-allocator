@@ -3,8 +3,8 @@
     "step": {
       "main_menu": {
         "data": {
-          "action": "Action",
           "action": {
+            "name": "Action",
             "options": {
               "settings": "Settings",
               "add_device": "Add Device",
@@ -16,8 +16,8 @@
       "devices": {
         "data": {
           "id": "Device",
-          "action": "Action",
           "action": {
+            "name": "Action",
             "options": {
               "add": "Add Device",
               "edit": "Edit",
@@ -30,8 +30,8 @@
       "manage_devices": {
         "data": {
           "id": "Device",
-          "action": "Action",
           "action": {
+            "name": "Action",
             "options": {
               "edit": "Edit",
               "remove": "Remove",
@@ -60,8 +60,8 @@
           "voc": "Open Circuit Voltage (Voc)",
           "isc": "Short Circuit Current (Isc)",
           "panel_count": "Panel Count",
-          "panel_configuration": "Panel Configuration",
           "panel_configuration": {
+            "name": "Panel Configuration",
             "options": {
               "series": "Series",
               "parallel": "Parallel",
@@ -73,8 +73,8 @@
       "device_name_type": {
         "data": {
           "name": "Device Name",
-          "device_type": "Device Type",
           "device_type": {
+            "name": "Device Type",
             "options": {
               "standard": "Standard Switch/Light (On/Off only)",
               "custom": "Custom ESPHome Relay (On/Off/Proportional)"

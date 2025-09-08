@@ -128,10 +128,10 @@ class SunAllocatorConfigFlow(
             ACTION_FINISH: "finish",
         }
 
-        # Prepare schema: дві окремі селекції
+        # Prepare schema
         schema_dict = {}
 
-        # Спочатку селектор пристрою (якщо вони є)
+        # Device selector
         if self._devices:
             default_device_id = self._devices[0][CONF_DEVICE_ID]
             schema_dict[vol.Required(
@@ -140,7 +140,7 @@ class SunAllocatorConfigFlow(
                 description={"suggested_value": default_device_id}
             )] = vol.In(device_options)
 
-        # Далі — селектор дії
+        # Action selector
         schema_dict[vol.Required(
             CONF_ACTION,
             default=ACTION_FINISH,
@@ -348,7 +348,7 @@ class SunAllocatorOptionsFlowHandler(
 
         schema_dict = {}
 
-        # Спочатку — селектор пристрою (якщо є пристрої)
+        # Device selector
         if self._devices:
             default_device_id = self._devices[0][CONF_DEVICE_ID]
             schema_dict[vol.Required(
@@ -357,7 +357,7 @@ class SunAllocatorOptionsFlowHandler(
                 description={"suggested_value": default_device_id}
             )] = vol.In(device_options)
 
-        # Потім — селектор дії (внизу)
+        # Action selector
         schema_dict[vol.Required(
             CONF_ACTION,
             default=ACTION_BACK,

@@ -182,36 +182,51 @@ def cleanup_sensor_listeners(unsub_listeners: list) -> None:
     unsub_listeners.clear()
 
 
-def calculate_excess_power(current_max_power: float, actual_power: float, battery_power: float = 0.0, battery_power_reversed: bool = False) -> float:
+def calculate_excess_power(
+    current_max_power: float,
+    pv_power: float,
+    battery_power: float = 0.0,
+    battery_power_reversed: bool = False,
+    *,
+    relative_voltage: float | None = None,
+    energy_harvesting_possible: bool | None = None,
+) -> float:
     """
-    Calculate excess power (untapped potential) considering battery status.
+    Calculate excess (untapped potential) with internal accounting for battery charge
+    and topology constraints.
 
-    Args:
-        current_max_power: Maximum power possible at current conditions
-        actual_power: Actual power being generated
-        battery_power: Battery power (negative = discharging, positive = charging in normal mode;
-                                     positive = discharging, negative = charging if reversed)
-        battery_power_reversed: Whether battery power values are reversed (True if consumption is positive)
-
-    Returns:
-        Excess power available (0 if battery is discharging)
+    Rules:
+    - If battery is discharging → return 0
+    - If topology disallows harvesting (relative_voltage <= 1.0 or EHP is False) → return 0
+    - Else excess = max(current_max_power - (pv_power + battery_charge_w), 0)
     """
-    # Check if battery is discharging based on whether values are reversed
-    is_discharging = False
-    
+    # 1) Discharge guard
     if battery_power_reversed:
-        # If reversed: positive value means discharging
+        # reversed polarity: positive means discharging
         is_discharging = battery_power > 0
     else:
-        # Normal mode: negative value means discharging
+        # normal polarity: negative means discharging
         is_discharging = battery_power < 0
-    
-    # If battery is discharging, no excess is available
+
     if is_discharging:
         return 0.0
 
-    # Calculate normal excess
-    return max(current_max_power - actual_power, 0)
+    # 2) Topology guard (if provided)
+    if relative_voltage is not None and relative_voltage <= 1.0:
+        return 0.0
+    if energy_harvesting_possible is not None and not energy_harvesting_possible:
+        return 0.0
+
+    # 3) Account battery charging as already used PV power
+    if battery_power_reversed:
+        # reversed polarity: negative means charging
+        battery_charge_w = max(-battery_power, 0.0)
+    else:
+        # normal polarity: positive means charging
+        battery_charge_w = max(battery_power, 0.0)
+
+    actual_harvested = pv_power + battery_charge_w
+    return max(current_max_power - actual_harvested, 0.0)
 
 
 def calculate_usage_percentage(actual_power: float, max_power: float) -> float:

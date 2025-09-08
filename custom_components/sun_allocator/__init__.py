@@ -229,13 +229,20 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
             else:
                 _LOGGER.warning(f"Unsupported entity domain: {domain}. Cannot turn on {entity_id}")
     
-    # Register the services
-    hass.services.async_register(
-        DOMAIN, SERVICE_SET_RELAY_MODE, handle_set_relay_mode, schema=SET_RELAY_MODE_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_SET_RELAY_POWER, handle_set_relay_power, schema=SET_RELAY_POWER_SCHEMA
-    )
+    # Register the services once (global) and track entry count
+    root = hass.data[DOMAIN]
+    root.setdefault("_entry_count", 0)
+    root.setdefault("_services_registered", False)
+    if not root["_services_registered"]:
+        hass.services.async_register(
+            DOMAIN, SERVICE_SET_RELAY_MODE, handle_set_relay_mode, schema=SET_RELAY_MODE_SCHEMA
+        )
+        hass.services.async_register(
+            DOMAIN, SERVICE_SET_RELAY_POWER, handle_set_relay_power, schema=SET_RELAY_POWER_SCHEMA
+        )
+        root["_services_registered"] = True
+    # Increment active entry count
+    root["_entry_count"] = int(root.get("_entry_count", 0)) + 1
     
     # Track and resync desired modes for ESPHome select entities to avoid boot Off override
     VALID_MODES = {RELAY_MODE_OFF, RELAY_MODE_ON, RELAY_MODE_PROPORTIONAL}
@@ -279,7 +286,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
             hass.config_entries.async_update_entry(config_entry, data=data)
 
     if select_entity_ids:
-        @callback
         async def _mode_select_state_listener(event):
             entity_id = event.data.get("entity_id")
             if entity_id not in select_entity_ids:
@@ -343,8 +349,9 @@ def is_device_in_schedule(device, now=None):
     if not start_time or not end_time or not days_of_week:
         return True
     
-    # Check if current day is in schedule
-    current_day = now.strftime("%A").lower()
+    # Check if current day is in schedule (locale-independent)
+    DAY_INDEX_TO_NAME = DAYS_OF_WEEK  # ["monday", ..., "sunday"]
+    current_day = DAY_INDEX_TO_NAME[now.weekday()]
     if current_day not in days_of_week:
         return False
     
@@ -865,11 +872,19 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigType):
     if entry_data.get("unsub_ramp_timer"):
         entry_data["unsub_ramp_timer"]()
     
-    # Remove config entry from data
-    hass.data[DOMAIN].pop(config_entry.entry_id)
-    
-    # Unregister services
-    hass.services.async_remove(DOMAIN, SERVICE_SET_RELAY_MODE)
-    hass.services.async_remove(DOMAIN, SERVICE_SET_RELAY_POWER)
+    # Remove config entry from data and manage global services
+    root = hass.data.get(DOMAIN, {})
+    root.pop(config_entry.entry_id, None)
+
+    # Decrement active entry count and remove services only if last entry unloaded
+    try:
+        root["_entry_count"] = max(0, int(root.get("_entry_count", 1)) - 1)
+    except Exception:
+        root["_entry_count"] = 0
+
+    if root.get("_entry_count", 0) == 0 and root.get("_services_registered"):
+        hass.services.async_remove(DOMAIN, SERVICE_SET_RELAY_MODE)
+        hass.services.async_remove(DOMAIN, SERVICE_SET_RELAY_POWER)
+        root["_services_registered"] = False
     
     return True

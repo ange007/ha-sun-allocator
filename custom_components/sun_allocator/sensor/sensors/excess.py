@@ -80,9 +80,16 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             temperature_compensation=temp_compensation
         )
         
-        # Calculate excess power
+        # Calculate excess power with topology constraints and battery charging accounted
         battery_power_reversed = self._config.get(CONF_BATTERY_POWER_REVERSED, False)
-        excess = calculate_excess_power(current_max_power, pv_power, battery_power, battery_power_reversed)
+        excess = calculate_excess_power(
+            current_max_power=current_max_power,
+            pv_power=pv_power,
+            battery_power=battery_power,
+            battery_power_reversed=battery_power_reversed,
+            relative_voltage=debug_info[KEY_RELATIVE_VOLTAGE],
+            energy_harvesting_possible=debug_info[KEY_ENERGY_HARVESTING_POSSIBLE],
+        )
         # Determine if battery is discharging (for diagnostics/UI)
         battery_discharging = (battery_power > 0) if battery_power_reversed else (battery_power < 0)
         
@@ -91,11 +98,11 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         
         # Determine actionable and topology-based excess flags
         epsilon = 5.0  # small hysteresis to avoid flicker
-        excess_possible = excess > epsilon
         topology_excess_possible = (
             debug_info[KEY_RELATIVE_VOLTAGE] > 1.0
             and debug_info[KEY_ENERGY_HARVESTING_POSSIBLE]
         )
+        excess_possible = (excess > epsilon) and topology_excess_possible
         
         # Update attributes with all relevant information
         self._update_attributes(
