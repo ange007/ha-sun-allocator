@@ -65,16 +65,16 @@ class DeviceConfigMixin:
         all_entities = []
         for e in hass.states.async_all():
             domain = e.entity_id.split(".")[0]
-            if domain in allowed_domains and e.state in [STATE_ON, STATE_OFF]:
-                if "sun_allocator" not in e.entity_id.lower() and "sunallocator" not in e.entity_id.lower():
+            if domain in allowed_domains:
+                if domain == DOMAIN_CLIMATE:
                     friendly = e.attributes.get("friendly_name", "")
-                    if domain == DOMAIN_CLIMATE:
-                        # Додаємо два варіанти: Heat та Cool
-                        label_heat = f"{e.entity_id} (Heat)"
-                        label_cool = f"{e.entity_id} (Cool)"
-                        all_entities.append((f"{e.entity_id}|heat", label_heat, friendly))
-                        all_entities.append((f"{e.entity_id}|cool", label_cool, friendly))
-                    else:
+                    label_heat = f"{e.entity_id} (Heat)"
+                    label_cool = f"{e.entity_id} (Cool)"
+                    all_entities.append((f"{e.entity_id}|heat", label_heat, friendly))
+                    all_entities.append((f"{e.entity_id}|cool", label_cool, friendly))
+                elif e.state in [STATE_ON, STATE_OFF]:
+                    if "sun_allocator" not in e.entity_id.lower() and "sunallocator" not in e.entity_id.lower():
+                        friendly = e.attributes.get("friendly_name", "")
                         label = f"{e.entity_id} ({friendly})" if friendly else e.entity_id
                         all_entities.append((e.entity_id, label, friendly))
         all_entities.sort(key=lambda x: x[1])
@@ -263,6 +263,8 @@ class DeviceConfigMixin:
             # Universal entity selection for standard devices
             default_entity = NONE_OPTION if defaults.get(CONF_DEVICE_ENTITY) is None else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
             entity_options = {label: eid for eid, label, _ in entities["all_entities"]}
+            if len(entity_options) <= 1:  # only NONE_OPTION present
+                entity_options["[No devices found]"] = NONE_OPTION
             schema[vol.Optional(CONF_DEVICE_ENTITY, default=default_entity, description={"suggested_value": default_entity})] = vol.In(list(entity_options.keys()))
         # (custom devices залишаємо як є, якщо потрібно)
         return vol.Schema(schema)
