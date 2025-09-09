@@ -62,20 +62,30 @@ class DeviceConfigMixin:
     def _get_device_entities(self, hass: HomeAssistant) -> Dict[str, list]:
         """Get available device entities for selection (switch, light, climate, etc)."""
         allowed_domains = [DOMAIN_LIGHT, DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT, DOMAIN_CLIMATE]
+        icon_map = {
+            DOMAIN_LIGHT: "💡",
+            DOMAIN_SWITCH: "🔌",
+            DOMAIN_INPUT_BOOLEAN: "☑️",
+            DOMAIN_AUTOMATION: "⚙️",
+            DOMAIN_SCRIPT: "📜",
+            DOMAIN_CLIMATE: "🌡️",
+        }
         all_entities = []
         for e in hass.states.async_all():
             domain = e.entity_id.split(".")[0]
+            icon = icon_map.get(domain, "")
+            state = e.state
             if domain in allowed_domains:
                 if domain == DOMAIN_CLIMATE:
                     friendly = e.attributes.get("friendly_name", "")
-                    label_heat = f"{e.entity_id} (Heat)"
-                    label_cool = f"{e.entity_id} (Cool)"
+                    label_heat = f"{icon} {e.entity_id} (Heat) [{state}]"
+                    label_cool = f"{icon} {e.entity_id} (Cool) [{state}]"
                     all_entities.append((f"{e.entity_id}|heat", label_heat, friendly))
                     all_entities.append((f"{e.entity_id}|cool", label_cool, friendly))
-                elif e.state in [STATE_ON, STATE_OFF]:
+                elif state in [STATE_ON, STATE_OFF]:
                     if "sun_allocator" not in e.entity_id.lower() and "sunallocator" not in e.entity_id.lower():
                         friendly = e.attributes.get("friendly_name", "")
-                        label = f"{e.entity_id} ({friendly})" if friendly else e.entity_id
+                        label = f"{icon} {e.entity_id} ({friendly}) [{state}]" if friendly else f"{icon} {e.entity_id} [{state}]"
                         all_entities.append((e.entity_id, label, friendly))
         all_entities.sort(key=lambda x: x[1])
         all_entities = [(NONE_OPTION, NONE_OPTION, "")] + all_entities
@@ -112,6 +122,13 @@ class DeviceConfigMixin:
         except (ValueError, TypeError):
             errors[CONF_MAX_EXPECTED_W] = "invalid_max_expected_w"
         
+        # Validate duplicate entity_id
+        entity_id = user_input.get(CONF_DEVICE_ENTITY)
+        if entity_id and hasattr(self, '_devices'):
+            for d in getattr(self, '_devices', []):
+                if d.get(CONF_DEVICE_ENTITY) == entity_id:
+                    errors[CONF_DEVICE_ENTITY] = "duplicate_entity_id"
+
         return errors
 
     def _validate_basic_settings(self, user_input: Dict[str, Any]) -> Dict[str, str]:
@@ -250,8 +267,8 @@ class DeviceConfigMixin:
             default_type = DEVICE_TYPE_CUSTOM
         
         return vol.Schema({
-            vol.Required(CONF_DEVICE_NAME, default=defaults.get(CONF_DEVICE_NAME, ""), description={"suggested_value": defaults.get(CONF_DEVICE_NAME, "")}): str,
-            vol.Required(CONF_DEVICE_TYPE, default=default_type, description={"suggested_value": default_type}): vol.In(device_type_options),
+            vol.Required(CONF_DEVICE_NAME, default=defaults.get(CONF_DEVICE_NAME, ""), description={"suggested_value": defaults.get(CONF_DEVICE_NAME, ""), "description": "Унікальна назва пристрою, наприклад 'Бойлер'"}): str,
+            vol.Required(CONF_DEVICE_TYPE, default=default_type, description={"suggested_value": default_type, "description": "Тип пристрою: стандартний (on/off) або custom (ESPHome)"}): vol.In(device_type_options),
         })
     
     def _get_device_selection_schema(self, entities: Dict[str, list], device_type: str, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
@@ -266,23 +283,25 @@ class DeviceConfigMixin:
             if len(entity_options) <= 1:  # only NONE_OPTION present
                 entity_options["[No devices found]"] = NONE_OPTION
             schema[vol.Optional(CONF_DEVICE_ENTITY, default=default_entity, description={"suggested_value": default_entity})] = vol.In(list(entity_options.keys()))
-        # (custom devices залишаємо як є, якщо потрібно)
         return vol.Schema(schema)
     
     def _get_device_basic_settings_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
         """Get the schema for device basic settings configuration."""
         if defaults is None:
             defaults = {}
-        
-        return vol.Schema({
+        device_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_STANDARD)
+        schema_dict = {
             vol.Required(CONF_AUTO_CONTROL_ENABLED, default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False), description={"suggested_value": defaults.get(CONF_AUTO_CONTROL_ENABLED, False)}): bool,
             vol.Optional(CONF_MIN_EXPECTED_W, default=defaults.get(CONF_MIN_EXPECTED_W, 0.0), description={"suggested_value": defaults.get(CONF_MIN_EXPECTED_W, 0.0)}): vol.Coerce(float),
-            vol.Optional(CONF_MAX_EXPECTED_W, default=defaults.get(CONF_MAX_EXPECTED_W, 0.0), description={"suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)}): vol.Coerce(float),
             vol.Required(CONF_DEVICE_PRIORITY, default=defaults.get(CONF_DEVICE_PRIORITY, 50), description={"suggested_value": defaults.get(CONF_DEVICE_PRIORITY, 50)}): vol.All(
                 vol.Coerce(int), vol.Range(min=1, max=100)
             ),
             vol.Required(CONF_SCHEDULE_ENABLED, default=defaults.get(CONF_SCHEDULE_ENABLED, False), description={"suggested_value": defaults.get(CONF_SCHEDULE_ENABLED, False)}): bool,
-        })
+        }
+        # Only for custom (ESPhome) devices
+        if device_type == DEVICE_TYPE_CUSTOM:
+            schema_dict[vol.Optional(CONF_MAX_EXPECTED_W, default=defaults.get(CONF_MAX_EXPECTED_W, 0.0), description={"suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)})] = vol.Coerce(float)
+        return vol.Schema(schema_dict)
     
     def _get_device_schedule_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
         """Get the schema for device schedule configuration."""

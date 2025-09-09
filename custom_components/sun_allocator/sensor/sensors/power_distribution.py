@@ -72,6 +72,23 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                 except (TypeError, ValueError):
                     allocation_percent[dev_id] = 0.0
 
+
+            # Діагностичні причини для кожного пристрою
+            reasons = {}
+            for dev_id, st in device_status.items():
+                reason = []
+                if st.get("auto_control_enabled") is False:
+                    reason.append("Auto control disabled")
+                if st.get("schedule_enabled") and not st.get("schedule_active", True):
+                    reason.append("Out of schedule")
+                if st.get("allocated_w", 0) < st.get("min_expected_w", 0):
+                    reason.append("Not enough excess power")
+                if st.get("manual_override", False):
+                    reason.append("Manual override")
+                if not reason and st.get("percent_actual", 0) > 0:
+                    reason.append("Active")
+                reasons[dev_id] = ", ".join(reason)
+
             self._attr_extra_state_attributes = {
                 "total_power": total,
                 "remaining_power": remaining,
@@ -79,6 +96,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                 "allocation_w": allocation,
                 "allocation_percent": allocation_percent,
                 "device_meta": device_status,
+                "reasons": reasons,
             }
 
             self._state = allocated

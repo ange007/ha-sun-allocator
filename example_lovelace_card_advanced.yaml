@@ -1,0 +1,33 @@
+type: custom:vertical-stack-in-card
+cards:
+  - type: entities
+    title: SunAllocator — Енергетика
+    entities:
+      - entity: sensor.sunallocator_excess_1
+        name: Вільна енергія (W)
+      - entity: sensor.sunallocator_max_power_1
+        name: Макс. потужність (W)
+      - entity: sensor.sunallocator_current_max_power_1
+        name: Поточна макс. потужність (W)
+      - entity: sensor.sunallocator_usage_percent_1
+        name: Використання PV (%)
+      - entity: sensor.sunallocator_power_distribution_1
+        name: Розподіл потужності (W)
+  - type: custom:entities-graph-card
+    title: Розподіл по пристроях
+    entities:
+      - entity: sensor.sunallocator_power_distribution_1
+        name: Розподіл
+    show:
+      labels: true
+      legend: true
+  - type: custom:template-entity-row
+    entity: sensor.sunallocator_power_distribution_1
+    name: Діагностика
+    state: |
+      {% set meta = state_attr('sensor.sunallocator_power_distribution_1', 'device_meta') %}
+      {% set reasons = state_attr('sensor.sunallocator_power_distribution_1', 'reasons') %}
+      {% for id, st in meta.items() %}
+        {{ st.name or id }} | Пріоритет: {{ st.priority }} | Статус: {% if st.percent_actual > 0 %}🟢 Активний{% else %}⚪ Вимкнено{% endif %} | Потужність: {{ st.allocated_w|round(1) }} Вт | Використання: {{ st.percent_actual|round(1) }}% | Причина: {{ reasons[id] if reasons and id in reasons else '-' }}{% if not loop.last %}<br>{% endif %}
+      {% endfor %}
+    icon: mdi:flash
