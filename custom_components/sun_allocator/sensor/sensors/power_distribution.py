@@ -28,9 +28,20 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
     def __init__(self, hass: HomeAssistant, entry_id: str):
         self._hass = hass
         self._entry_id = entry_id
+        # Try to extract a numeric suffix from entry_id, fallback to entry_id
+        numeric_suffix = None
+        if entry_id.isdigit():
+            numeric_suffix = entry_id
+        else:
+            import re
+            m = re.search(r'(\d+)$', entry_id)
+            if m:
+                numeric_suffix = m.group(1)
+            else:
+                numeric_suffix = entry_id[-4:]
         self._attr_name = f"{SENSOR_NAME_PREFIX} Power Distribution"
-        self._attr_unique_id = f"{SENSOR_ID_PREFIX}_power_distribution_{entry_id}"
-        self.entity_id = f"sensor.{SENSOR_ID_PREFIX}_power_distribution_{entry_id}"
+        self._attr_unique_id = f"{SENSOR_ID_PREFIX}_power_distribution_{numeric_suffix}"
+        self.entity_id = f"sensor.{SENSOR_ID_PREFIX}_power_distribution_{numeric_suffix}"
         self._attr_native_unit_of_measurement = UnitOfPower.WATT
         self._state = 0.0
         self._attr_extra_state_attributes: Dict[str, Any] = {}

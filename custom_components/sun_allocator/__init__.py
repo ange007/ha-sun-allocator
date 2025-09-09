@@ -26,6 +26,7 @@ from .const import (
     RELAY_MODE_PROPORTIONAL,
     CONF_ESPHOME_RELAY_ENTITY,
     CONF_ESPHOME_MODE_SELECT_ENTITY,
+    CONF_DEVICE_ENTITY,
     CONF_AUTO_CONTROL_ENABLED,
     CONF_DEVICES,
     CONF_DEVICE_ID,
@@ -169,17 +170,25 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
         elif device_id:
             device = next((d for d in devices if d.get(CONF_DEVICE_ID) == device_id), None)
             if device:
-                entity_id = device.get(CONF_ESPHOME_RELAY_ENTITY)
+                device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
+                if device_type == DEVICE_TYPE_CUSTOM:
+                    entity_id = device.get(CONF_ESPHOME_RELAY_ENTITY)
+                else:
+                    entity_id = device.get(CONF_DEVICE_ENTITY)
                 if entity_id:
                     await set_power_for_entity(hass, entity_id, power_percent)
                 else:
-                    _LOGGER.error(f"Device {device.get(CONF_DEVICE_NAME)} has no relay entity configured")
+                    _LOGGER.error(f"Device {device.get(CONF_DEVICE_NAME)} has no entity configured")
             else:
                 _LOGGER.error(f"Device with ID {device_id} not found")
         # If neither is provided, set power for all devices
         else:
             for device in devices:
-                entity_id = device.get(CONF_ESPHOME_RELAY_ENTITY)
+                device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
+                if device_type == DEVICE_TYPE_CUSTOM:
+                    entity_id = device.get(CONF_ESPHOME_RELAY_ENTITY)
+                else:
+                    entity_id = device.get(CONF_DEVICE_ENTITY)
                 if entity_id:
                     await set_power_for_entity(hass, entity_id, power_percent)
     
@@ -499,8 +508,12 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     # Build mapping from relay entity to device_id for quick lookup
     entity_to_device_id = {}
     for d in auto_control_devices:
-        eid = d.get(CONF_ESPHOME_RELAY_ENTITY)
+        device_type = d.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
         did = d.get(CONF_DEVICE_ID)
+        if device_type == DEVICE_TYPE_CUSTOM:
+            eid = d.get(CONF_ESPHOME_RELAY_ENTITY)
+        else:
+            eid = d.get(CONF_DEVICE_ENTITY)
         if eid and did:
             entity_to_device_id[eid] = did
     entry_data["entity_to_device_id"] = entity_to_device_id
@@ -588,8 +601,12 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         for device in auto_control_devices:
             device_id = device.get(CONF_DEVICE_ID)
             device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-            relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
-            mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
+            if device_type == DEVICE_TYPE_CUSTOM:
+                relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
+                mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
+            else:
+                relay_entity = device.get(CONF_DEVICE_ENTITY)
+                mode_select_entity = None
             device_name = device.get(CONF_DEVICE_NAME, "Unknown")
             device_priority = int(device.get(CONF_DEVICE_PRIORITY, 50))
             max_expected_w = float(device.get(CONF_MAX_EXPECTED_W, 0) or 0)

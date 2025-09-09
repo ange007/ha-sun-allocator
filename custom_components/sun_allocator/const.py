@@ -27,10 +27,13 @@ PANEL_CONFIG_SERIES = "series"
 PANEL_CONFIG_PARALLEL = "parallel"
 PANEL_CONFIG_PARALLEL_SERIES = "parallel-series"
 
-# Device configuration keys (universal entity support)
-CONF_DEVICE_ENTITY = "device_entity"  # entity_id (switch, light, climate, etc)
+# Device configuration keys
+# ESPHome relay entity (legacy/ESPHome-specific)
+CONF_ESPHOME_RELAY_ENTITY = "esphome_relay_entity"  # entity_id for ESPHome relay
+CONF_ESPHOME_MODE_SELECT_ENTITY = "esphome_mode_select_entity"  # ESPHome mode select entity
+# Universal device entity (switch, light, climate, etc)
+CONF_DEVICE_ENTITY = "device_entity"  # entity_id for standard device
 CONF_DEVICE_ENTITY_FRIENDLY_NAME = "device_entity_friendly_name"  # friendly_name for UI
-CONF_ESPHOME_MODE_SELECT_ENTITY = "esphome_mode_select_entity"
 CONF_AUTO_CONTROL_ENABLED = "auto_control_enabled"
 CONF_MIN_EXCESS_POWER = "min_excess_power"
 
