@@ -375,11 +375,12 @@ class SunAllocatorOptionsFlowHandler(
         )
 
     async def _save_and_return(self):
-        """Save configuration and return to main menu."""
+        """Save configuration, reload integration and return to main menu."""
         data = self._solar_config.copy()
         data[CONF_DEVICES] = self._devices
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
-        
+        # Live reload integration
+        await self.hass.config_entries.async_reload(self.config_entry.entry_id)
         # Return to main menu
         return await self.async_step_main_menu()
 
@@ -387,7 +388,7 @@ class SunAllocatorOptionsFlowHandler(
     # No need to override them as they work correctly through mixin inheritance
 
     async def _finalize_device_config(self):
-        """Finalize device configuration, persist, and return to manage devices."""
+        """Finalize device configuration, persist, reload integration, and return to manage devices."""
         # Add or update device ID
         if self._action == ACTION_ADD:
             self._device_config[CONF_DEVICE_ID] = str(uuid.uuid4())
@@ -396,12 +397,12 @@ class SunAllocatorOptionsFlowHandler(
             self._device_config[CONF_DEVICE_ID] = self._device_config.get(CONF_DEVICE_ID) or str(uuid.uuid4())
             if self._device_index is not None:
                 self._devices[self._device_index] = self._device_config
-        
         # Persist changes immediately so they survive HA restarts
         data = self._solar_config.copy()
         data[CONF_DEVICES] = self._devices
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
-        
+        # Live reload integration
+        await self.hass.config_entries.async_reload(self.config_entry.entry_id)
         # Return to manage devices
         return await self.async_step_manage_devices()
 

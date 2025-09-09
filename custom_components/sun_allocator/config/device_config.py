@@ -6,7 +6,9 @@ from homeassistant.core import HomeAssistant
 from typing import Dict, Any, List, Optional
 
 from ..const import (
-    CONF_ESPHOME_RELAY_ENTITY,
+    CONF_DEVICE_ENTITY,
+    CONF_DEVICE_ENTITY_FRIENDLY_NAME,
+    DOMAIN_CLIMATE,
     CONF_ESPHOME_MODE_SELECT_ENTITY,
     CONF_AUTO_CONTROL_ENABLED,
     CONF_DEVICES,
@@ -58,53 +60,26 @@ class DeviceConfigMixin:
     """Mixin for device configuration steps."""
     
     def _get_device_entities(self, hass: HomeAssistant) -> Dict[str, list]:
-        """Get available device entities categorized by type."""
-        # Get ESPHome entities for relay control
-        light_entities = [e.entity_id for e in hass.states.async_all() if e.entity_id.startswith(f"{DOMAIN_LIGHT}.")]
-        select_entities = [e.entity_id for e in hass.states.async_all() if e.entity_id.startswith(f"{DOMAIN_SELECT}.")]
-        
-        # Get boolean entities from various domains for standard relay entities
-        boolean_domains = [f"{DOMAIN_LIGHT}.", f"{DOMAIN_SWITCH}.", f"{DOMAIN_INPUT_BOOLEAN}.", f"{DOMAIN_AUTOMATION}.", f"{DOMAIN_SCRIPT}."]
-        boolean_entities = []
+        """Get available device entities for selection (switch, light, climate, etc)."""
+        allowed_domains = [DOMAIN_LIGHT, DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT, DOMAIN_CLIMATE]
+        all_entities = []
         for e in hass.states.async_all():
-            # Check if entity belongs to one of the boolean domains
-            if any(e.entity_id.startswith(domain) for domain in boolean_domains):
-                # Check if entity state is boolean (on/off)
-                if e.state in [STATE_ON, STATE_OFF]:
-                    # Exclude integration's own entities (old/new names)
-                    if (
-                        "sun_allocator" not in e.entity_id.lower()
-                        and "sunallocator" not in e.entity_id.lower()
-                        and "sun_allocator" not in e.entity_id.lower()
-                        and "sunallocator" not in e.entity_id.lower()
-                    ):
-                        boolean_entities.append(e.entity_id)
-        
-        # Sort entities for better organization in dropdown list
-        boolean_entities.sort()
-        
-        # Create separate lists for custom and standard entities
-        custom_relay_entities = [
-            e for e in light_entities
-            if (
-                "sun_allocator" in e.lower() or "sunallocator" in e.lower()
-                or "sun_allocator" in e.lower() or "sunallocator" in e.lower()
-            )
-        ]
-        standard_relay_entities = boolean_entities
-        
-        custom_mode_select_entities = [e for e in select_entities if "sun_allocator" in e.lower() or "sunallocator" in e.lower()]
-        
-        # Add a "None" option to all lists
-        custom_relay_entities = [NONE_OPTION] + custom_relay_entities
-        standard_relay_entities = [NONE_OPTION] + standard_relay_entities
-        custom_mode_select_entities = [NONE_OPTION] + custom_mode_select_entities
-        
-        return {
-            "custom_relay_entities": custom_relay_entities,
-            "standard_relay_entities": standard_relay_entities,
-            "custom_mode_select_entities": custom_mode_select_entities
-        }
+            domain = e.entity_id.split(".")[0]
+            if domain in allowed_domains and e.state in [STATE_ON, STATE_OFF]:
+                if "sun_allocator" not in e.entity_id.lower() and "sunallocator" not in e.entity_id.lower():
+                    friendly = e.attributes.get("friendly_name", "")
+                    if domain == DOMAIN_CLIMATE:
+                        # Додаємо два варіанти: Heat та Cool
+                        label_heat = f"{e.entity_id} (Heat)"
+                        label_cool = f"{e.entity_id} (Cool)"
+                        all_entities.append((f"{e.entity_id}|heat", label_heat, friendly))
+                        all_entities.append((f"{e.entity_id}|cool", label_cool, friendly))
+                    else:
+                        label = f"{e.entity_id} ({friendly})" if friendly else e.entity_id
+                        all_entities.append((e.entity_id, label, friendly))
+        all_entities.sort(key=lambda x: x[1])
+        all_entities = [(NONE_OPTION, NONE_OPTION, "")] + all_entities
+        return {"all_entities": all_entities}
     
     def _validate_device_config(self, user_input: Dict[str, Any]) -> Dict[str, str]:
         """Validate device configuration."""
@@ -205,11 +180,32 @@ class DeviceConfigMixin:
     def _process_device_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process and clean device configuration input."""
         # Convert "None" string to actual None value
-        if user_input.get(CONF_ESPHOME_RELAY_ENTITY) == NONE_OPTION:
-            user_input[CONF_ESPHOME_RELAY_ENTITY] = None
-        if user_input.get(CONF_ESPHOME_MODE_SELECT_ENTITY) == NONE_OPTION:
-            user_input[CONF_ESPHOME_MODE_SELECT_ENTITY] = None
-        
+        if user_input.get(CONF_DEVICE_ENTITY) == NONE_OPTION:
+            user_input[CONF_DEVICE_ENTITY] = None
+            user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = None
+        else:
+            # Climate entity: entity_id|mode (heat/cool)
+            label = user_input.get(CONF_DEVICE_ENTITY)
+            if label and "|" in label:
+                entity_id, mode = label.split("|", 1)
+                user_input[CONF_DEVICE_ENTITY] = f"{entity_id}|{mode}"
+                # Friendly name (if present in label)
+                if "(" in entity_id and entity_id.endswith(")"):
+                    eid = entity_id.split(" (")[0]
+                    friendly = entity_id[entity_id.find("(")+1:-1]
+                    user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = friendly
+                    user_input[CONF_DEVICE_ENTITY] = f"{eid}|{mode}"
+                else:
+                    user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = None
+            else:
+                # Parse friendly_name from label if present
+                if label and "(" in label and label.endswith(")"):
+                    entity_id = label.split(" (")[0]
+                    friendly = label[label.find("(")+1:-1]
+                    user_input[CONF_DEVICE_ENTITY] = entity_id
+                    user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = friendly
+                else:
+                    user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = None
         return user_input
     
     def _process_schedule_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
@@ -262,20 +258,13 @@ class DeviceConfigMixin:
         """Get the schema for device selection configuration."""
         if defaults is None:
             defaults = {}
-        
-        # Convert None values to "None" string for the dropdown
-        default_relay = NONE_OPTION if defaults.get(CONF_ESPHOME_RELAY_ENTITY) is None else defaults.get(CONF_ESPHOME_RELAY_ENTITY, NONE_OPTION)
-        default_mode = NONE_OPTION if defaults.get(CONF_ESPHOME_MODE_SELECT_ENTITY) is None else defaults.get(CONF_ESPHOME_MODE_SELECT_ENTITY, NONE_OPTION)
-        
         schema = {}
-        
         if device_type == DEVICE_TYPE_STANDARD:
-            schema[vol.Optional(CONF_ESPHOME_RELAY_ENTITY, default=default_relay, description={"suggested_value": default_relay})] = vol.In(entities["standard_relay_entities"])
-        
-        if device_type == DEVICE_TYPE_CUSTOM:
-            schema[vol.Optional(CONF_ESPHOME_RELAY_ENTITY, default=default_relay, description={"suggested_value": default_relay})] = vol.In(entities["custom_relay_entities"])
-            schema[vol.Optional(CONF_ESPHOME_MODE_SELECT_ENTITY, default=default_mode, description={"suggested_value": default_mode})] = vol.In(entities["custom_mode_select_entities"])
-        
+            # Universal entity selection for standard devices
+            default_entity = NONE_OPTION if defaults.get(CONF_DEVICE_ENTITY) is None else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
+            entity_options = {label: eid for eid, label, _ in entities["all_entities"]}
+            schema[vol.Optional(CONF_DEVICE_ENTITY, default=default_entity, description={"suggested_value": default_entity})] = vol.In(list(entity_options.keys()))
+        # (custom devices залишаємо як є, якщо потрібно)
         return vol.Schema(schema)
     
     def _get_device_basic_settings_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:

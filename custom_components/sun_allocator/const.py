@@ -27,8 +27,9 @@ PANEL_CONFIG_SERIES = "series"
 PANEL_CONFIG_PARALLEL = "parallel"
 PANEL_CONFIG_PARALLEL_SERIES = "parallel-series"
 
-# Device configuration keys
-CONF_ESPHOME_RELAY_ENTITY = "esphome_relay_entity"
+# Device configuration keys (universal entity support)
+CONF_DEVICE_ENTITY = "device_entity"  # entity_id (switch, light, climate, etc)
+CONF_DEVICE_ENTITY_FRIENDLY_NAME = "device_entity_friendly_name"  # friendly_name for UI
 CONF_ESPHOME_MODE_SELECT_ENTITY = "esphome_mode_select_entity"
 CONF_AUTO_CONTROL_ENABLED = "auto_control_enabled"
 CONF_MIN_EXCESS_POWER = "min_excess_power"
@@ -149,6 +150,7 @@ DOMAIN_SELECT = "select"
 DOMAIN_INPUT_BOOLEAN = "input_boolean"
 DOMAIN_AUTOMATION = "automation"
 DOMAIN_SCRIPT = "script"
+DOMAIN_CLIMATE = "climate"
 
 # Brightness constants
 MAX_BRIGHTNESS = 255

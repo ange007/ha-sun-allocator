@@ -59,6 +59,7 @@ from .const import (
     DOMAIN_INPUT_BOOLEAN,
     DOMAIN_AUTOMATION,
     DOMAIN_SCRIPT,
+    DOMAIN_CLIMATE,
     MAX_BRIGHTNESS,
     MAX_PERCENTAGE,
     DEFAULT_MIN_START_W,
@@ -192,6 +193,13 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
             )
             return
 
+        # Climate entity: entity_id|mode (heat/cool)
+        hvac_mode = None
+        if '|' in entity_id:
+            entity_id, hvac_mode = entity_id.split('|', 1)
+            entity_id = entity_id.strip()
+            hvac_mode = hvac_mode.strip()
+
         # Get the domain from the entity_id
         domain = entity_id.split('.')[0]
         brightness = int((power_percent / MAX_PERCENTAGE) * MAX_BRIGHTNESS)
@@ -210,6 +218,12 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
                     {ATTR_ENTITY_ID: entity_id},
                     blocking=True
                 )
+            elif domain == DOMAIN_CLIMATE:
+                await hass.services.async_call(
+                    DOMAIN_CLIMATE, "set_hvac_mode",
+                    {ATTR_ENTITY_ID: entity_id, "hvac_mode": "off"},
+                    blocking=True
+                )
             else:
                 _LOGGER.warning(f"Unsupported entity domain: {domain}. Cannot turn off {entity_id}")
         else:
@@ -224,6 +238,12 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
                 await hass.services.async_call(
                     domain, SERVICE_TURN_ON,
                     {ATTR_ENTITY_ID: entity_id},
+                    blocking=True
+                )
+            elif domain == DOMAIN_CLIMATE:
+                await hass.services.async_call(
+                    DOMAIN_CLIMATE, "set_hvac_mode",
+                    {ATTR_ENTITY_ID: entity_id, "hvac_mode": hvac_mode or "heat"},
                     blocking=True
                 )
             else:
