@@ -1,6 +1,6 @@
 """Solar config form builders for Sun Allocator."""
 from voluptuous import Schema, Required, Optional
-from ..utils.ui_helpers import NumberSelectorBuilder
+from ..utils.ui_helpers import NumberSelectorBuilder, SelectSelectorBuilder
 try:
     from homeassistant.helpers.selector import selector
 except ImportError:

@@ -123,10 +123,9 @@ class SunAllocatorConfigFlow(
         ]
         # Build action dropdown for this step
         action_options = [
-            {"label": "Add", "value": ACTION_ADD},
+            {"label": "Back", "value": ACTION_BACK},
             {"label": "Edit", "value": ACTION_EDIT},
             {"label": "Remove", "value": ACTION_REMOVE},
-            {"label": "Finish", "value": ACTION_FINISH},
         ]
         schema_dict = {}
         # Device selector

@@ -187,7 +187,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     
     # Register services
     async def handle_set_relay_mode(call: ServiceCall):
-    """Handle set_relay_mode service call."""
+        """Handle set_relay_mode service call."""
         mode = call.data["mode"]
         entity_id = call.data.get(ATTR_ENTITY_ID)
         device_id = call.data.get(CONF_DEVICE_ID)
@@ -211,7 +211,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
                     await set_mode_for_entity(hass, entity_id, mode)
 
     async def handle_set_relay_power(call: ServiceCall):
-    """Handle set_relay_power service call."""
+        """Handle set_relay_power service call."""
         power_percent = call.data["power"]
         entity_id = call.data.get(ATTR_ENTITY_ID)
         device_id = call.data.get(CONF_DEVICE_ID)
