@@ -2,6 +2,9 @@
 import voluptuous as vol
 from typing import Dict, Any, Optional
 
+# Import helpers for schema
+from .advanced_config_form import build_advanced_config_schema
+
 from ..const import (
     CONF_ADVANCED_SETTINGS_ENABLED,
     CONF_BATTERY_POWER_REVERSED,
@@ -91,7 +94,6 @@ class AdvancedConfigMixin:
 
     def _get_advanced_config_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
         """Get the schema for advanced settings configuration using advanced_config_form.py."""
-        from .advanced_config_form import build_advanced_config_schema
         return build_advanced_config_schema(defaults)
 
     async def async_step_advanced_settings(self, user_input=None):

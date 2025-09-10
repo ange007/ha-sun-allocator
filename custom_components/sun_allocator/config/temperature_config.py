@@ -15,13 +15,16 @@ from ..const import (
     CONF_ADVANCED_SETTINGS_ENABLED,
 )
 
+# Import helpers for selector building and schema
+from ..utils.ui_helpers import EntitySelectorBuilder
+from .temperature_config_form import build_temperature_config_schema
+
 
 class TemperatureConfigMixin:
     """Mixin for temperature compensation configuration steps."""
 
     def _get_temperature_sensors(self, hass: HomeAssistant) -> list:
         """Get available temperature sensors with label/value for selector (через UI helpers)."""
-        from ..ui_helpers import EntitySelectorBuilder
         icon_map = {"sensor": "🌡️"}
         sensors = [e for e in hass.states.async_all() if e.entity_id.startswith("sensor.") and (
             "temp" in e.entity_id.lower() or
@@ -77,8 +80,10 @@ class TemperatureConfigMixin:
 
     def _get_temperature_config_schema(self, temperature_sensors: list, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
         """Get the schema for temperature compensation configuration using temperature_config_form.py."""
-        from .temperature_config_form import build_temperature_config_schema
         return build_temperature_config_schema(temperature_sensors, defaults)
+
+
+# Imports moved to the top for PEP8 compliance
 
     async def async_step_temperature_compensation(self, user_input=None):
         """Handle temperature compensation settings."""

@@ -3,10 +3,12 @@ import voluptuous as vol
 import uuid
 from datetime import time
 from typing import Dict, Any, List, Optional
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.selector import selector
-
+from ..utils.sensor_utils import clean_entity_id_and_mode
+from .device_config_form import (
+    build_device_name_type_schema, build_device_selection_schema, build_device_basic_settings_schema, build_device_schedule_schema
+)
 from ..const import (
     CONF_DEVICE_ENTITY,
     CONF_DEVICE_ENTITY_FRIENDLY_NAME,
@@ -62,8 +64,7 @@ class DeviceConfigMixin:
     """Mixin for device configuration steps."""
     
     def _get_device_entities(self, hass: HomeAssistant) -> Dict[str, list]:
-        """Get available device entities for selection (switch, light, climate, etc). Для custom (ESPHome) — лише ESPHome-реле."""
-        from ..utils.sensor_utils import clean_entity_id_and_mode
+        """Get available device entities for selection (switch, light, climate, etc). For custom (ESPHome) — only ESPHome relays."""
         allowed_domains = [DOMAIN_LIGHT, DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT, DOMAIN_CLIMATE]
         icon_map = {
             DOMAIN_LIGHT: "💡",
@@ -211,7 +212,6 @@ class DeviceConfigMixin:
     
     def _process_device_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process and clean device configuration input."""
-        from ..utils.sensor_utils import clean_entity_id_and_mode
         # Convert "None" string to actual None value
         if user_input.get(CONF_DEVICE_ENTITY) == NONE_OPTION:
             user_input[CONF_DEVICE_ENTITY] = None
@@ -260,24 +260,20 @@ class DeviceConfigMixin:
     
     def _get_device_name_type_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
         """Get the schema for device name and type configuration using device_config_form.py."""
-        from .device_config_form import build_device_name_type_schema
         return build_device_name_type_schema(defaults)
     
     def _get_device_selection_schema(self, entities: Dict[str, list], device_type: str, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
         """Get the schema for device selection configuration using device_config_form.py."""
-        from .device_config_form import build_device_selection_schema
         return build_device_selection_schema(entities, device_type, defaults)
     
     def _get_device_basic_settings_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
         """Get the schema for device basic settings configuration using device_config_form.py."""
-        from .device_config_form import build_device_basic_settings_schema
         return build_device_basic_settings_schema(defaults)
     
     def _get_device_schedule_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
         """Get the schema for device schedule configuration using device_config_form.py."""
-        from .device_config_form import build_device_schedule_schema
         return build_device_schedule_schema(defaults)
-    
+
     async def _finalize_device_config(self):
         """Finalize device configuration and return to appropriate screen."""
         # Add or update device ID
@@ -288,7 +284,6 @@ class DeviceConfigMixin:
             self._device_config[CONF_DEVICE_ID] = self._device_config.get(CONF_DEVICE_ID) or str(uuid.uuid4())
             if self._device_index is not None:
                 self._devices[self._device_index] = self._device_config
-        
         # Check which method to call based on available methods
         if hasattr(self, 'async_step_manage_devices'):
             # For SunAllocatorOptionsFlowHandler

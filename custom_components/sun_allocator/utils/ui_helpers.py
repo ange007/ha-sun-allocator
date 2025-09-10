@@ -45,5 +45,3 @@ class SelectSelectorBuilder:
         self.mode = mode
     def build(self):
         return selector({"select": {"options": self.options, "mode": self.mode}})
-
-# Додаткові утиліти для label/emoji можна додати тут

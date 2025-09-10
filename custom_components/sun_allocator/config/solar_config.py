@@ -21,13 +21,16 @@ from ..const import (
     NONE_OPTION,
 )
 
+# Import helpers for selector building and schema
+from ..utils.ui_helpers import EntitySelectorBuilder
+from .solar_config_form import build_solar_config_schema
+
 
 class SolarConfigMixin:
     """Mixin for solar panel configuration steps."""
     
     def _get_sensor_entities(self, hass: HomeAssistant) -> Dict[str, list]:
         """Get available sensor entities categorized by type, with label/value for selector (через UI helpers)."""
-        from ..ui_helpers import EntitySelectorBuilder
         icon_map = {"power": "⚡", "voltage": "🔋", "consumption": "🏠", "battery": "🔋"}
         sensor_entities = [e for e in hass.states.async_all() if e.entity_id.startswith("sensor.")]
         def filter_entities(entities, key):
@@ -107,9 +110,8 @@ class SolarConfigMixin:
     
     def _get_solar_config_schema(self, sensors: Dict[str, list], defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
         """Get the schema for solar panel configuration using solar_config_form.py."""
-        from .solar_config_form import build_solar_config_schema
         return build_solar_config_schema(sensors, defaults)
-    
+
     async def async_step_user(self, user_input=None):
         """Handle the initial step - solar panel configuration."""
         errors = {}

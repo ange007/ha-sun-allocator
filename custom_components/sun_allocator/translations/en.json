@@ -85,7 +85,8 @@
       "device_selection": {
         "data": {
           "esphome_relay_entity": "ESPHome Relay Entity",
-          "esphome_mode_select_entity": "ESPHome Mode Select Entity"
+          "esphome_mode_select_entity": "ESPHome Mode Select Entity",
+          "no_devices_found": "No devices found"
         }
       },
       "device_basic_settings": {

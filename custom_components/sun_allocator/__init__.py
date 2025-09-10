@@ -1,5 +1,5 @@
 async def set_mode_for_entity(hass, entity_id, mode):
-    """Встановити режим для конкретної сутності."""
+    """Set mode for a specific entity."""
     state = hass.states.get(entity_id)
     if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
         _LOGGER.debug(
@@ -15,7 +15,7 @@ async def set_mode_for_entity(hass, entity_id, mode):
     )
 
 async def set_power_for_entity(hass, entity_id, power_percent):
-    """Встановити потужність для конкретної сутності."""
+    """Set power for a specific entity."""
     state = hass.states.get(entity_id)
     if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
         _LOGGER.debug(
@@ -187,7 +187,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     
     # Register services
     async def handle_set_relay_mode(call: ServiceCall):
-        """Обробка сервісу set_relay_mode."""
+    """Handle set_relay_mode service call."""
         mode = call.data["mode"]
         entity_id = call.data.get(ATTR_ENTITY_ID)
         device_id = call.data.get(CONF_DEVICE_ID)
@@ -211,7 +211,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
                     await set_mode_for_entity(hass, entity_id, mode)
 
     async def handle_set_relay_power(call: ServiceCall):
-        """Обробка сервісу set_relay_power."""
+    """Handle set_relay_power service call."""
         power_percent = call.data["power"]
         entity_id = call.data.get(ATTR_ENTITY_ID)
         device_id = call.data.get(CONF_DEVICE_ID)

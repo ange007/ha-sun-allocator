@@ -115,7 +115,7 @@ class SunAllocatorConfigFlow(
                 data[CONF_DEVICES] = self._devices
                 return self.async_create_entry(title="SunAllocator", data=data)
 
-        from ..ui_helpers import SelectSelectorBuilder
+        from ..utils.ui_helpers import SelectSelectorBuilder
         # Build devices dropdown: value=id, label=name
         device_options = [
             {"label": d[CONF_DEVICE_NAME], "value": d[CONF_DEVICE_ID]}
@@ -123,10 +123,10 @@ class SunAllocatorConfigFlow(
         ]
         # Build action dropdown for this step
         action_options = [
-            {"label": "Додати", "value": ACTION_ADD},
-            {"label": "Редагувати", "value": ACTION_EDIT},
-            {"label": "Видалити", "value": ACTION_REMOVE},
-            {"label": "Завершити", "value": ACTION_FINISH},
+            {"label": "Add", "value": ACTION_ADD},
+            {"label": "Edit", "value": ACTION_EDIT},
+            {"label": "Remove", "value": ACTION_REMOVE},
+            {"label": "Finish", "value": ACTION_FINISH},
         ]
         schema_dict = {}
         # Device selector
