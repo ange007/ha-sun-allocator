@@ -61,6 +61,7 @@ class DeviceConfigMixin:
     
     def _get_device_entities(self, hass: HomeAssistant) -> Dict[str, list]:
         """Get available device entities for selection (switch, light, climate, etc)."""
+        from ..utils.sensor_utils import clean_entity_id_and_mode
         allowed_domains = [DOMAIN_LIGHT, DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT, DOMAIN_CLIMATE]
         icon_map = {
             DOMAIN_LIGHT: "💡",
@@ -75,18 +76,27 @@ class DeviceConfigMixin:
             domain = e.entity_id.split(".")[0]
             icon = icon_map.get(domain, "")
             state = e.state
+            friendly = e.attributes.get("friendly_name", "")
+            # For custom devices, show emoji+entity_id, for standard - only friendly name and mode
             if domain in allowed_domains:
                 if domain == DOMAIN_CLIMATE:
-                    friendly = e.attributes.get("friendly_name", "")
-                    label_heat = f"{icon} {e.entity_id} (Heat) [{state}]"
-                    label_cool = f"{icon} {e.entity_id} (Cool) [{state}]"
-                    all_entities.append((f"{e.entity_id}|heat", label_heat, friendly))
-                    all_entities.append((f"{e.entity_id}|cool", label_cool, friendly))
+                    # Heat
+                    value_heat, _ = clean_entity_id_and_mode(f"{e.entity_id}|heat")
+                    label_heat = f"{friendly} (Heat)" if friendly else f"{e.entity_id} (Heat)"
+                    all_entities.append((value_heat, label_heat, friendly))
+                    # Cool
+                    value_cool, _ = clean_entity_id_and_mode(f"{e.entity_id}|cool")
+                    label_cool = f"{friendly} (Cool)" if friendly else f"{e.entity_id} (Cool)"
+                    all_entities.append((value_cool, label_cool, friendly))
                 elif state in [STATE_ON, STATE_OFF]:
                     if "sun_allocator" not in e.entity_id.lower() and "sunallocator" not in e.entity_id.lower():
-                        friendly = e.attributes.get("friendly_name", "")
-                        label = f"{icon} {e.entity_id} ({friendly}) [{state}]" if friendly else f"{icon} {e.entity_id} [{state}]"
-                        all_entities.append((e.entity_id, label, friendly))
+                        value, _ = clean_entity_id_and_mode(e.entity_id)
+                        # For custom devices (ESPHome) — show emoji+entity_id, for standard — just friendly name
+                        if domain in [DOMAIN_LIGHT, DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
+                            label = friendly if friendly else value
+                        else:
+                            label = f"{icon} {value}"
+                        all_entities.append((value, label, friendly))
         all_entities.sort(key=lambda x: x[1])
         all_entities = [(NONE_OPTION, NONE_OPTION, "")] + all_entities
         return {"all_entities": all_entities}
@@ -268,13 +278,18 @@ class DeviceConfigMixin:
         if defaults is None:
             defaults = {}
         schema = {}
-        if device_type == DEVICE_TYPE_STANDARD:
-            # Universal entity selection for standard devices
-            default_entity = NONE_OPTION if defaults.get(CONF_DEVICE_ENTITY) is None else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
-            entity_options = {label: eid for eid, label, _ in entities["all_entities"]}
-            if len(entity_options) <= 1:  # only NONE_OPTION present
-                entity_options["[No devices found]"] = NONE_OPTION
-            schema[vol.Optional(CONF_DEVICE_ENTITY, default=default_entity, description={"suggested_value": default_entity})] = vol.In(list(entity_options.keys()))
+        # Build {label: value} mapping for dropdown
+        entity_options = {}
+        for value, label, _ in entities["all_entities"]:
+            if value == NONE_OPTION:
+                entity_options[label] = value
+            else:
+                entity_options[label] = value
+        # Default selection
+        default_entity = NONE_OPTION if defaults.get(CONF_DEVICE_ENTITY) is None else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
+        if len(entity_options) <= 1:
+            entity_options["[No devices found]"] = NONE_OPTION
+        schema[vol.Optional(CONF_DEVICE_ENTITY, default=default_entity, description={"suggested_value": default_entity})] = vol.In(list(entity_options.values()))
         return vol.Schema(schema)
     
     def _get_device_basic_settings_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:

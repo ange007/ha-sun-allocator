@@ -1,3 +1,81 @@
+async def set_mode_for_entity(hass, entity_id, mode):
+    """Встановити режим для конкретної сутності."""
+    state = hass.states.get(entity_id)
+    if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        _LOGGER.debug(
+            f"Entity {entity_id} not found or unavailable, skipping set_relay_mode({mode})"
+        )
+        return
+
+    _LOGGER.debug(f"Setting relay mode to {mode} for entity {entity_id}")
+    await hass.services.async_call(
+        DOMAIN_SELECT, SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: entity_id, "option": mode},
+        blocking=True
+    )
+
+async def set_power_for_entity(hass, entity_id, power_percent):
+    """Встановити потужність для конкретної сутності."""
+    state = hass.states.get(entity_id)
+    if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        _LOGGER.debug(
+            f"Entity {entity_id} not found or unavailable, skipping set_relay_power({power_percent}%)"
+        )
+        return
+
+    hvac_mode = None
+    if '|' in entity_id:
+        entity_id, hvac_mode = entity_id.split('|', 1)
+        entity_id = entity_id.strip()
+        hvac_mode = hvac_mode.strip()
+
+    domain = entity_id.split('.')[0]
+    brightness = int((power_percent / MAX_PERCENTAGE) * MAX_BRIGHTNESS)
+
+    if power_percent <= 0:
+        _LOGGER.debug(f"Turning off entity {entity_id}")
+        if domain == DOMAIN_LIGHT:
+            await hass.services.async_call(
+                DOMAIN_LIGHT, SERVICE_TURN_OFF,
+                {ATTR_ENTITY_ID: entity_id},
+                blocking=True
+            )
+        elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
+            await hass.services.async_call(
+                domain, SERVICE_TURN_OFF,
+                {ATTR_ENTITY_ID: entity_id},
+                blocking=True
+            )
+        elif domain == DOMAIN_CLIMATE:
+            await hass.services.async_call(
+                DOMAIN_CLIMATE, "set_hvac_mode",
+                {ATTR_ENTITY_ID: entity_id, "hvac_mode": "off"},
+                blocking=True
+            )
+        else:
+            _LOGGER.warning(f"Unsupported entity domain: {domain}. Cannot turn off {entity_id}")
+    else:
+        _LOGGER.debug(f"Turning on entity {entity_id} with power {power_percent}%")
+        if domain == DOMAIN_LIGHT:
+            await hass.services.async_call(
+                DOMAIN_LIGHT, SERVICE_TURN_ON,
+                {ATTR_ENTITY_ID: entity_id, ATTR_BRIGHTNESS: brightness},
+                blocking=True
+            )
+        elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
+            await hass.services.async_call(
+                domain, SERVICE_TURN_ON,
+                {ATTR_ENTITY_ID: entity_id},
+                blocking=True
+            )
+        elif domain == DOMAIN_CLIMATE:
+            await hass.services.async_call(
+                DOMAIN_CLIMATE, "set_hvac_mode",
+                {ATTR_ENTITY_ID: entity_id, "hvac_mode": hvac_mode or "heat"},
+                blocking=True
+            )
+        else:
+            _LOGGER.warning(f"Unsupported entity domain: {domain}. Cannot turn on {entity_id}")
 import logging
 import voluptuous as vol
 from datetime import time, datetime, timedelta
@@ -17,7 +95,6 @@ from homeassistant.const import (
 from homeassistant.components.light import ATTR_BRIGHTNESS
 import homeassistant.util.dt as dt_util
 
-from .utils.sensor_utils import clean_entity_id_and_mode
 
 from .const import (
     DOMAIN,
@@ -110,18 +187,13 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     
     # Register services
     async def handle_set_relay_mode(call: ServiceCall):
-        """Handle the set_relay_mode service."""
+        """Обробка сервісу set_relay_mode."""
         mode = call.data["mode"]
         entity_id = call.data.get(ATTR_ENTITY_ID)
         device_id = call.data.get(CONF_DEVICE_ID)
-        
-        # Get devices from config
         devices = config_entry.data.get(CONF_DEVICES, [])
-        
-        # If entity_id is provided, use it directly
         if entity_id:
             await set_mode_for_entity(hass, entity_id, mode)
-        # If device_id is provided, find the corresponding device
         elif device_id:
             device = next((d for d in devices if d.get(CONF_DEVICE_ID) == device_id), None)
             if device:
@@ -132,43 +204,20 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
                     _LOGGER.error(f"Device {device.get(CONF_DEVICE_NAME)} has no mode select entity configured")
             else:
                 _LOGGER.error(f"Device with ID {device_id} not found")
-        # If neither is provided, set mode for all devices
         else:
             for device in devices:
                 entity_id = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
                 if entity_id:
                     await set_mode_for_entity(hass, entity_id, mode)
 
-    async def set_mode_for_entity(hass, entity_id, mode):
-        """Set mode for a specific entity."""
-        # Guard: ensure entity exists and is available
-        state = hass.states.get(entity_id)
-        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            _LOGGER.debug(
-                f"Entity {entity_id} not found or unavailable, skipping set_relay_mode({mode})"
-            )
-            return
-
-        _LOGGER.debug(f"Setting relay mode to {mode} for entity {entity_id}")
-        await hass.services.async_call(
-            DOMAIN_SELECT, SERVICE_SELECT_OPTION,
-            {ATTR_ENTITY_ID: entity_id, "option": mode},
-            blocking=True
-        )
-    
     async def handle_set_relay_power(call: ServiceCall):
-        """Handle the set_relay_power service."""
+        """Обробка сервісу set_relay_power."""
         power_percent = call.data["power"]
         entity_id = call.data.get(ATTR_ENTITY_ID)
         device_id = call.data.get(CONF_DEVICE_ID)
-        
-        # Get devices from config
         devices = config_entry.data.get(CONF_DEVICES, [])
-        
-        # If entity_id is provided, use it directly
         if entity_id:
             await set_power_for_entity(hass, entity_id, power_percent)
-        # If device_id is provided, find the corresponding device
         elif device_id:
             device = next((d for d in devices if d.get(CONF_DEVICE_ID) == device_id), None)
             if device:
@@ -183,7 +232,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
                     _LOGGER.error(f"Device {device.get(CONF_DEVICE_NAME)} has no entity configured")
             else:
                 _LOGGER.error(f"Device with ID {device_id} not found")
-        # If neither is provided, set power for all devices
         else:
             for device in devices:
                 device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
@@ -193,72 +241,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
                     entity_id = device.get(CONF_DEVICE_ENTITY)
                 if entity_id:
                     await set_power_for_entity(hass, entity_id, power_percent)
-    
-    async def set_power_for_entity(hass, entity_id, power_percent):
-        """Set power for a specific entity."""
-        # Guard: ensure entity exists and is available
-        state = hass.states.get(entity_id)
-        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            _LOGGER.debug(
-                f"Entity {entity_id} not found or unavailable, skipping set_relay_power({power_percent}%)"
-            )
-            return
-
-        # Climate entity: entity_id|mode (heat/cool)
-        hvac_mode = None
-        if '|' in entity_id:
-            entity_id, hvac_mode = entity_id.split('|', 1)
-            entity_id = entity_id.strip()
-            hvac_mode = hvac_mode.strip()
-
-        # Get the domain from the entity_id
-        domain = entity_id.split('.')[0]
-        brightness = int((power_percent / MAX_PERCENTAGE) * MAX_BRIGHTNESS)
-
-        if power_percent <= 0:
-            _LOGGER.debug(f"Turning off entity {entity_id}")
-            if domain == DOMAIN_LIGHT:
-                await hass.services.async_call(
-                    DOMAIN_LIGHT, SERVICE_TURN_OFF,
-                    {ATTR_ENTITY_ID: entity_id},
-                    blocking=True
-                )
-            elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
-                await hass.services.async_call(
-                    domain, SERVICE_TURN_OFF,
-                    {ATTR_ENTITY_ID: entity_id},
-                    blocking=True
-                )
-            elif domain == DOMAIN_CLIMATE:
-                await hass.services.async_call(
-                    DOMAIN_CLIMATE, "set_hvac_mode",
-                    {ATTR_ENTITY_ID: entity_id, "hvac_mode": "off"},
-                    blocking=True
-                )
-            else:
-                _LOGGER.warning(f"Unsupported entity domain: {domain}. Cannot turn off {entity_id}")
-        else:
-            _LOGGER.debug(f"Turning on entity {entity_id} with power {power_percent}%")
-            if domain == DOMAIN_LIGHT:
-                await hass.services.async_call(
-                    DOMAIN_LIGHT, SERVICE_TURN_ON,
-                    {ATTR_ENTITY_ID: entity_id, ATTR_BRIGHTNESS: brightness},
-                    blocking=True
-                )
-            elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
-                await hass.services.async_call(
-                    domain, SERVICE_TURN_ON,
-                    {ATTR_ENTITY_ID: entity_id},
-                    blocking=True
-                )
-            elif domain == DOMAIN_CLIMATE:
-                await hass.services.async_call(
-                    DOMAIN_CLIMATE, "set_hvac_mode",
-                    {ATTR_ENTITY_ID: entity_id, "hvac_mode": hvac_mode or "heat"},
-                    blocking=True
-                )
-            else:
-                _LOGGER.warning(f"Unsupported entity domain: {domain}. Cannot turn on {entity_id}")
     
     # Register the services once (global) and track entry count
     root = hass.data[DOMAIN]
@@ -419,21 +401,8 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     # Get devices from config
     import re
     devices = config_entry.data.get(CONF_DEVICES, [])
-    # Normalize entity_id and hvac_mode at registration/configuration time
-    for device in devices:
-        device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-        if device_type == DEVICE_TYPE_CUSTOM:
-            relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
-            clean_id, hvac_mode = clean_entity_id_and_mode(relay_entity)
-            device["_clean_entity_id"] = clean_id
-            if hvac_mode:
-                device["_hvac_mode"] = hvac_mode
-        else:
-            relay_entity_raw = device.get(CONF_DEVICE_ENTITY)
-            clean_id, hvac_mode = clean_entity_id_and_mode(relay_entity_raw)
-            device["_clean_entity_id"] = clean_id
-            if hvac_mode:
-                device["_hvac_mode"] = hvac_mode
+    # No normalization needed here; entity_id is already cleaned in config
+    # _clean_entity_id is legacy and no longer used
     # Filter devices with auto-control enabled
     auto_control_devices = [d for d in devices if d.get(CONF_AUTO_CONTROL_ENABLED, False)]
     if not auto_control_devices:
@@ -521,7 +490,12 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     entity_to_device_id = {}
     for d in auto_control_devices:
         did = d.get(CONF_DEVICE_ID)
-        eid = d.get("_clean_entity_id")
+        # Use the correct config field for entity_id
+        device_type = d.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
+        if device_type == DEVICE_TYPE_CUSTOM:
+            eid = d.get(CONF_ESPHOME_RELAY_ENTITY)
+        else:
+            eid = d.get(CONF_DEVICE_ENTITY)
         if eid and did:
             entity_to_device_id[eid] = did
     entry_data["entity_to_device_id"] = entity_to_device_id
@@ -607,9 +581,15 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         for device in auto_control_devices:
             device_id = device.get(CONF_DEVICE_ID)
             device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-            relay_entity = device.get("_clean_entity_id")
-            mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else None
-            hvac_mode = device.get("_hvac_mode") if device_type == DEVICE_TYPE_STANDARD else None
+            # Use the correct config field for entity_id
+            if device_type == DEVICE_TYPE_CUSTOM:
+                relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
+                mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
+                hvac_mode = None
+            else:
+                relay_entity = device.get(CONF_DEVICE_ENTITY)
+                mode_select_entity = None
+                hvac_mode = device.get("_hvac_mode")
             device_name = device.get(CONF_DEVICE_NAME, "Unknown")
             device_priority = int(device.get(CONF_DEVICE_PRIORITY, 50))
             max_expected_w = float(device.get(CONF_MAX_EXPECTED_W, 0) or 0)
