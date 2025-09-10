@@ -1,6 +1,12 @@
 """Solar config form builders for Sun Allocator."""
 from voluptuous import Schema, Required, Optional
-from ..utils.ui_helpers import NumberSelectorBuilder, SelectSelectorBuilder
+from ..utils.ui_helpers import NumberSelectorBuilder
+try:
+    from homeassistant.helpers.selector import selector
+except ImportError:
+    # Fallback for linting outside Home Assistant
+    def selector(x):
+        return x
 
 from ..const import (
     CONF_PV_POWER, CONF_PV_VOLTAGE, CONF_VMP, CONF_IMP, CONF_VOC, CONF_ISC, CONF_PANEL_COUNT, CONF_PANEL_CONFIGURATION,
@@ -25,7 +31,7 @@ def build_solar_config_schema(sensors, defaults=None):
                 "suggested_value": defaults.get(CONF_PV_POWER),
                 "label": "config.step.settings.data.pv_power"
             },
-        ): SelectSelectorBuilder(sensors["power_sensors"]).build(),
+        ): selector({"entity": {}}),
         Required(
             CONF_PV_VOLTAGE,
             default=defaults.get(CONF_PV_VOLTAGE),
@@ -33,7 +39,7 @@ def build_solar_config_schema(sensors, defaults=None):
                 "suggested_value": defaults.get(CONF_PV_VOLTAGE),
                 "label": "config.step.settings.data.pv_voltage"
             },
-        ): SelectSelectorBuilder(sensors["voltage_sensors"]).build(),
+        ): selector({"entity": {}}),
         Required(
             CONF_VMP,
             default=defaults.get(CONF_VMP, 36.0),
@@ -89,7 +95,7 @@ def build_solar_config_schema(sensors, defaults=None):
                 "suggested_value": default_consumption,
                 "label": "config.step.settings.data.consumption"
             },
-        ): SelectSelectorBuilder(sensors["consumption_sensors"]).build(),
+        ): selector({"entity": {}}),
         Optional(
             CONF_BATTERY_POWER,
             default=default_battery_power,
@@ -97,5 +103,5 @@ def build_solar_config_schema(sensors, defaults=None):
                 "suggested_value": default_battery_power,
                 "label": "config.step.settings.data.battery_power"
             },
-        ): SelectSelectorBuilder(sensors["battery_sensors"]).build(),
+        ): selector({"entity": {}}),
     })

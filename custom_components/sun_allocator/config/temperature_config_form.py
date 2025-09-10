@@ -1,6 +1,12 @@
 """Temperature config form builders for Sun Allocator."""
 from voluptuous import Schema, Required
-from ..utils.ui_helpers import NumberSelectorBuilder, SelectSelectorBuilder
+from ..utils.ui_helpers import NumberSelectorBuilder
+try:
+    from homeassistant.helpers.selector import selector
+except ImportError:
+    # Fallback for linting outside Home Assistant
+    def selector(x):
+        return x
 
 from ..const import (
     CONF_TEMPERATURE_SENSOR, CONF_TEMP_COEFFICIENT_VOC, CONF_TEMP_COEFFICIENT_PMAX, NONE_OPTION, DEFAULT_VOC_COEFFICIENT, DEFAULT_PMAX_COEFFICIENT
@@ -18,7 +24,7 @@ def build_temperature_config_schema(temperature_sensors, defaults=None):
                 "suggested_value": default_temp_sensor,
                 "label": "config.step.temperature_compensation.data.temperature_sensor"
             }
-        ): SelectSelectorBuilder(temperature_sensors).build(),
+        ): selector({"entity": {}}),
         Required(
             CONF_TEMP_COEFFICIENT_VOC,
             default=defaults.get(CONF_TEMP_COEFFICIENT_VOC, DEFAULT_VOC_COEFFICIENT),

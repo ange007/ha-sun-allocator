@@ -1,4 +1,10 @@
-"""Device config form builders for Sun Allocator."""
+"""Device config form builders for Sun Allocator.
+
+# NOTE: Custom SelectSelectorBuilder is kept here because:
+#  - Device dropdown requires emoji and friendly_name in label, value=entity_id
+#  - Supports 'None' option and custom filtering (ESPHome/standard devices)
+#  - Standard Home Assistant selector does not support these UI/UX requirements
+"""
 from voluptuous import Schema, Required, Optional
 from ..utils.ui_helpers import SelectSelectorBuilder, NumberSelectorBuilder, BooleanSelectorBuilder
 
