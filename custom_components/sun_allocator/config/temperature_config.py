@@ -20,20 +20,19 @@ class TemperatureConfigMixin:
     """Mixin for temperature compensation configuration steps."""
 
     def _get_temperature_sensors(self, hass: HomeAssistant) -> list:
-        """Get available temperature sensors with label/value for selector."""
-        icon = "🌡️"
-        sensors = []
-        for e in hass.states.async_all():
-            if e.entity_id.startswith("sensor."):
-                if ("temp" in e.entity_id.lower() or
-                    "temperature" in e.entity_id.lower() or
-                    (e.attributes.get("unit_of_measurement") in ["°C", "°F", "K"])):
-                    friendly = e.attributes.get("friendly_name", "")
-                    label = f"{icon} {friendly}" if friendly else f"{icon} {e.entity_id}"
-                    sensors.append({"label": label, "value": e.entity_id})
-        sensors.sort(key=lambda x: x["label"])
-        sensors = [{"label": "None", "value": NONE_OPTION}] + sensors
-        return sensors
+        """Get available temperature sensors with label/value for selector (через UI helpers)."""
+        from ..ui_helpers import EntitySelectorBuilder
+        icon_map = {"sensor": "🌡️"}
+        sensors = [e for e in hass.states.async_all() if e.entity_id.startswith("sensor.") and (
+            "temp" in e.entity_id.lower() or
+            "temperature" in e.entity_id.lower() or
+            (e.attributes.get("unit_of_measurement") in ["°C", "°F", "K"]))]
+        builder = EntitySelectorBuilder(icon_map)
+        result = builder.build(sensors, none_option=True)
+        # NONE_OPTION замість "None"
+        if result and result[0]["value"] == "None":
+            result[0]["value"] = NONE_OPTION
+        return result
 
     def _validate_temperature_config(self, user_input: Dict[str, Any]) -> Dict[str, str]:
         """Validate temperature compensation configuration."""
@@ -77,16 +76,9 @@ class TemperatureConfigMixin:
         return user_input
 
     def _get_temperature_config_schema(self, temperature_sensors: list, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for temperature compensation configuration using selectors."""
-        from homeassistant.helpers.selector import selector
-        if defaults is None:
-            defaults = {}
-        default_temp_sensor = NONE_OPTION if defaults.get(CONF_TEMPERATURE_SENSOR) is None else defaults.get(CONF_TEMPERATURE_SENSOR, NONE_OPTION)
-        return vol.Schema({
-            vol.Required(CONF_TEMPERATURE_SENSOR, default=default_temp_sensor, description={"suggested_value": default_temp_sensor}): selector({"select": {"options": temperature_sensors, "mode": "dropdown"}}),
-            vol.Required(CONF_TEMP_COEFFICIENT_VOC, default=defaults.get(CONF_TEMP_COEFFICIENT_VOC, DEFAULT_VOC_COEFFICIENT), description={"suggested_value": defaults.get(CONF_TEMP_COEFFICIENT_VOC, DEFAULT_VOC_COEFFICIENT)}): selector({"number": {"min": -1.0, "max": 0.0, "step": 0.01, "mode": "box"}}),
-            vol.Required(CONF_TEMP_COEFFICIENT_PMAX, default=defaults.get(CONF_TEMP_COEFFICIENT_PMAX, DEFAULT_PMAX_COEFFICIENT), description={"suggested_value": defaults.get(CONF_TEMP_COEFFICIENT_PMAX, DEFAULT_PMAX_COEFFICIENT)}): selector({"number": {"min": -1.0, "max": 0.0, "step": 0.01, "mode": "box"}}),
-        })
+        """Get the schema for temperature compensation configuration using temperature_config_form.py."""
+        from .temperature_config_form import build_temperature_config_schema
+        return build_temperature_config_schema(temperature_sensors, defaults)
 
     async def async_step_temperature_compensation(self, user_input=None):
         """Handle temperature compensation settings."""

@@ -259,141 +259,24 @@ class DeviceConfigMixin:
         return user_input
     
     def _get_device_name_type_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for device name and type configuration using selectors."""
-        if defaults is None:
-            defaults = {}
-        default_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-        if default_type == DEVICE_TYPE_NONE:
-            default_type = DEVICE_TYPE_CUSTOM
-        schema = {
-            vol.Required(
-                CONF_DEVICE_NAME,
-                default=defaults.get(CONF_DEVICE_NAME, ""),
-                description={"suggested_value": defaults.get(CONF_DEVICE_NAME, ""), "description": "Унікальна назва пристрою, наприклад 'Бойлер'"}
-            ): str,
-            vol.Required(
-                CONF_DEVICE_TYPE,
-                default=default_type,
-                description={"suggested_value": default_type, "description": "Тип пристрою: стандартний (on/off) або custom (ESPHome)"}
-            ): selector({
-                "select": {
-                    "options": [
-                        {"label": "Стандартний (on/off)", "value": DEVICE_TYPE_STANDARD},
-                        {"label": "Custom (ESPHome)", "value": DEVICE_TYPE_CUSTOM}
-                    ],
-                    "mode": "dropdown"
-                }
-            })
-        }
-        return vol.Schema(schema)
+        """Get the schema for device name and type configuration using device_config_form.py."""
+        from .device_config_form import build_device_name_type_schema
+        return build_device_name_type_schema(defaults)
     
     def _get_device_selection_schema(self, entities: Dict[str, list], device_type: str, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for device selection configuration using selector."""
-        if defaults is None:
-            defaults = {}
-        schema = {}
-        options = [
-            {"label": label, "value": value}
-            for value, label, _ in entities["all_entities"]
-        ]
-        default_entity = NONE_OPTION if defaults.get(CONF_DEVICE_ENTITY) is None else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
-        if len(options) <= 1:
-            options.append({"label": "[No devices found]", "value": NONE_OPTION})
-        schema[vol.Optional(
-            CONF_DEVICE_ENTITY,
-            default=default_entity,
-            description={"suggested_value": default_entity}
-        )] = selector({
-            "select": {
-                "options": options,
-                "mode": "dropdown"
-            }
-        })
-        return vol.Schema(schema)
+        """Get the schema for device selection configuration using device_config_form.py."""
+        from .device_config_form import build_device_selection_schema
+        return build_device_selection_schema(entities, device_type, defaults)
     
     def _get_device_basic_settings_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for device basic settings configuration using selectors."""
-        if defaults is None:
-            defaults = {}
-        device_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_STANDARD)
-        schema_dict = {
-            vol.Required(
-                CONF_AUTO_CONTROL_ENABLED,
-                default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
-                description={"suggested_value": defaults.get(CONF_AUTO_CONTROL_ENABLED, False)}
-            ): selector({"boolean": {}}),
-            vol.Optional(
-                CONF_MIN_EXPECTED_W,
-                default=defaults.get(CONF_MIN_EXPECTED_W, 0.0),
-                description={"suggested_value": defaults.get(CONF_MIN_EXPECTED_W, 0.0)}
-            ): selector({
-                "number": {
-                    "min": 0,
-                    "max": 10000,
-                    "step": 1,
-                    "mode": "box",
-                    "unit_of_measurement": "Вт"
-                }
-            }),
-            vol.Required(
-                CONF_DEVICE_PRIORITY,
-                default=defaults.get(CONF_DEVICE_PRIORITY, 50),
-                description={"suggested_value": defaults.get(CONF_DEVICE_PRIORITY, 50)}
-            ): selector({
-                "number": {
-                    "min": 1,
-                    "max": 100,
-                    "step": 1,
-                    "mode": "slider"
-                }
-            }),
-            vol.Required(
-                CONF_SCHEDULE_ENABLED,
-                default=defaults.get(CONF_SCHEDULE_ENABLED, False),
-                description={"suggested_value": defaults.get(CONF_SCHEDULE_ENABLED, False)}
-            ): selector({"boolean": {}}),
-        }
-        if device_type == DEVICE_TYPE_CUSTOM:
-            schema_dict[vol.Optional(
-                CONF_MAX_EXPECTED_W,
-                default=defaults.get(CONF_MAX_EXPECTED_W, 0.0),
-                description={"suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)}
-            )] = selector({
-                "number": {
-                    "min": 0,
-                    "max": 10000,
-                    "step": 1,
-                    "mode": "box",
-                    "unit_of_measurement": "Вт"
-                }
-            })
-        return vol.Schema(schema_dict)
+        """Get the schema for device basic settings configuration using device_config_form.py."""
+        from .device_config_form import build_device_basic_settings_schema
+        return build_device_basic_settings_schema(defaults)
     
     def _get_device_schedule_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for device schedule configuration using selectors."""
-        if defaults is None:
-            defaults = {}
-        default_days = defaults.get(CONF_DAYS_OF_WEEK, DAYS_OF_WEEK)
-        days_schema = {}
-        for day in DAYS_OF_WEEK:
-            days_schema[vol.Required(
-                day,
-                default=day in default_days,
-                description={"suggested_value": day in default_days}
-            )] = selector({"boolean": {}})
-        return vol.Schema({
-            vol.Required(
-                CONF_START_TIME,
-                default=defaults.get(CONF_START_TIME, "08:00"),
-                description={"suggested_value": defaults.get(CONF_START_TIME, "08:00")}
-            ): selector({"time": {}}),
-            vol.Required(
-                CONF_END_TIME,
-                default=defaults.get(CONF_END_TIME, "20:00"),
-                description={"suggested_value": defaults.get(CONF_END_TIME, "20:00")}
-            ): selector({"time": {}}),
-            **days_schema
-        })
+        """Get the schema for device schedule configuration using device_config_form.py."""
+        from .device_config_form import build_device_schedule_schema
+        return build_device_schedule_schema(defaults)
     
     async def _finalize_device_config(self):
         """Finalize device configuration and return to appropriate screen."""

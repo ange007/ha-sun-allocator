@@ -90,43 +90,9 @@ class AdvancedConfigMixin:
         return user_input
 
     def _get_advanced_config_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for advanced settings configuration using selectors."""
-        from homeassistant.helpers.selector import selector
-        if defaults is None:
-            defaults = {}
-        return vol.Schema({
-            # MPPT algorithm parameters
-            vol.Required(CONF_CURVE_FACTOR_K, default=defaults.get(CONF_CURVE_FACTOR_K, 0.2), 
-                        description={"suggested_value": defaults.get(CONF_CURVE_FACTOR_K, 0.2)}): 
-                selector({"number": {"min": 0.1, "max": 0.5, "step": 0.01, "mode": "box"}}),
-            vol.Required(CONF_EFFICIENCY_CORRECTION_FACTOR, default=defaults.get(CONF_EFFICIENCY_CORRECTION_FACTOR, 1.05), 
-                        description={"suggested_value": defaults.get(CONF_EFFICIENCY_CORRECTION_FACTOR, 1.05)}): 
-                selector({"number": {"min": 1.0, "max": 1.2, "step": 0.01, "mode": "box"}}),
-            vol.Required(CONF_MIN_INVERTER_VOLTAGE, default=defaults.get(CONF_MIN_INVERTER_VOLTAGE, 100.0), 
-                        description={"suggested_value": defaults.get(CONF_MIN_INVERTER_VOLTAGE, 100.0)}): 
-                selector({"number": {"min": 0, "max": 1000, "step": 1, "mode": "box"}}),
-
-            # Ramp/hysteresis tunables
-            vol.Required(CONF_RAMP_UP_STEP, default=defaults.get(CONF_RAMP_UP_STEP, 10.0),
-                        description={"suggested_value": defaults.get(CONF_RAMP_UP_STEP, 10.0)}):
-                selector({"number": {"min": 0.1, "max": 100.0, "step": 0.1, "mode": "box"}}),
-            vol.Required(CONF_RAMP_DOWN_STEP, default=defaults.get(CONF_RAMP_DOWN_STEP, 20.0),
-                        description={"suggested_value": defaults.get(CONF_RAMP_DOWN_STEP, 20.0)}):
-                selector({"number": {"min": 0.1, "max": 100.0, "step": 0.1, "mode": "box"}}),
-            vol.Required(CONF_RAMP_DEADBAND, default=defaults.get(CONF_RAMP_DEADBAND, 1.0),
-                        description={"suggested_value": defaults.get(CONF_RAMP_DEADBAND, 1.0)}):
-                selector({"number": {"min": 0.0, "max": 10.0, "step": 0.01, "mode": "box"}}),
-            vol.Required(CONF_DEFAULT_MIN_START_W, default=defaults.get(CONF_DEFAULT_MIN_START_W, DEFAULT_MIN_START_W),
-                        description={"suggested_value": defaults.get(CONF_DEFAULT_MIN_START_W, DEFAULT_MIN_START_W)}):
-                selector({"number": {"min": 0, "max": 5000, "step": 1, "mode": "box"}}),
-            vol.Required(CONF_HYSTERESIS_W, default=defaults.get(CONF_HYSTERESIS_W, DEFAULT_HYSTERESIS_W),
-                        description={"suggested_value": defaults.get(CONF_HYSTERESIS_W, DEFAULT_HYSTERESIS_W)}):
-                selector({"number": {"min": 0, "max": 5000, "step": 1, "mode": "box"}}),
-            # Battery power reverse setting
-            vol.Required(CONF_BATTERY_POWER_REVERSED, default=defaults.get(CONF_BATTERY_POWER_REVERSED, False), 
-                        description={"suggested_value": defaults.get(CONF_BATTERY_POWER_REVERSED, False)}): 
-                selector({"boolean": {}}),
-        })
+        """Get the schema for advanced settings configuration using advanced_config_form.py."""
+        from .advanced_config_form import build_advanced_config_schema
+        return build_advanced_config_schema(defaults)
 
     async def async_step_advanced_settings(self, user_input=None):
         """Handle advanced settings."""

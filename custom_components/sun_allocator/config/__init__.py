@@ -115,7 +115,7 @@ class SunAllocatorConfigFlow(
                 data[CONF_DEVICES] = self._devices
                 return self.async_create_entry(title="SunAllocator", data=data)
 
-        from homeassistant.helpers.selector import selector
+        from ..ui_helpers import SelectSelectorBuilder
         # Build devices dropdown: value=id, label=name
         device_options = [
             {"label": d[CONF_DEVICE_NAME], "value": d[CONF_DEVICE_ID]}
@@ -136,13 +136,13 @@ class SunAllocatorConfigFlow(
                 CONF_DEVICE_ID,
                 default=default_device_id,
                 description={"suggested_value": default_device_id}
-            )] = selector({"select": {"options": device_options, "mode": "dropdown"}})
+            )] = SelectSelectorBuilder(device_options).build()
         # Action selector
         schema_dict[vol.Required(
             CONF_ACTION,
             default=ACTION_FINISH,
             description={"suggested_value": ACTION_FINISH}
-        )] = selector({"select": {"options": action_options, "mode": "dropdown"}})
+        )] = SelectSelectorBuilder(action_options).build()
         return self.async_show_form(
             step_id=STEP_DEVICES,
             data_schema=vol.Schema(schema_dict),
