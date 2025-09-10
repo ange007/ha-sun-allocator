@@ -2,8 +2,10 @@
 import voluptuous as vol
 import uuid
 from datetime import time
-from homeassistant.core import HomeAssistant
 from typing import Dict, Any, List, Optional
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.selector import selector
 
 from ..const import (
     CONF_DEVICE_ENTITY,
@@ -60,7 +62,7 @@ class DeviceConfigMixin:
     """Mixin for device configuration steps."""
     
     def _get_device_entities(self, hass: HomeAssistant) -> Dict[str, list]:
-        """Get available device entities for selection (switch, light, climate, etc)."""
+        """Get available device entities for selection (switch, light, climate, etc). Для custom (ESPHome) — лише ESPHome-реле."""
         from ..utils.sensor_utils import clean_entity_id_and_mode
         allowed_domains = [DOMAIN_LIGHT, DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT, DOMAIN_CLIMATE]
         icon_map = {
@@ -72,24 +74,34 @@ class DeviceConfigMixin:
             DOMAIN_CLIMATE: "🌡️",
         }
         all_entities = []
+        device_type = getattr(self, '_device_config', {}).get('device_type', None) or getattr(self, '_device_config', {}).get('type', None)
         for e in hass.states.async_all():
             domain = e.entity_id.split(".")[0]
             icon = icon_map.get(domain, "")
             state = e.state
             friendly = e.attributes.get("friendly_name", "")
-            if domain in allowed_domains:
-                if domain == DOMAIN_CLIMATE:
-                    value_heat, _ = clean_entity_id_and_mode(f"{e.entity_id}|heat")
-                    label_heat = f"{icon} {friendly} (Heat)" if friendly else f"{icon} {e.entity_id} (Heat)"
-                    all_entities.append((value_heat, label_heat, friendly))
-                    value_cool, _ = clean_entity_id_and_mode(f"{e.entity_id}|cool")
-                    label_cool = f"{icon} {friendly} (Cool)" if friendly else f"{icon} {e.entity_id} (Cool)"
-                    all_entities.append((value_cool, label_cool, friendly))
-                elif state in [STATE_ON, STATE_OFF]:
-                    if "sun_allocator" not in e.entity_id.lower() and "sunallocator" not in e.entity_id.lower():
-                        value, _ = clean_entity_id_and_mode(e.entity_id)
-                        label = f"{icon} {friendly}" if friendly else f"{icon} {value}"
-                        all_entities.append((value, label, friendly))
+            # ESPHome only: entity_id contains 'esphome' (e.g. switch.esphome_*)
+            is_esphome = ".esphome_" in e.entity_id or e.attributes.get("integration") == "esphome"
+            if device_type == "custom":
+                # Only ESPHome relays (switch, light, input_boolean, script, automation) with esphome in entity_id
+                if domain in [DOMAIN_SWITCH, DOMAIN_LIGHT, DOMAIN_INPUT_BOOLEAN, DOMAIN_SCRIPT, DOMAIN_AUTOMATION] and is_esphome:
+                    value, _ = clean_entity_id_and_mode(e.entity_id)
+                    label = f"{icon} {friendly}" if friendly else f"{icon} {value}"
+                    all_entities.append((value, label, friendly))
+            else:
+                if domain in allowed_domains:
+                    if domain == DOMAIN_CLIMATE:
+                        value_heat, _ = clean_entity_id_and_mode(f"{e.entity_id}|heat")
+                        label_heat = f"{icon} {friendly} (Heat)" if friendly else f"{icon} {e.entity_id} (Heat)"
+                        all_entities.append((value_heat, label_heat, friendly))
+                        value_cool, _ = clean_entity_id_and_mode(f"{e.entity_id}|cool")
+                        label_cool = f"{icon} {friendly} (Cool)" if friendly else f"{icon} {e.entity_id} (Cool)"
+                        all_entities.append((value_cool, label_cool, friendly))
+                    elif state in [STATE_ON, STATE_OFF]:
+                        if "sun_allocator" not in e.entity_id.lower() and "sunallocator" not in e.entity_id.lower():
+                            value, _ = clean_entity_id_and_mode(e.entity_id)
+                            label = f"{icon} {friendly}" if friendly else f"{icon} {value}"
+                            all_entities.append((value, label, friendly))
         all_entities.sort(key=lambda x: x[1])
         all_entities = [(NONE_OPTION, NONE_OPTION, "")] + all_entities
         return {"all_entities": all_entities}
@@ -247,76 +259,140 @@ class DeviceConfigMixin:
         return user_input
     
     def _get_device_name_type_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for device name and type configuration."""
+        """Get the schema for device name and type configuration using selectors."""
         if defaults is None:
             defaults = {}
-        
-        device_type_options = {
-            DEVICE_TYPE_STANDARD: DEVICE_TYPE_STANDARD,
-            DEVICE_TYPE_CUSTOM: DEVICE_TYPE_CUSTOM
-        }
-        
-        # If the default type is "No Device", change it to "Custom"
         default_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
         if default_type == DEVICE_TYPE_NONE:
             default_type = DEVICE_TYPE_CUSTOM
-        
-        return vol.Schema({
-            vol.Required(CONF_DEVICE_NAME, default=defaults.get(CONF_DEVICE_NAME, ""), description={"suggested_value": defaults.get(CONF_DEVICE_NAME, ""), "description": "Унікальна назва пристрою, наприклад 'Бойлер'"}): str,
-            vol.Required(CONF_DEVICE_TYPE, default=default_type, description={"suggested_value": default_type, "description": "Тип пристрою: стандартний (on/off) або custom (ESPHome)"}): vol.In(device_type_options),
-        })
+        schema = {
+            vol.Required(
+                CONF_DEVICE_NAME,
+                default=defaults.get(CONF_DEVICE_NAME, ""),
+                description={"suggested_value": defaults.get(CONF_DEVICE_NAME, ""), "description": "Унікальна назва пристрою, наприклад 'Бойлер'"}
+            ): str,
+            vol.Required(
+                CONF_DEVICE_TYPE,
+                default=default_type,
+                description={"suggested_value": default_type, "description": "Тип пристрою: стандартний (on/off) або custom (ESPHome)"}
+            ): selector({
+                "select": {
+                    "options": [
+                        {"label": "Стандартний (on/off)", "value": DEVICE_TYPE_STANDARD},
+                        {"label": "Custom (ESPHome)", "value": DEVICE_TYPE_CUSTOM}
+                    ],
+                    "mode": "dropdown"
+                }
+            })
+        }
+        return vol.Schema(schema)
     
     def _get_device_selection_schema(self, entities: Dict[str, list], device_type: str, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for device selection configuration."""
+        """Get the schema for device selection configuration using selector."""
         if defaults is None:
             defaults = {}
         schema = {}
-        # Build {label: value} mapping for dropdown
-        entity_options = {}
-        for value, label, _ in entities["all_entities"]:
-            entity_options[label] = value
-        # Default selection
+        options = [
+            {"label": label, "value": value}
+            for value, label, _ in entities["all_entities"]
+        ]
         default_entity = NONE_OPTION if defaults.get(CONF_DEVICE_ENTITY) is None else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
-        if len(entity_options) <= 1:
-            entity_options["[No devices found]"] = NONE_OPTION
-        schema[vol.Optional(CONF_DEVICE_ENTITY, default=default_entity, description={"suggested_value": default_entity})] = vol.In(entity_options)
+        if len(options) <= 1:
+            options.append({"label": "[No devices found]", "value": NONE_OPTION})
+        schema[vol.Optional(
+            CONF_DEVICE_ENTITY,
+            default=default_entity,
+            description={"suggested_value": default_entity}
+        )] = selector({
+            "select": {
+                "options": options,
+                "mode": "dropdown"
+            }
+        })
         return vol.Schema(schema)
     
     def _get_device_basic_settings_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for device basic settings configuration."""
+        """Get the schema for device basic settings configuration using selectors."""
         if defaults is None:
             defaults = {}
         device_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_STANDARD)
         schema_dict = {
-            vol.Required(CONF_AUTO_CONTROL_ENABLED, default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False), description={"suggested_value": defaults.get(CONF_AUTO_CONTROL_ENABLED, False)}): bool,
-            vol.Optional(CONF_MIN_EXPECTED_W, default=defaults.get(CONF_MIN_EXPECTED_W, 0.0), description={"suggested_value": defaults.get(CONF_MIN_EXPECTED_W, 0.0)}): vol.Coerce(float),
-            vol.Required(CONF_DEVICE_PRIORITY, default=defaults.get(CONF_DEVICE_PRIORITY, 50), description={"suggested_value": defaults.get(CONF_DEVICE_PRIORITY, 50)}): vol.All(
-                vol.Coerce(int), vol.Range(min=1, max=100)
-            ),
-            vol.Required(CONF_SCHEDULE_ENABLED, default=defaults.get(CONF_SCHEDULE_ENABLED, False), description={"suggested_value": defaults.get(CONF_SCHEDULE_ENABLED, False)}): bool,
+            vol.Required(
+                CONF_AUTO_CONTROL_ENABLED,
+                default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
+                description={"suggested_value": defaults.get(CONF_AUTO_CONTROL_ENABLED, False)}
+            ): selector({"boolean": {}}),
+            vol.Optional(
+                CONF_MIN_EXPECTED_W,
+                default=defaults.get(CONF_MIN_EXPECTED_W, 0.0),
+                description={"suggested_value": defaults.get(CONF_MIN_EXPECTED_W, 0.0)}
+            ): selector({
+                "number": {
+                    "min": 0,
+                    "max": 10000,
+                    "step": 1,
+                    "mode": "box",
+                    "unit_of_measurement": "Вт"
+                }
+            }),
+            vol.Required(
+                CONF_DEVICE_PRIORITY,
+                default=defaults.get(CONF_DEVICE_PRIORITY, 50),
+                description={"suggested_value": defaults.get(CONF_DEVICE_PRIORITY, 50)}
+            ): selector({
+                "number": {
+                    "min": 1,
+                    "max": 100,
+                    "step": 1,
+                    "mode": "slider"
+                }
+            }),
+            vol.Required(
+                CONF_SCHEDULE_ENABLED,
+                default=defaults.get(CONF_SCHEDULE_ENABLED, False),
+                description={"suggested_value": defaults.get(CONF_SCHEDULE_ENABLED, False)}
+            ): selector({"boolean": {}}),
         }
-        # Only for custom (ESPhome) devices
         if device_type == DEVICE_TYPE_CUSTOM:
-            schema_dict[vol.Optional(CONF_MAX_EXPECTED_W, default=defaults.get(CONF_MAX_EXPECTED_W, 0.0), description={"suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)})] = vol.Coerce(float)
+            schema_dict[vol.Optional(
+                CONF_MAX_EXPECTED_W,
+                default=defaults.get(CONF_MAX_EXPECTED_W, 0.0),
+                description={"suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)}
+            )] = selector({
+                "number": {
+                    "min": 0,
+                    "max": 10000,
+                    "step": 1,
+                    "mode": "box",
+                    "unit_of_measurement": "Вт"
+                }
+            })
         return vol.Schema(schema_dict)
     
     def _get_device_schedule_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for device schedule configuration."""
+        """Get the schema for device schedule configuration using selectors."""
         if defaults is None:
             defaults = {}
-        
         default_days = defaults.get(CONF_DAYS_OF_WEEK, DAYS_OF_WEEK)
-        
+        days_schema = {}
+        for day in DAYS_OF_WEEK:
+            days_schema[vol.Required(
+                day,
+                default=day in default_days,
+                description={"suggested_value": day in default_days}
+            )] = selector({"boolean": {}})
         return vol.Schema({
-            vol.Required(CONF_START_TIME, default=defaults.get(CONF_START_TIME, "08:00"), description={"suggested_value": defaults.get(CONF_START_TIME, "08:00")}): str,
-            vol.Required(CONF_END_TIME, default=defaults.get(CONF_END_TIME, "20:00"), description={"suggested_value": defaults.get(CONF_END_TIME, "20:00")}): str,
-            vol.Required(DAY_MONDAY, default=DAY_MONDAY in default_days, description={"suggested_value": DAY_MONDAY in default_days}): bool,
-            vol.Required(DAY_TUESDAY, default=DAY_TUESDAY in default_days, description={"suggested_value": DAY_TUESDAY in default_days}): bool,
-            vol.Required(DAY_WEDNESDAY, default=DAY_WEDNESDAY in default_days, description={"suggested_value": DAY_WEDNESDAY in default_days}): bool,
-            vol.Required(DAY_THURSDAY, default=DAY_THURSDAY in default_days, description={"suggested_value": DAY_THURSDAY in default_days}): bool,
-            vol.Required(DAY_FRIDAY, default=DAY_FRIDAY in default_days, description={"suggested_value": DAY_FRIDAY in default_days}): bool,
-            vol.Required(DAY_SATURDAY, default=DAY_SATURDAY in default_days, description={"suggested_value": DAY_SATURDAY in default_days}): bool,
-            vol.Required(DAY_SUNDAY, default=DAY_SUNDAY in default_days, description={"suggested_value": DAY_SUNDAY in default_days}): bool,
+            vol.Required(
+                CONF_START_TIME,
+                default=defaults.get(CONF_START_TIME, "08:00"),
+                description={"suggested_value": defaults.get(CONF_START_TIME, "08:00")}
+            ): selector({"time": {}}),
+            vol.Required(
+                CONF_END_TIME,
+                default=defaults.get(CONF_END_TIME, "20:00"),
+                description={"suggested_value": defaults.get(CONF_END_TIME, "20:00")}
+            ): selector({"time": {}}),
+            **days_schema
         })
     
     async def _finalize_device_config(self):

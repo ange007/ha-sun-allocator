@@ -115,22 +115,20 @@ class SunAllocatorConfigFlow(
                 data[CONF_DEVICES] = self._devices
                 return self.async_create_entry(title="SunAllocator", data=data)
 
+        from homeassistant.helpers.selector import selector
         # Build devices dropdown: value=id, label=name
-        device_options = {}
-        for d in self._devices:
-            device_options[d[CONF_DEVICE_ID]] = d[CONF_DEVICE_NAME]
-
+        device_options = [
+            {"label": d[CONF_DEVICE_NAME], "value": d[CONF_DEVICE_ID]}
+            for d in self._devices
+        ]
         # Build action dropdown for this step
-        action_options = {
-            ACTION_ADD: "add",
-            ACTION_EDIT: "edit",
-            ACTION_REMOVE: "remove",
-            ACTION_FINISH: "finish",
-        }
-
-        # Prepare schema
+        action_options = [
+            {"label": "Додати", "value": ACTION_ADD},
+            {"label": "Редагувати", "value": ACTION_EDIT},
+            {"label": "Видалити", "value": ACTION_REMOVE},
+            {"label": "Завершити", "value": ACTION_FINISH},
+        ]
         schema_dict = {}
-
         # Device selector
         if self._devices:
             default_device_id = self._devices[0][CONF_DEVICE_ID]
@@ -138,15 +136,13 @@ class SunAllocatorConfigFlow(
                 CONF_DEVICE_ID,
                 default=default_device_id,
                 description={"suggested_value": default_device_id}
-            )] = vol.In(device_options)
-
+            )] = selector({"select": {"options": device_options, "mode": "dropdown"}})
         # Action selector
         schema_dict[vol.Required(
             CONF_ACTION,
             default=ACTION_FINISH,
             description={"suggested_value": ACTION_FINISH}
-        )] = vol.In(action_options)
-
+        )] = selector({"select": {"options": action_options, "mode": "dropdown"}})
         return self.async_show_form(
             step_id=STEP_DEVICES,
             data_schema=vol.Schema(schema_dict),

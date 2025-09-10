@@ -26,20 +26,37 @@ class SolarConfigMixin:
     """Mixin for solar panel configuration steps."""
     
     def _get_sensor_entities(self, hass: HomeAssistant) -> Dict[str, list]:
-        """Get available sensor entities categorized by type."""
+        """Get available sensor entities categorized by type, with label/value for selector."""
+        icon_map = {
+            "power": "⚡",
+            "voltage": "🔋",
+            "consumption": "🏠",
+            "battery": "🔋",
+        }
+        def make_label(e, icon):
+            friendly = e.attributes.get("friendly_name", "")
+            return f"{icon} {friendly}" if friendly else f"{icon} {e.entity_id}"
+
         sensor_entities = [e for e in hass.states.async_all() if e.entity_id.startswith("sensor.")]
-        
-        power_sensors = [e.entity_id for e in sensor_entities if "power" in e.entity_id]
-        voltage_sensors = [e.entity_id for e in sensor_entities if "voltage" in e.entity_id]
-        consumption_sensors = [e.entity_id for e in sensor_entities 
-                             if "consumption" in e.entity_id or "power" in e.entity_id]
-        battery_sensors = [e.entity_id for e in sensor_entities 
-                          if "battery" in e.entity_id or "bat" in e.entity_id or "power" in e.entity_id]
-        
-        # Add a "None" option to allow deselecting consumption and battery
-        consumption_sensors = [NONE_OPTION] + consumption_sensors
-        battery_sensors = [NONE_OPTION] + battery_sensors
-        
+        power_sensors = [
+            {"label": make_label(e, icon_map["power"]), "value": e.entity_id}
+            for e in sensor_entities if "power" in e.entity_id
+        ]
+        voltage_sensors = [
+            {"label": make_label(e, icon_map["voltage"]), "value": e.entity_id}
+            for e in sensor_entities if "voltage" in e.entity_id
+        ]
+        consumption_sensors = [
+            {"label": make_label(e, icon_map["consumption"]), "value": e.entity_id}
+            for e in sensor_entities if "consumption" in e.entity_id or "power" in e.entity_id
+        ]
+        battery_sensors = [
+            {"label": make_label(e, icon_map["battery"]), "value": e.entity_id}
+            for e in sensor_entities if "battery" in e.entity_id or "bat" in e.entity_id or "power" in e.entity_id
+        ]
+        # Add a "None" option
+        consumption_sensors = [{"label": "None", "value": NONE_OPTION}] + consumption_sensors
+        battery_sensors = [{"label": "None", "value": NONE_OPTION}] + battery_sensors
         return {
             "power_sensors": power_sensors,
             "voltage_sensors": voltage_sensors,
@@ -98,35 +115,28 @@ class SolarConfigMixin:
         return user_input
     
     def _get_solar_config_schema(self, sensors: Dict[str, list], defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for solar panel configuration."""
+        """Get the schema for solar panel configuration using selectors."""
+        from homeassistant.helpers.selector import selector
         if defaults is None:
             defaults = {}
-        
-        # Get default value for consumption, converting None to "None" string for the dropdown
         default_consumption = NONE_OPTION if defaults.get(CONF_CONSUMPTION) is None else defaults.get(CONF_CONSUMPTION)
-        # Get default value for battery power, converting None to "None" string for the dropdown
         default_battery_power = NONE_OPTION if defaults.get(CONF_BATTERY_POWER) is None else defaults.get(CONF_BATTERY_POWER)
-        
-        # Create panel configuration options with proper mapping
-        panel_config_options = {
-            PANEL_CONFIG_SERIES: PANEL_CONFIG_SERIES,
-            PANEL_CONFIG_PARALLEL: PANEL_CONFIG_PARALLEL,
-            PANEL_CONFIG_PARALLEL_SERIES: PANEL_CONFIG_PARALLEL_SERIES
-        }
-        
+        panel_config_options = [
+            {"label": "Серійне з'єднання", "value": PANEL_CONFIG_SERIES},
+            {"label": "Паралельне з'єднання", "value": PANEL_CONFIG_PARALLEL},
+            {"label": "Паралельно-серійне", "value": PANEL_CONFIG_PARALLEL_SERIES},
+        ]
         return vol.Schema({
-            # Solar panel configuration
-            vol.Required(CONF_PV_POWER, default=defaults.get(CONF_PV_POWER), description={"suggested_value": defaults.get(CONF_PV_POWER)}): vol.In(sensors["power_sensors"]),
-            vol.Required(CONF_PV_VOLTAGE, default=defaults.get(CONF_PV_VOLTAGE), description={"suggested_value": defaults.get(CONF_PV_VOLTAGE)}): vol.In(sensors["voltage_sensors"]),
-            vol.Required(CONF_VMP, default=defaults.get(CONF_VMP, 36.0), description={"suggested_value": defaults.get(CONF_VMP, 36.0)}): vol.Coerce(float),
-            vol.Required(CONF_IMP, default=defaults.get(CONF_IMP, 8.0), description={"suggested_value": defaults.get(CONF_IMP, 8.0)}): vol.Coerce(float),
-            vol.Optional(CONF_VOC, default=defaults.get(CONF_VOC, 44.0), description={"suggested_value": defaults.get(CONF_VOC, 44.0)}): vol.Coerce(float),
-            vol.Optional(CONF_ISC, default=defaults.get(CONF_ISC, 8.5), description={"suggested_value": defaults.get(CONF_ISC, 8.5)}): vol.Coerce(float),
-            vol.Required(CONF_PANEL_COUNT, default=defaults.get(CONF_PANEL_COUNT, 1), description={"suggested_value": defaults.get(CONF_PANEL_COUNT, 1)}): vol.Coerce(int),
-            vol.Required(CONF_PANEL_CONFIGURATION, default=defaults.get(CONF_PANEL_CONFIGURATION, PANEL_CONFIG_SERIES), description={"suggested_value": defaults.get(CONF_PANEL_CONFIGURATION, PANEL_CONFIG_SERIES)}):
-                vol.In(panel_config_options),
-            vol.Optional(CONF_CONSUMPTION, default=default_consumption, description={"suggested_value": default_consumption}): vol.In(sensors["consumption_sensors"]),
-            vol.Optional(CONF_BATTERY_POWER, default=default_battery_power, description={"suggested_value": default_battery_power}): vol.In(sensors["battery_sensors"]),
+            vol.Required(CONF_PV_POWER, default=defaults.get(CONF_PV_POWER), description={"suggested_value": defaults.get(CONF_PV_POWER)}): selector({"select": {"options": sensors["power_sensors"], "mode": "dropdown"}}),
+            vol.Required(CONF_PV_VOLTAGE, default=defaults.get(CONF_PV_VOLTAGE), description={"suggested_value": defaults.get(CONF_PV_VOLTAGE)}): selector({"select": {"options": sensors["voltage_sensors"], "mode": "dropdown"}}),
+            vol.Required(CONF_VMP, default=defaults.get(CONF_VMP, 36.0), description={"suggested_value": defaults.get(CONF_VMP, 36.0)}): selector({"number": {"min": 0, "max": 100, "step": 0.1, "mode": "box"}}),
+            vol.Required(CONF_IMP, default=defaults.get(CONF_IMP, 8.0), description={"suggested_value": defaults.get(CONF_IMP, 8.0)}): selector({"number": {"min": 0, "max": 100, "step": 0.01, "mode": "box"}}),
+            vol.Optional(CONF_VOC, default=defaults.get(CONF_VOC, 44.0), description={"suggested_value": defaults.get(CONF_VOC, 44.0)}): selector({"number": {"min": 0, "max": 100, "step": 0.1, "mode": "box"}}),
+            vol.Optional(CONF_ISC, default=defaults.get(CONF_ISC, 8.5), description={"suggested_value": defaults.get(CONF_ISC, 8.5)}): selector({"number": {"min": 0, "max": 100, "step": 0.01, "mode": "box"}}),
+            vol.Required(CONF_PANEL_COUNT, default=defaults.get(CONF_PANEL_COUNT, 1), description={"suggested_value": defaults.get(CONF_PANEL_COUNT, 1)}): selector({"number": {"min": 1, "max": 100, "step": 1, "mode": "box"}}),
+            vol.Required(CONF_PANEL_CONFIGURATION, default=defaults.get(CONF_PANEL_CONFIGURATION, PANEL_CONFIG_SERIES), description={"suggested_value": defaults.get(CONF_PANEL_CONFIGURATION, PANEL_CONFIG_SERIES)}): selector({"select": {"options": panel_config_options, "mode": "dropdown"}}),
+            vol.Optional(CONF_CONSUMPTION, default=default_consumption, description={"suggested_value": default_consumption}): selector({"select": {"options": sensors["consumption_sensors"], "mode": "dropdown"}}),
+            vol.Optional(CONF_BATTERY_POWER, default=default_battery_power, description={"suggested_value": default_battery_power}): selector({"select": {"options": sensors["battery_sensors"], "mode": "dropdown"}}),
         })
     
     async def async_step_user(self, user_input=None):
