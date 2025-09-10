@@ -196,33 +196,25 @@ class DeviceConfigMixin:
     
     def _process_device_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process and clean device configuration input."""
+        from ..utils.sensor_utils import clean_entity_id_and_mode
         # Convert "None" string to actual None value
         if user_input.get(CONF_DEVICE_ENTITY) == NONE_OPTION:
             user_input[CONF_DEVICE_ENTITY] = None
             user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = None
+            user_input['hvac_mode'] = None
         else:
-            # Climate entity: entity_id|mode (heat/cool)
             label = user_input.get(CONF_DEVICE_ENTITY)
-            if label and "|" in label:
-                entity_id, mode = label.split("|", 1)
-                user_input[CONF_DEVICE_ENTITY] = f"{entity_id}|{mode}"
-                # Friendly name (if present in label)
-                if "(" in entity_id and entity_id.endswith(")"):
-                    eid = entity_id.split(" (")[0]
-                    friendly = entity_id[entity_id.find("(")+1:-1]
-                    user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = friendly
-                    user_input[CONF_DEVICE_ENTITY] = f"{eid}|{mode}"
-                else:
-                    user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = None
+            # Always normalize entity_id and extract hvac_mode
+            cleaned_id, hvac_mode = clean_entity_id_and_mode(label)
+            user_input[CONF_DEVICE_ENTITY] = cleaned_id
+            user_input['hvac_mode'] = hvac_mode
+            # Parse friendly_name from label if present
+            if label and "(" in label and label.endswith(")"):
+                entity_id = label.split(" (", 1)[0]
+                friendly = label[label.find("(")+1:-1]
+                user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = friendly
             else:
-                # Parse friendly_name from label if present
-                if label and "(" in label and label.endswith(")"):
-                    entity_id = label.split(" (")[0]
-                    friendly = label[label.find("(")+1:-1]
-                    user_input[CONF_DEVICE_ENTITY] = entity_id
-                    user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = friendly
-                else:
-                    user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = None
+                user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = None
         return user_input
     
     def _process_schedule_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:

@@ -360,8 +360,8 @@ class SunAllocatorOptionsFlowHandler(
         # Action selector
         schema_dict[vol.Required(
             CONF_ACTION,
-            default=ACTION_BACK,
-            description={"suggested_value": ACTION_BACK}
+            default=ACTION_EDIT,
+            description={"suggested_value": ACTION_EDIT}
         )] = vol.In(action_options)
 
         return self.async_show_form(
