@@ -283,7 +283,7 @@ class DeviceConfigMixin:
         if hasattr(self, "hass") and hasattr(self, "config_entry"):
             # Try to persist devices immediately
             try:
-                data = getattr(self, "_solar_config", {}).copy() if hasattr(self, "_solar_config") else {}
+                data = dict(self.config_entry.data)
                 data[CONF_DEVICES] = self._devices
                 self.hass.config_entries.async_update_entry(self.config_entry, data=data)
                 log_info("[DeviceConfigMixin] Persisted devices to config_entry.data: %d devices", len(self._devices))

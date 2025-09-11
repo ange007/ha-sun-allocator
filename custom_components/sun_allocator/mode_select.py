@@ -7,6 +7,7 @@ from .utils.logger import log_debug
 from .entity_control import set_mode_for_entity
 
 from .const import (
+    DOMAIN,
     CONF_ESPHOME_MODE_SELECT_ENTITY,
     CONF_DEVICES,
 )
@@ -15,6 +16,12 @@ VALID_MODES = {"off", "on", "proportional"}
 
 
 async def persist_last_mode(hass, config_entry, entity_id, mode):
+    # Defer persistence if a config flow is in progress to avoid race conditions
+    active_flows = config_entry.async_get_active_flows(hass)
+    if any(flow['handler'] == DOMAIN for flow in active_flows):
+        log_debug("Config flow in progress. Deferring persistence of last_mode for %s.", entity_id)
+        return
+
     if mode not in VALID_MODES:
         return
     data = dict(config_entry.data)

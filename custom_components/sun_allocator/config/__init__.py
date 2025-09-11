@@ -159,25 +159,13 @@ class SunAllocatorOptionsFlowHandler(
     
     def __init__(self, config_entry):
         """Initialize options flow."""
-        super().__init__()
-        self._solar_config = {}
-        self._devices = []
-        self._device_config = {}
-        self._device_index = None
-        self._action = None
-
-    async def async_step_init(self, user_input=None):
-        """Manage the options for the custom component."""
-        # Migrate old configuration format if needed
+        super().__init__(config_entry)
         if CONF_DEVICES not in self.config_entry.data:
-            # Extract solar panel configuration
             self._solar_config = {
-                k: v for k, v in self.config_entry.data.items() 
-                if k not in [CONF_ESPHOME_RELAY_ENTITY, CONF_ESPHOME_MODE_SELECT_ENTITY, 
+                k: v for k, v in self.config_entry.data.items()
+                if k not in [CONF_ESPHOME_RELAY_ENTITY, CONF_ESPHOME_MODE_SELECT_ENTITY,
                             CONF_AUTO_CONTROL_ENABLED]
             }
-            
-            # Extract device configuration if available
             if self.config_entry.data.get(CONF_ESPHOME_RELAY_ENTITY) or self.config_entry.data.get(CONF_ESPHOME_MODE_SELECT_ENTITY):
                 device = {
                     CONF_DEVICE_ID: str(uuid.uuid4()),
@@ -193,13 +181,17 @@ class SunAllocatorOptionsFlowHandler(
             else:
                 self._devices = []
         else:
-            # Use existing configuration
             self._solar_config = {
                 k: v for k, v in self.config_entry.data.items() if k != CONF_DEVICES
             }
             self._devices = self.config_entry.data.get(CONF_DEVICES, [])
-        
-        # Proceed to main menu
+
+        self._device_config = {}
+        self._device_index = None
+        self._action = None
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options for the custom component."""
         return await self.async_step_main_menu()
         
     async def async_step_main_menu(self, user_input=None):

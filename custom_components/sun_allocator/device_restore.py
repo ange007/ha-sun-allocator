@@ -1,10 +1,11 @@
 """Device restore and persist logic for Sun Allocator."""
 from homeassistant.const import STATE_ON, STATE_OFF
 
-from .utils.logger import log_info
+from .utils.logger import log_info, log_debug
 from .entity_control import set_power_for_entity
 
 from .const import (
+    DOMAIN,
     CONF_DEVICES, 
     CONF_DEVICE_TYPE, 
     DEVICE_TYPE_CUSTOM,
@@ -16,6 +17,12 @@ from .const import (
 
 
 async def persist_device_state(hass, config_entry, entity_id, percent=None, is_on=None):
+    # Defer persistence if a config flow is in progress to avoid race conditions
+    active_flows = config_entry.async_get_active_flows(hass)
+    if any(flow['handler'] == DOMAIN for flow in active_flows):
+        log_debug("Config flow in progress. Deferring persistence of device state for %s.", entity_id)
+        return
+
     data = dict(config_entry.data)
     devs = list(data.get(CONF_DEVICES, []))
     changed = False
