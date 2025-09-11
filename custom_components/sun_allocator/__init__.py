@@ -722,6 +722,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
 
 async def update_listener(hass: HomeAssistant, config_entry: ConfigType):
     """Handle options update."""
+    log_warning("--- UPDATE LISTENER ---: Entry updated. Data: %s", config_entry.data)
     # Restart auto-control with new settings
     await setup_auto_control(hass, config_entry)
 

@@ -10,7 +10,7 @@ from .solar_config import SolarConfigMixin
 from .device_config import DeviceConfigMixin
 from .temperature_config import TemperatureConfigMixin
 from .advanced_config import AdvancedConfigMixin
-from ..utils.logger import log_warning # ADDED FOR DEBUGGING
+from ..utils.logger import log_warning
 
 from ..const import (
     DOMAIN,
@@ -160,7 +160,7 @@ class SunAllocatorOptionsFlowHandler(
     
     def __init__(self, config_entry):
         """Initialize options flow."""
-        super().__init__()
+        super().__init__(config_entry)
         self._solar_config = {}
         self._devices = []
         self._device_config = {}
@@ -169,38 +169,11 @@ class SunAllocatorOptionsFlowHandler(
 
     async def async_step_init(self, user_input=None):
         """Manage the options for the custom component."""
-        # Migrate old configuration format if needed
-        if CONF_DEVICES not in self.config_entry.data:
-            # Extract solar panel configuration
-            self._solar_config = {
-                k: v for k, v in self.config_entry.data.items() 
-                if k not in [CONF_ESPHOME_RELAY_ENTITY, CONF_ESPHOME_MODE_SELECT_ENTITY, 
-                            CONF_AUTO_CONTROL_ENABLED]
-            }
-            
-            # Extract device configuration if available
-            if self.config_entry.data.get(CONF_ESPHOME_RELAY_ENTITY) or self.config_entry.data.get(CONF_ESPHOME_MODE_SELECT_ENTITY):
-                device = {
-                    CONF_DEVICE_ID: str(uuid.uuid4()),
-                    CONF_DEVICE_NAME: "Default Device",
-                    CONF_ESPHOME_RELAY_ENTITY: self.config_entry.data.get(CONF_ESPHOME_RELAY_ENTITY),
-                    CONF_ESPHOME_MODE_SELECT_ENTITY: self.config_entry.data.get(CONF_ESPHOME_MODE_SELECT_ENTITY),
-                    CONF_AUTO_CONTROL_ENABLED: self.config_entry.data.get(CONF_AUTO_CONTROL_ENABLED, False),
-                    CONF_MIN_EXPECTED_W: float(self.config_entry.data.get('min_excess_power', 0) or 0),
-                    CONF_MAX_EXPECTED_W: 0.0,
-                    CONF_DEVICE_PRIORITY: 50,
-                }
-                self._devices = [device]
-            else:
-                self._devices = []
-        else:
-            # Use existing configuration
-            self._solar_config = {
-                k: v for k, v in self.config_entry.data.items() if k != CONF_DEVICES
-            }
-            self._devices = self.config_entry.data.get(CONF_DEVICES, [])
-        
+        # Load config from entry
+        self._solar_config = {k: v for k, v in self.config_entry.data.items() if k != CONF_DEVICES}
+        self._devices = self.config_entry.data.get(CONF_DEVICES, [])
         log_warning("--- CONFIG FLOW INIT ---: Loaded %d devices. Data: %s", len(self._devices), self.config_entry.data)
+       
         # Proceed to main menu
         return await self.async_step_main_menu()
         
@@ -314,9 +287,11 @@ class SunAllocatorOptionsFlowHandler(
                 if selected_device_id:
                     self._devices = [d for d in self._devices if d[CONF_DEVICE_ID] != selected_device_id]
                     # Persist changes immediately and stay on the manage devices page
-                    data = self._solar_config.copy()
+                    data = dict(self.config_entry.data)
+                    data.update(self._solar_config)
                     data[CONF_DEVICES] = self._devices
                     log_warning("--- CONFIG FLOW REMOVE ---: Saving %d devices. Data: %s", len(self._devices), data)
+                    
                     self.hass.config_entries.async_update_entry(self.config_entry, data=data)
                     return await self.async_step_manage_devices()
                 errors[CONF_DEVICE_ID] = "device_name_required"
@@ -367,9 +342,11 @@ class SunAllocatorOptionsFlowHandler(
 
     async def _save_and_return(self):
         """Save configuration, reload integration and return to main menu."""
-        data = self._solar_config.copy()
+        data = dict(self.config_entry.data)
+        data.update(self._solar_config)
         data[CONF_DEVICES] = self._devices
         log_warning("--- CONFIG FLOW SAVE ---: Saving %d devices. Data: %s", len(self._devices), data)
+        
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration
         await self.hass.config_entries.async_reload(self.config_entry.entry_id)
@@ -390,9 +367,11 @@ class SunAllocatorOptionsFlowHandler(
             if self._device_index is not None:
                 self._devices[self._device_index] = self._device_config
         # Persist changes immediately so they survive HA restarts
-        data = self._solar_config.copy()
+        data = dict(self.config_entry.data)
+        data.update(self._solar_config)
         data[CONF_DEVICES] = self._devices
         log_warning("--- CONFIG FLOW FINALIZE ---: Saving %d devices. Data: %s", len(self._devices), data)
+
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration
         await self.hass.config_entries.async_reload(self.config_entry.entry_id)
