@@ -1,10 +1,11 @@
+
 """Power Distribution sensor for SunAllocator.
 Provides overview of total allocated power with per-device allocation in W and % plus metadata.
 """
 from __future__ import annotations
-
-import logging
 from typing import Any, Dict
+from ...utils.logger import get_logger, log_debug
+from ...utils.journal import journal_event
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.components.sensor import SensorEntity
@@ -19,7 +20,7 @@ from ...const import (
     SENSOR_ID_PREFIX,
 )
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = get_logger(__name__)
 
 
 class SunAllocatorPowerDistributionSensor(SensorEntity):
@@ -132,7 +133,24 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                 reasons[dev_id] = ", ".join(reason)
 
             # Add debug logging for troubleshooting
-            _LOGGER.debug("SunAllocatorPowerDistributionSensor data: %s", data)
+            log_debug("SunAllocatorPowerDistributionSensor data: %s", data)
+            journal_event("power_distribution_status", {
+                "total": total,
+                "remaining": remaining,
+                "allocated": allocated,
+                "allocation": allocation,
+                "allocation_percent": allocation_percent,
+                "device_meta": device_status,
+                "reasons": reasons,
+                "diagnostics": {
+                    "all_devices_info": all_devices_info,
+                    "visible_devices": list(device_status.keys()),
+                    "not_found_entities": not_found_entities,
+                    "device_count": len(all_devices_info),
+                    "visible_count": len(device_status),
+                    "raw_data_keys": list(data.keys()),
+                },
+            })
 
             # Compose extra state attributes, including diagnostics
             self._attr_extra_state_attributes = {
@@ -156,7 +174,8 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             self._state = allocated
             return self._state
         except Exception as e:
-            _LOGGER.debug("PowerDistribution sensor error: %s", e)
+            log_debug("PowerDistribution sensor error: %s", e)
+            journal_event("power_distribution_error", {"error": str(e)})
             return self._state
 
     async def async_added_to_hass(self):

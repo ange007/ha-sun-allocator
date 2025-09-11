@@ -1,8 +1,10 @@
+
 """Sensor utilities for Sun Allocator integration."""
-import logging
 from typing import Optional, Dict, Any, Tuple
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event
+from .logger import get_logger, log_debug, log_error
+from .journal import journal_event
 
 from ..const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
@@ -20,7 +22,7 @@ from ..const import (
 )
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = get_logger(__name__)
 
 
 def get_sensor_state_safely(hass: HomeAssistant, entity_id: Optional[str], sensor_name: str) -> Tuple[float, bool]:
@@ -36,24 +38,29 @@ def get_sensor_state_safely(hass: HomeAssistant, entity_id: Optional[str], senso
         Tuple of (value, success) where success indicates if the value was retrieved successfully
     """
     if not entity_id:
-        _LOGGER.debug(f"{sensor_name} entity ID not configured")
+        log_debug(f"{sensor_name} entity ID not configured")
+        journal_event("sensor_missing_entity_id", {"sensor": sensor_name})
         return 0.0, False
 
     state = hass.states.get(entity_id)
     if state is None:
-        _LOGGER.debug(f"{sensor_name} sensor '{entity_id}' not found - this is normal during startup")
+        log_debug(f"{sensor_name} sensor '{entity_id}' not found - this is normal during startup")
+        journal_event("sensor_not_found", {"sensor": sensor_name, "entity_id": entity_id})
         return 0.0, False
 
     if state.state in (None, STATE_UNKNOWN, STATE_UNAVAILABLE):
-        _LOGGER.debug(f"{sensor_name} sensor '{entity_id}' is {state.state} - waiting for sensor to become available")
+        log_debug(f"{sensor_name} sensor '{entity_id}' is {state.state} - waiting for sensor to become available")
+        journal_event("sensor_unavailable", {"sensor": sensor_name, "entity_id": entity_id, "state": state.state})
         return 0.0, False
 
     try:
         value = float(state.state)
-        _LOGGER.debug(f"{sensor_name}: {value}")
+        log_debug(f"{sensor_name}: {value}")
+        journal_event("sensor_value", {"sensor": sensor_name, "entity_id": entity_id, "value": value})
         return value, True
     except (ValueError, TypeError):
-        _LOGGER.error(f"Could not convert {sensor_name} state '{state.state}' to float")
+        log_error(f"Could not convert {sensor_name} state '{state.state}' to float")
+        journal_event("sensor_value_error", {"sensor": sensor_name, "entity_id": entity_id, "state": state.state})
         return 0.0, False
 
 
@@ -85,7 +92,8 @@ def get_temperature_compensation_data(hass: HomeAssistant, config: Dict[str, Any
     voc_coef = config.get(CONF_TEMP_COEFFICIENT_VOC, DEFAULT_VOC_COEFFICIENT) / 100
     pmax_coef = config.get(CONF_TEMP_COEFFICIENT_PMAX, DEFAULT_PMAX_COEFFICIENT) / 100
 
-    _LOGGER.debug(f"Temperature compensation: {temp_value}°C, diff: {temp_diff}°C")
+    log_debug(f"Temperature compensation: {temp_value}°C, diff: {temp_diff}°C")
+    journal_event("temperature_compensation", {"temp_value": temp_value, "temp_diff": temp_diff})
 
     return {
         "temp_diff": temp_diff,

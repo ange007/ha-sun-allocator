@@ -1,6 +1,9 @@
 """Utility functions for Sun Allocator config flow."""
 from typing import Dict, Any, List, Optional
 from homeassistant.core import HomeAssistant
+# Centralized logging
+from ..utils.logger import log_error
+from ..utils.journal import log_exception
 
 from ..const import (
     NONE_OPTION,
@@ -95,7 +98,9 @@ def validate_float_range(value: Any, min_val: float, max_val: float, field_name:
         if float_val < min_val or float_val > max_val:
             return f"invalid_{field_name}_range"
         return None
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as e:
+        log_error("[utils] Invalid float for %s: %s", field_name, value)
+        log_exception(f"validate_float_range_{field_name}", e)
         return f"invalid_{field_name}_format"
 
 
@@ -106,7 +111,9 @@ def validate_int_range(value: Any, min_val: int, max_val: int, field_name: str) 
         if int_val < min_val or int_val > max_val:
             return f"invalid_{field_name}_range"
         return None
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as e:
+        log_error("[utils] Invalid int for %s: %s", field_name, value)
+        log_exception(f"validate_int_range_{field_name}", e)
         return f"invalid_{field_name}_format"
 
 
@@ -117,7 +124,9 @@ def validate_time_format(time_str: str) -> Optional[str]:
         if hour < 0 or hour > 23 or minute < 0 or minute > 59:
             return "invalid_time_format"
         return None
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError) as e:
+        log_error("[utils] Invalid time format: %s", time_str)
+        log_exception("validate_time_format", e)
         return "invalid_time_format"
 
 

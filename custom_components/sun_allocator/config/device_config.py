@@ -5,6 +5,8 @@ from datetime import time
 from typing import Dict, Any, List, Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.selector import selector
+from ..utils.logger import get_logger, log_info, log_error
+from ..utils.journal import audit_action, log_exception
 from ..utils.sensor_utils import clean_entity_id_and_mode
 from .device_config_form import (
     build_device_name_type_schema, build_device_selection_schema, build_device_basic_settings_schema, build_device_schedule_schema
@@ -275,15 +277,31 @@ class DeviceConfigMixin:
         return build_device_schedule_schema(defaults)
 
     async def _finalize_device_config(self):
-        """Finalize device configuration and return to appropriate screen."""
+        """Finalize device configuration, persist devices, and return to appropriate screen."""
+        _LOGGER = get_logger(__name__)
         # Add or update device ID
         if self._action == ACTION_ADD:
             self._device_config[CONF_DEVICE_ID] = str(uuid.uuid4())
             self._devices.append(self._device_config)
+            log_info("[DeviceConfigMixin] Added device: %s", self._device_config)
+            audit_action("device_add", {"device": self._device_config})
         else:  # ACTION_EDIT
             self._device_config[CONF_DEVICE_ID] = self._device_config.get(CONF_DEVICE_ID) or str(uuid.uuid4())
             if self._device_index is not None:
                 self._devices[self._device_index] = self._device_config
+                log_info("[DeviceConfigMixin] Edited device: %s", self._device_config)
+                audit_action("device_edit", {"device": self._device_config})
+        # Persist devices to config_entry.data if possible
+        if hasattr(self, "hass") and hasattr(self, "config_entry"):
+            # Try to persist devices immediately
+            try:
+                data = getattr(self, "_solar_config", {}).copy() if hasattr(self, "_solar_config") else {}
+                data[CONF_DEVICES] = self._devices
+                self.hass.config_entries.async_update_entry(self.config_entry, data=data)
+                log_info("[DeviceConfigMixin] Persisted devices to config_entry.data: %d devices", len(self._devices))
+            except Exception as e:
+                log_error("[DeviceConfigMixin] Failed to persist devices: %s", e)
+                log_exception("device_persist", e)
         # Check which method to call based on available methods
         if hasattr(self, 'async_step_manage_devices'):
             # For SunAllocatorOptionsFlowHandler

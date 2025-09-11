@@ -1,8 +1,10 @@
+
 """Excess power sensor for Sun Allocator."""
-import logging
 from typing import Optional, Dict, Any
 from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfPower
+from ...utils.logger import get_logger, log_debug
+from ...utils.journal import journal_event
 
 from .base import BaseSunAllocatorSensor
 from ...utils import (
@@ -34,7 +36,7 @@ from ...const import (
     KEY_CALCULATION_REASON,
 )
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = get_logger(__name__)
 
 
 class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
@@ -130,10 +132,20 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             calculation_reason=debug_info[KEY_CALCULATION_REASON]
         )
         
-        _LOGGER.debug(
+        log_debug(
             f"Excess power calculation: PV Power={pv_power}W, "
             f"Current Max Power={current_max_power}W, Excess={excess}W, "
             f"Reason: {debug_info[KEY_CALCULATION_REASON]}"
         )
+        journal_event("excess_power_calc", {
+            "pv_power": pv_power,
+            "current_max_power": current_max_power,
+            "excess": excess,
+            "reason": debug_info[KEY_CALCULATION_REASON],
+            "usage_percent": usage,
+            "battery_discharging": battery_discharging,
+            "excess_possible": excess_possible,
+            "topology_excess_possible": topology_excess_possible
+        })
         
         return excess

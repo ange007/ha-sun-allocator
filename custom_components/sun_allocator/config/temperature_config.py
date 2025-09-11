@@ -2,6 +2,9 @@
 import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from typing import Dict, Any, List, Optional
+# Centralized logging and audit
+from ..utils.logger import log_error
+from ..utils.journal import log_exception, audit_action
 
 from ..const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
@@ -40,30 +43,30 @@ class TemperatureConfigMixin:
     def _validate_temperature_config(self, user_input: Dict[str, Any]) -> Dict[str, str]:
         """Validate temperature compensation configuration."""
         errors = {}
-
         # Validate temperature coefficients
         try:
             voc_coef = float(user_input.get(CONF_TEMP_COEFFICIENT_VOC, -0.3))
             # VOC coefficient should typically be negative (around -0.3% per °C)
             if voc_coef > 0 or voc_coef < -1.0:
                 errors[CONF_TEMP_COEFFICIENT_VOC] = "invalid_voc_coefficient"
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             errors[CONF_TEMP_COEFFICIENT_VOC] = "invalid_voc_coefficient"
-
+            log_error("[TemperatureConfigMixin] Invalid VOC coefficient: %s", user_input.get(CONF_TEMP_COEFFICIENT_VOC))
+            log_exception("temperature_config_voc_coef", e)
         try:
             pmax_coef = float(user_input.get(CONF_TEMP_COEFFICIENT_PMAX, -0.4))
             # PMAX coefficient should typically be negative (around -0.4% per °C)
             if pmax_coef > 0 or pmax_coef < -1.0:
                 errors[CONF_TEMP_COEFFICIENT_PMAX] = "invalid_pmax_coefficient"
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             errors[CONF_TEMP_COEFFICIENT_PMAX] = "invalid_pmax_coefficient"
-
+            log_error("[TemperatureConfigMixin] Invalid PMAX coefficient: %s", user_input.get(CONF_TEMP_COEFFICIENT_PMAX))
+            log_exception("temperature_config_pmax_coef", e)
         # Validate that temperature sensor is selected if compensation is enabled
         if user_input.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False):
             temp_sensor = user_input.get(CONF_TEMPERATURE_SENSOR)
             if not temp_sensor or temp_sensor == NONE_OPTION:
                 errors[CONF_TEMPERATURE_SENSOR] = "temperature_sensor_required"
-
         return errors
 
     def _process_temperature_config_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
@@ -100,7 +103,7 @@ class TemperatureConfigMixin:
 
                 # Update solar panel configuration with temperature compensation settings
                 self._solar_config.update(user_input)
-
+                audit_action("temperature_config_saved", {"config": user_input})
                 # If advanced settings are enabled, chain to advanced settings step next
                 if self._solar_config.get(CONF_ADVANCED_SETTINGS_ENABLED, False) and hasattr(self, "async_step_advanced_settings"):
                     return await self.async_step_advanced_settings()

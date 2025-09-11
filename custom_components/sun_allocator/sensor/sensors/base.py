@@ -1,7 +1,8 @@
 """Base sensor class for Sun Allocator sensors."""
-import logging
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
+from ...utils.logger import get_logger, log_error
+from ...utils.journal import journal_event
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.typing import StateType
@@ -33,7 +34,7 @@ from ...utils import (
     create_sensor_attributes,
 )
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = get_logger(__name__)
 
 
 class BaseSunAllocatorSensor(SensorEntity, ABC):
@@ -248,7 +249,8 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             return value
             
         except Exception as e:
-            _LOGGER.error(f"Error calculating {self._attr_name}: {e}")
+            log_error(f"Error calculating {self._attr_name}: {e}")
+            journal_event("sensor_calc_error", {"sensor": self._attr_name, "error": str(e)})
             return self._state or 0.0
     
     @abstractmethod

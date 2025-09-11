@@ -2,6 +2,9 @@
 import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from typing import Dict, Any, Optional
+# Centralized logging and audit
+from ..utils.logger import log_error
+from ..utils.journal import log_exception, audit_action
 
 from ..const import (
     STEP_USER,
@@ -61,7 +64,6 @@ class SolarConfigMixin:
     def _validate_solar_config(self, user_input: Dict[str, Any]) -> Dict[str, str]:
         """Validate solar panel configuration."""
         errors = {}
-        
         # Validate that Voc is not equal to Vmp
         if user_input.get(CONF_VOC) is not None and user_input.get(CONF_VMP) is not None:
             try:
@@ -69,32 +71,36 @@ class SolarConfigMixin:
                 vmp = float(user_input.get(CONF_VMP))
                 if voc == vmp:
                     errors[CONF_VOC] = "voc_equal_to_vmp"
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
                 errors["base"] = "invalid_values"
-        
+                log_error("[SolarConfigMixin] Invalid Voc/Vmp: VOC=%s, VMP=%s", user_input.get(CONF_VOC), user_input.get(CONF_VMP))
+                log_exception("solar_config_voc_vmp", e)
         # Validate panel count
         try:
             panel_count = int(user_input.get(CONF_PANEL_COUNT, 1))
             if panel_count <= 0:
                 errors[CONF_PANEL_COUNT] = "invalid_panel_count"
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             errors[CONF_PANEL_COUNT] = "invalid_panel_count"
-        
+            log_error("[SolarConfigMixin] Invalid panel count: %s", user_input.get(CONF_PANEL_COUNT))
+            log_exception("solar_config_panel_count", e)
         # Validate Vmp and Imp
         try:
             vmp = float(user_input.get(CONF_VMP, 0))
             if vmp <= 0:
                 errors[CONF_VMP] = "invalid_vmp"
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             errors[CONF_VMP] = "invalid_vmp"
-            
+            log_error("[SolarConfigMixin] Invalid Vmp: %s", user_input.get(CONF_VMP))
+            log_exception("solar_config_vmp", e)
         try:
             imp = float(user_input.get(CONF_IMP, 0))
             if imp <= 0:
                 errors[CONF_IMP] = "invalid_imp"
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             errors[CONF_IMP] = "invalid_imp"
-        
+            log_error("[SolarConfigMixin] Invalid Imp: %s", user_input.get(CONF_IMP))
+            log_exception("solar_config_imp", e)
         return errors
     
     def _process_solar_config_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
@@ -120,20 +126,20 @@ class SolarConfigMixin:
         if user_input is not None:
             # Validate input
             errors = self._validate_solar_config(user_input)
-            
+
             if not errors:
                 # Process input
                 user_input = self._process_solar_config_input(user_input)
-                
+
                 # Store solar panel configuration
                 self._solar_config = user_input
-                
+                audit_action("solar_config_saved", {"config": user_input})
                 # Proceed to device configuration
                 return await self.async_step_devices()
 
         # Create schema with current values as defaults
         schema = self._get_solar_config_schema(sensors, self._solar_config)
-        
+
         return self.async_show_form(
             step_id=STEP_USER,
             data_schema=schema,

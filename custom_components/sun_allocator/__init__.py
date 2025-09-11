@@ -1,3 +1,8 @@
+from .utils.logger import get_logger, log_info, log_debug, log_warning, log_error
+from .settings import LOG_STARTUP_DEVICES
+
+_LOGGER = get_logger()
+
 async def set_mode_for_entity(hass, entity_id, mode):
     """Set mode for a specific entity."""
     state = hass.states.get(entity_id)
@@ -171,16 +176,185 @@ SET_RELAY_POWER_SCHEMA = vol.Schema({
 })
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
-    """Set up SunAllocator from a config entry."""
+    # Store config entry data EARLY so it's available for all listeners
     hass.data.setdefault(DOMAIN, {})
-    
-    # Store config entry data
     entry_data = {
         "config": config_entry.data,
         "unsub_update_listener": None,
         "unsub_auto_control": None,
     }
     hass.data[DOMAIN][config_entry.entry_id] = entry_data
+
+    # --- Log all loaded devices for diagnostics ---
+    devices = config_entry.data.get(CONF_DEVICES, [])
+    if LOG_STARTUP_DEVICES:
+        if devices:
+            log_info("[Startup] Loaded %d devices from config_entry.data:", len(devices))
+            for d in devices:
+                log_info("[Startup] Device: id=%s, name=%s, type=%s, entity=%s",
+                    d.get(CONF_DEVICE_ID),
+                    d.get(CONF_DEVICE_NAME),
+                    d.get(CONF_DEVICE_TYPE),
+                    d.get(CONF_ESPHOME_RELAY_ENTITY) or d.get(CONF_DEVICE_ENTITY)
+                )
+        else:
+            log_info("[Startup] No devices loaded from config_entry.data.")
+
+    # --- Persist last_percent and _restore_on for all devices on state change ---
+    async def _persist_device_state(entity_id, percent=None, is_on=None):
+        """Persist last_percent and _restore_on for a device in config_entry.data."""
+        data = dict(config_entry.data)
+        devs = list(data.get(CONF_DEVICES, []))
+        changed = False
+        for i, d in enumerate(devs):
+            relay_entity = d.get(CONF_ESPHOME_RELAY_ENTITY) if d.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM) == DEVICE_TYPE_CUSTOM else d.get(CONF_DEVICE_ENTITY)
+            if relay_entity == entity_id:
+                nd = dict(d)
+                if percent is not None:
+                    if nd.get("last_percent") != percent:
+                        nd["last_percent"] = percent
+                        changed = True
+                if is_on is not None:
+                    if nd.get("_restore_on") != is_on:
+                        nd["_restore_on"] = is_on
+                        changed = True
+                devs[i] = nd
+                break
+        if changed:
+            data[CONF_DEVICES] = devs
+            hass.config_entries.async_update_entry(config_entry, data=data)
+
+    # --- Restore state also when entity becomes available ---
+    async def _restore_entity_state(entity_id):
+        """Restore state for a single entity when it becomes available."""
+        devices = config_entry.data.get(CONF_DEVICES, [])
+        for device in devices:
+            device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
+            relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else device.get(CONF_DEVICE_ENTITY)
+            mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else None
+            if relay_entity == entity_id:
+                percent = device.get("last_percent")
+                is_on = device.get("_restore_on")
+                if percent is not None:
+                    _LOGGER.info(f"[Restore] Setting percent {percent} for {entity_id}")
+                    await set_power_for_entity(hass, entity_id, percent)
+                elif is_on is not None:
+                    _LOGGER.info(f"[Restore] Setting ON/OFF {is_on} for {entity_id}")
+                    await set_power_for_entity(hass, entity_id, 100 if is_on else 0)
+                else:
+                    _LOGGER.info(f"[Restore] No saved state for {entity_id}")
+            if mode_select_entity == entity_id:
+                last_mode = device.get("last_mode")
+                if last_mode:
+                    _LOGGER.info(f"[Restore] Setting mode {last_mode} for {entity_id}")
+                    await set_mode_for_entity(hass, entity_id, last_mode)
+
+    # --- Restore device state after Home Assistant restart ---
+    async def _restore_all_devices():
+        """Restore mode and power for all devices after restart when entities become available."""
+        devices = config_entry.data.get(CONF_DEVICES, [])
+        restored = set()
+        for device in devices:
+            device_id = device.get(CONF_DEVICE_ID)
+            device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
+            relay_entity = None
+            mode_select_entity = None
+            hvac_mode = device.get("_hvac_mode")
+            if device_type == DEVICE_TYPE_CUSTOM:
+                relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
+                mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
+            else:
+                relay_entity = device.get(CONF_DEVICE_ENTITY)
+            # Restore mode for custom devices (if mode_select_entity exists)
+            if mode_select_entity:
+                last_mode = device.get("last_mode")
+                if last_mode:
+                    state = hass.states.get(mode_select_entity)
+                    if state and state.state != last_mode:
+                        _LOGGER.info(f"Restoring mode {last_mode} for {mode_select_entity}")
+                        await set_mode_for_entity(hass, mode_select_entity, last_mode)
+                        restored.add(mode_select_entity)
+            # Restore power state for relay_entity (all types)
+            if relay_entity:
+                # Try to restore ON/OFF or brightness/percent if available
+                state = hass.states.get(relay_entity)
+                if state and state.state in (STATE_ON, STATE_OFF):
+                    # If device was ON before, try to restore ON
+                    if device.get("_restore_on", False) and state.state != STATE_ON:
+                        _LOGGER.info(f"Restoring ON state for {relay_entity}")
+                        await set_power_for_entity(hass, relay_entity, 100)
+                        restored.add(relay_entity)
+                    elif not device.get("_restore_on", False) and state.state != STATE_OFF:
+                        _LOGGER.info(f"Restoring OFF state for {relay_entity}")
+                        await set_power_for_entity(hass, relay_entity, 0)
+                        restored.add(relay_entity)
+                # Optionally restore brightness/percent if stored
+                percent = device.get("last_percent")
+                if percent is not None:
+                    _LOGGER.info(f"Restoring percent {percent} for {relay_entity}")
+                    await set_power_for_entity(hass, relay_entity, percent)
+                    restored.add(relay_entity)
+        if not restored:
+            _LOGGER.info("No device states needed to be restored after restart.")
+
+    # Schedule restore after Home Assistant is fully started
+    async def _on_ha_started(event):
+        await _restore_all_devices()
+
+    hass.bus.async_listen_once("homeassistant_started", _on_ha_started)
+
+    # Listen for entity state changes to persist and restore state
+    @callback
+    async def _entity_state_listener(event):
+        entity_id = event.data.get("entity_id")
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        if not new_state:
+            return
+        # Persist percent and ON/OFF for relay entities
+        try:
+            percent = None
+            is_on = None
+            domain = entity_id.split(".")[0]
+            if domain == DOMAIN_LIGHT:
+                br = int(new_state.attributes.get("brightness", 0))
+                percent = (br / MAX_BRIGHTNESS) * MAX_PERCENTAGE if br > 0 else 0
+                is_on = new_state.state == STATE_ON
+            elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
+                is_on = new_state.state == STATE_ON
+                percent = 100 if is_on else 0
+            elif domain == DOMAIN_CLIMATE:
+                # For climate, treat 'off' as OFF, else ON
+                is_on = new_state.state != "off"
+                percent = 100 if is_on else 0
+            await _persist_device_state(entity_id, percent=percent, is_on=is_on)
+        except Exception as e:
+            _LOGGER.debug(f"[Persist] Error persisting state for {entity_id}: {e}")
+        # Restore if entity just became available
+        was_unavailable = (old_state is None) or (old_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE))
+        now_available = new_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+        if was_unavailable and now_available:
+            await _restore_entity_state(entity_id)
+
+    # Subscribe to all relevant entity state changes
+    relay_entities = set()
+    mode_entities = set()
+    for device in config_entry.data.get(CONF_DEVICES, []):
+        device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
+        relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else device.get(CONF_DEVICE_ENTITY)
+        mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else None
+        if relay_entity:
+            relay_entities.add(relay_entity)
+        if mode_select_entity:
+            mode_entities.add(mode_select_entity)
+    all_entities = list(relay_entities | mode_entities)
+    if all_entities:
+        # entry_data is guaranteed to exist here
+        entry_data["unsub_restore_listener"] = async_track_state_change_event(
+            hass, all_entities, _entity_state_listener
+        )
+    """Set up SunAllocator from a config entry."""
+    # ...existing code...
     
     # Set up sensors
     await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
