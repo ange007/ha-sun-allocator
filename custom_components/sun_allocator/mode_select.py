@@ -1,8 +1,10 @@
 """Mode select logic for Sun Allocator."""
-from .const import (
-    CONF_ESPHOME_MODE_SELECT_ENTITY, CONF_DEVICE_ID, CONF_DEVICES, DEVICE_TYPE_CUSTOM, CONF_DEVICE_TYPE, STATE_UNKNOWN, STATE_UNAVAILABLE
-)
 from .utils.logger import log_debug
+from .entity_control import set_mode_for_entity
+
+from .const import (
+    CONF_ESPHOME_MODE_SELECT_ENTITY, CONF_DEVICES, DEVICE_TYPE_CUSTOM, CONF_DEVICE_TYPE, STATE_UNKNOWN, STATE_UNAVAILABLE
+)
 
 VALID_MODES = {"off", "on", "proportional"}
 
@@ -43,5 +45,4 @@ async def mode_select_state_listener(hass, config_entry, event, desired_modes, s
             log_debug(
                 "Re-applying desired mode %s to %s after availability", desired, entity_id
             )
-            from . import set_mode_for_entity
             await set_mode_for_entity(hass, entity_id, desired)

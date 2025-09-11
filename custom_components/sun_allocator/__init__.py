@@ -17,12 +17,12 @@ from homeassistant.const import (
 from homeassistant.components.light import ATTR_BRIGHTNESS
 import homeassistant.util.dt as dt_util
 
-from . import set_mode_for_entity
-from .utils.logger import get_logger, log_info, log_debug, log_warning, log_error
+from .entity_control import set_mode_for_entity, set_power_for_entity
+from .utils.logger import log_info, log_debug, log_warning, log_error
 from .settings import LOG_STARTUP_DEVICES
 from .device_restore import persist_device_state, restore_entity_state, restore_all_devices
 from .services import handle_set_relay_mode, handle_set_relay_power
-from .mode_select import persist_last_mode, mode_select_state_listener
+from .mode_select import mode_select_state_listener
 
 from .const import (
     DOMAIN,
@@ -52,7 +52,6 @@ from .const import (
     CONF_POWER_ALLOCATION,
     CONF_POWER_DISTRIBUTION,
     STATE_ON,
-    STATE_OFF,
     DOMAIN_LIGHT,
     DOMAIN_SWITCH,
     DOMAIN_SELECT,

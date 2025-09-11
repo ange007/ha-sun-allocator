@@ -1,16 +1,25 @@
 """Service handlers for Sun Allocator."""
-from .const import (
-    ATTR_ENTITY_ID, CONF_DEVICE_ID, CONF_ESPHOME_MODE_SELECT_ENTITY, CONF_ESPHOME_RELAY_ENTITY, CONF_DEVICE_ENTITY,
-    CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM, CONF_DEVICE_NAME, CONF_DEVICES, SERVICE_SET_RELAY_MODE, SERVICE_SET_RELAY_POWER
-)
 from .utils.logger import log_error
+from .entity_control import set_power_for_entity, set_mode_for_entity
+
+from .const import (
+    ATTR_ENTITY_ID, 
+    CONF_DEVICE_ID, 
+    CONF_ESPHOME_MODE_SELECT_ENTITY, 
+    CONF_ESPHOME_RELAY_ENTITY, 
+    CONF_DEVICE_ENTITY,
+    CONF_DEVICE_TYPE,
+    DEVICE_TYPE_CUSTOM, 
+    CONF_DEVICE_NAME,
+    CONF_DEVICES,
+)
+    
 
 async def handle_set_relay_mode(hass, config_entry, call):
     mode = call.data["mode"]
     entity_id = call.data.get(ATTR_ENTITY_ID)
     device_id = call.data.get(CONF_DEVICE_ID)
     devices = config_entry.data.get(CONF_DEVICES, [])
-    from . import set_mode_for_entity
     if entity_id:
         await set_mode_for_entity(hass, entity_id, mode)
     elif device_id:
@@ -34,7 +43,7 @@ async def handle_set_relay_power(hass, config_entry, call):
     entity_id = call.data.get(ATTR_ENTITY_ID)
     device_id = call.data.get(CONF_DEVICE_ID)
     devices = config_entry.data.get(CONF_DEVICES, [])
-    from . import set_power_for_entity
+
     if entity_id:
         await set_power_for_entity(hass, entity_id, power_percent)
     elif device_id:

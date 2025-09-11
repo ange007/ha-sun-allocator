@@ -1,12 +1,15 @@
 """Device restore and persist logic for Sun Allocator."""
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.const import STATE_ON, STATE_OFF, STATE_UNKNOWN, STATE_UNAVAILABLE
+from homeassistant.const import STATE_ON, STATE_OFF
+
+from .utils.logger import log_info
+from .settings import LOG_STARTUP_DEVICES
+from .entity_control import set_power_for_entity
+
 from .const import (
     CONF_DEVICES, CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM, CONF_ESPHOME_RELAY_ENTITY, CONF_DEVICE_ENTITY,
     CONF_ESPHOME_MODE_SELECT_ENTITY, CONF_DEVICE_ID
 )
-from .utils.logger import log_info
-from .settings import LOG_STARTUP_DEVICES
+
 
 async def persist_device_state(hass, config_entry, entity_id, percent=None, is_on=None):
     data = dict(config_entry.data)
@@ -41,11 +44,9 @@ async def restore_entity_state(hass, config_entry, entity_id):
             is_on = device.get("_restore_on")
             if percent is not None:
                 log_info(f"[Restore] Setting percent {percent} for {entity_id}")
-                from . import set_power_for_entity
                 await set_power_for_entity(hass, entity_id, percent)
             elif is_on is not None:
                 log_info(f"[Restore] Setting ON/OFF {is_on} for {entity_id}")
-                from . import set_power_for_entity
                 await set_power_for_entity(hass, entity_id, 100 if is_on else 0)
             else:
                 log_info(f"[Restore] No saved state for {entity_id}")
@@ -53,7 +54,6 @@ async def restore_entity_state(hass, config_entry, entity_id):
             last_mode = device.get("last_mode")
             if last_mode:
                 log_info(f"[Restore] Setting mode {last_mode} for {entity_id}")
-                from . import set_mode_for_entity
                 await set_mode_for_entity(hass, entity_id, last_mode)
 
 async def restore_all_devices(hass, config_entry):
