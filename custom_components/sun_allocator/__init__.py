@@ -89,6 +89,7 @@ SET_RELAY_POWER_SCHEMA = vol.Schema({
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
+    log_warning("--- COMPONENT SETUP ---: Loading entry. Test Array: %s. Data: %s", config_entry.data.get('test_array', 'MISSING'), config_entry.data)
     # Store config entry data EARLY so it's available for all listeners
     hass.data.setdefault(DOMAIN, {})
     entry_data = {
@@ -722,7 +723,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
 
 async def update_listener(hass: HomeAssistant, config_entry: ConfigType):
     """Handle options update."""
-    log_warning("--- UPDATE LISTENER ---: Entry updated. Data: %s", config_entry.data)
+    log_warning("--- UPDATE LISTENER ---: Entry updated. Test Array: %s. Data: %s", config_entry.data.get('test_array', 'MISSING'), config_entry.data)
     # Restart auto-control with new settings
     await setup_auto_control(hass, config_entry)
 

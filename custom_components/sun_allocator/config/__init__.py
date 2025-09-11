@@ -10,7 +10,7 @@ from .solar_config import SolarConfigMixin
 from .device_config import DeviceConfigMixin
 from .temperature_config import TemperatureConfigMixin
 from .advanced_config import AdvancedConfigMixin
-from ..utils.logger import log_warning
+from ..utils.logger import log_warning # ADDED FOR DEBUGGING
 
 from ..const import (
     DOMAIN,
@@ -20,12 +20,6 @@ from ..const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_ADVANCED_SETTINGS_ENABLED,
     CONF_ACTION,
-    CONF_ESPHOME_RELAY_ENTITY,
-    CONF_ESPHOME_MODE_SELECT_ENTITY,
-    CONF_AUTO_CONTROL_ENABLED,
-    CONF_MIN_EXPECTED_W,
-    CONF_MAX_EXPECTED_W,
-    CONF_DEVICE_PRIORITY,
     STEP_DEVICES,
     STEP_MAIN_MENU,
     STEP_SETTINGS,
@@ -160,7 +154,8 @@ class SunAllocatorOptionsFlowHandler(
     
     def __init__(self, config_entry):
         """Initialize options flow."""
-        super().__init__(config_entry)
+        super().__init__()
+        self.config_entry = config_entry
         self._solar_config = {}
         self._devices = []
         self._device_config = {}
@@ -172,8 +167,8 @@ class SunAllocatorOptionsFlowHandler(
         # Load config from entry
         self._solar_config = {k: v for k, v in self.config_entry.data.items() if k != CONF_DEVICES}
         self._devices = self.config_entry.data.get(CONF_DEVICES, [])
-        log_warning("--- CONFIG FLOW INIT ---: Loaded %d devices. Data: %s", len(self._devices), self.config_entry.data)
-       
+        
+        log_warning("--- CONFIG FLOW INIT ---: Loaded %d devices. Test Array: %s. Data: %s", len(self._devices), self.config_entry.data.get('test_array', 'MISSING'), self.config_entry.data)
         # Proceed to main menu
         return await self.async_step_main_menu()
         
@@ -290,8 +285,8 @@ class SunAllocatorOptionsFlowHandler(
                     data = dict(self.config_entry.data)
                     data.update(self._solar_config)
                     data[CONF_DEVICES] = self._devices
+                    data['test_array'] = [{'a': 1, 'b': 'hello'}, {'c': True, 'd': None}]
                     log_warning("--- CONFIG FLOW REMOVE ---: Saving %d devices. Data: %s", len(self._devices), data)
-                    
                     self.hass.config_entries.async_update_entry(self.config_entry, data=data)
                     return await self.async_step_manage_devices()
                 errors[CONF_DEVICE_ID] = "device_name_required"
@@ -345,8 +340,8 @@ class SunAllocatorOptionsFlowHandler(
         data = dict(self.config_entry.data)
         data.update(self._solar_config)
         data[CONF_DEVICES] = self._devices
+        data['test_array'] = [{'a': 1, 'b': 'hello'}, {'c': True, 'd': None}]
         log_warning("--- CONFIG FLOW SAVE ---: Saving %d devices. Data: %s", len(self._devices), data)
-        
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration
         await self.hass.config_entries.async_reload(self.config_entry.entry_id)
@@ -370,8 +365,8 @@ class SunAllocatorOptionsFlowHandler(
         data = dict(self.config_entry.data)
         data.update(self._solar_config)
         data[CONF_DEVICES] = self._devices
+        data['test_array'] = [{'a': 1, 'b': 'hello'}, {'c': True, 'd': None}]
         log_warning("--- CONFIG FLOW FINALIZE ---: Saving %d devices. Data: %s", len(self._devices), data)
-
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration
         await self.hass.config_entries.async_reload(self.config_entry.entry_id)
