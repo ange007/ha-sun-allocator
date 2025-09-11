@@ -3,7 +3,7 @@ from homeassistant.const import (
     STATE_UNKNOWN, STATE_UNAVAILABLE
 )
 
-from .utils.logger import log_debug
+from .utils.logger import log_debug, log_warning
 from .entity_control import set_mode_for_entity
 
 from .const import (
@@ -37,6 +37,7 @@ async def persist_last_mode(hass, config_entry, entity_id, mode):
             break
     if changed:
         data[CONF_DEVICES] = devs
+        log_warning("--- MODE SELECT ---: Saving %d devices from persist_last_mode", len(devs))
         hass.config_entries.async_update_entry(config_entry, data=data)
 
 async def mode_select_state_listener(hass, config_entry, event, desired_modes, select_entity_ids):

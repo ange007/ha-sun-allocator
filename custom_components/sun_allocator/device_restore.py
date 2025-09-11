@@ -1,7 +1,7 @@
 """Device restore and persist logic for Sun Allocator."""
 from homeassistant.const import STATE_ON, STATE_OFF
 
-from .utils.logger import log_info, log_debug
+from .utils.logger import log_info, log_debug, log_warning
 from .entity_control import set_power_for_entity
 
 from .const import (
@@ -13,6 +13,7 @@ from .const import (
     CONF_DEVICE_ENTITY,
     CONF_ESPHOME_MODE_SELECT_ENTITY, 
     CONF_DEVICE_ID,
+    DOMAIN_CLIMATE,
 )
 
 
@@ -42,6 +43,7 @@ async def persist_device_state(hass, config_entry, entity_id, percent=None, is_o
             break
     if changed:
         data[CONF_DEVICES] = devs
+        log_warning("--- DEVICE RESTORE ---: Saving %d devices from persist_device_state", len(devs))
         hass.config_entries.async_update_entry(config_entry, data=data)
 
 async def restore_entity_state(hass, config_entry, entity_id):
@@ -69,6 +71,7 @@ async def restore_entity_state(hass, config_entry, entity_id):
 
 async def restore_all_devices(hass, config_entry):
     devices = config_entry.data.get(CONF_DEVICES, [])
+    log_info("Found %d devices to check for restore state", len(devices))
     restored = set()
     for device in devices:
         device_id = device.get(CONF_DEVICE_ID)
@@ -76,38 +79,49 @@ async def restore_all_devices(hass, config_entry):
         relay_entity = None
         mode_select_entity = None
         hvac_mode = device.get("_hvac_mode")
+        log_info(f"Checking restore state for device_id: {device_id}")
+
         if device_type == DEVICE_TYPE_CUSTOM:
             relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
             mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
         else:
             relay_entity = device.get(CONF_DEVICE_ENTITY)
+
         if mode_select_entity:
             last_mode = device.get("last_mode")
             if last_mode:
                 state = hass.states.get(mode_select_entity)
                 if state and state.state != last_mode:
-                    log_info(f"Restoring mode {last_mode} for {mode_select_entity}")
+                    log_info(f"Restoring mode '{last_mode}' for {mode_select_entity}")
                     from . import set_mode_for_entity
                     await set_mode_for_entity(hass, mode_select_entity, last_mode)
                     restored.add(mode_select_entity)
+
         if relay_entity:
+            entity_to_restore = relay_entity
+            domain = relay_entity.split('.')[0]
+            if domain == DOMAIN_CLIMATE and hvac_mode:
+                entity_to_restore = f"{relay_entity}|{hvac_mode}"
+
             state = hass.states.get(relay_entity)
             if state and state.state in (STATE_ON, STATE_OFF):
                 if device.get("_restore_on", False) and state.state != STATE_ON:
-                    log_info(f"Restoring ON state for {relay_entity}")
+                    log_info(f"Restoring ON state for {entity_to_restore}")
                     from . import set_power_for_entity
-                    await set_power_for_entity(hass, relay_entity, 100)
+                    await set_power_for_entity(hass, entity_to_restore, 100)
                     restored.add(relay_entity)
                 elif not device.get("_restore_on", False) and state.state != STATE_OFF:
                     log_info(f"Restoring OFF state for {relay_entity}")
                     from . import set_power_for_entity
                     await set_power_for_entity(hass, relay_entity, 0)
                     restored.add(relay_entity)
+            
             percent = device.get("last_percent")
             if percent is not None:
-                log_info(f"Restoring percent {percent} for {relay_entity}")
+                log_info(f"Restoring percent {percent} for {entity_to_restore}")
                 from . import set_power_for_entity
-                await set_power_for_entity(hass, relay_entity, percent)
+                await set_power_for_entity(hass, entity_to_restore, percent)
                 restored.add(relay_entity)
+
     if not restored:
         log_info("No device states needed to be restored after restart.")

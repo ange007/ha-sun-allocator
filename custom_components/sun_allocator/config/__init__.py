@@ -10,6 +10,7 @@ from .solar_config import SolarConfigMixin
 from .device_config import DeviceConfigMixin
 from .temperature_config import TemperatureConfigMixin
 from .advanced_config import AdvancedConfigMixin
+from ..utils.logger import log_warning # ADDED FOR DEBUGGING
 
 from ..const import (
     DOMAIN,
@@ -159,13 +160,25 @@ class SunAllocatorOptionsFlowHandler(
     
     def __init__(self, config_entry):
         """Initialize options flow."""
-        super().__init__(config_entry)
+        super().__init__()
+        self._solar_config = {}
+        self._devices = []
+        self._device_config = {}
+        self._device_index = None
+        self._action = None
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options for the custom component."""
+        # Migrate old configuration format if needed
         if CONF_DEVICES not in self.config_entry.data:
+            # Extract solar panel configuration
             self._solar_config = {
-                k: v for k, v in self.config_entry.data.items()
-                if k not in [CONF_ESPHOME_RELAY_ENTITY, CONF_ESPHOME_MODE_SELECT_ENTITY,
+                k: v for k, v in self.config_entry.data.items() 
+                if k not in [CONF_ESPHOME_RELAY_ENTITY, CONF_ESPHOME_MODE_SELECT_ENTITY, 
                             CONF_AUTO_CONTROL_ENABLED]
             }
+            
+            # Extract device configuration if available
             if self.config_entry.data.get(CONF_ESPHOME_RELAY_ENTITY) or self.config_entry.data.get(CONF_ESPHOME_MODE_SELECT_ENTITY):
                 device = {
                     CONF_DEVICE_ID: str(uuid.uuid4()),
@@ -181,17 +194,14 @@ class SunAllocatorOptionsFlowHandler(
             else:
                 self._devices = []
         else:
+            # Use existing configuration
             self._solar_config = {
                 k: v for k, v in self.config_entry.data.items() if k != CONF_DEVICES
             }
             self._devices = self.config_entry.data.get(CONF_DEVICES, [])
-
-        self._device_config = {}
-        self._device_index = None
-        self._action = None
-
-    async def async_step_init(self, user_input=None):
-        """Manage the options for the custom component."""
+        
+        log_warning("--- CONFIG FLOW INIT ---: Loaded %d devices", len(self._devices))
+        # Proceed to main menu
         return await self.async_step_main_menu()
         
     async def async_step_main_menu(self, user_input=None):
@@ -306,6 +316,7 @@ class SunAllocatorOptionsFlowHandler(
                     # Persist changes immediately and stay on the manage devices page
                     data = self._solar_config.copy()
                     data[CONF_DEVICES] = self._devices
+                    log_warning("--- CONFIG FLOW REMOVE ---: Saving %d devices", len(self._devices))
                     self.hass.config_entries.async_update_entry(self.config_entry, data=data)
                     return await self.async_step_manage_devices()
                 errors[CONF_DEVICE_ID] = "device_name_required"
@@ -358,6 +369,7 @@ class SunAllocatorOptionsFlowHandler(
         """Save configuration, reload integration and return to main menu."""
         data = self._solar_config.copy()
         data[CONF_DEVICES] = self._devices
+        log_warning("--- CONFIG FLOW SAVE ---: Saving %d devices", len(self._devices))
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration
         await self.hass.config_entries.async_reload(self.config_entry.entry_id)
@@ -380,6 +392,7 @@ class SunAllocatorOptionsFlowHandler(
         # Persist changes immediately so they survive HA restarts
         data = self._solar_config.copy()
         data[CONF_DEVICES] = self._devices
+        log_warning("--- CONFIG FLOW FINALIZE ---: Saving %d devices", len(self._devices))
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration
         await self.hass.config_entries.async_reload(self.config_entry.entry_id)
