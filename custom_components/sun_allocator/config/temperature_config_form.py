@@ -1,21 +1,26 @@
 """Temperature config form builders for Sun Allocator."""
 from voluptuous import Schema, Required
+
+from homeassistant.helpers.selector import selector
+
 from ..utils.ui_helpers import NumberSelectorBuilder
-try:
-    from homeassistant.helpers.selector import selector
-except ImportError:
-    # Fallback for linting outside Home Assistant
-    def selector(x):
-        return x
 
 from ..const import (
-    CONF_TEMPERATURE_SENSOR, CONF_TEMP_COEFFICIENT_VOC, CONF_TEMP_COEFFICIENT_PMAX, NONE_OPTION, DEFAULT_VOC_COEFFICIENT, DEFAULT_PMAX_COEFFICIENT
+    CONF_TEMPERATURE_SENSOR, 
+    CONF_TEMP_COEFFICIENT_VOC, 
+    CONF_TEMP_COEFFICIENT_PMAX, 
+    NONE_OPTION, 
+    DEFAULT_VOC_COEFFICIENT, 
+    DEFAULT_PMAX_COEFFICIENT
 )
+
 
 def build_temperature_config_schema(temperature_sensors, defaults=None):
     if defaults is None:
         defaults = {}
+
     default_temp_sensor = NONE_OPTION if defaults.get(CONF_TEMPERATURE_SENSOR) is None else defaults.get(CONF_TEMPERATURE_SENSOR, NONE_OPTION)
+    
     return Schema({
         Required(
             CONF_TEMPERATURE_SENSOR,

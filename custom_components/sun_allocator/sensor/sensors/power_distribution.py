@@ -4,13 +4,14 @@ Provides overview of total allocated power with per-device allocation in W and %
 """
 from __future__ import annotations
 from typing import Any, Dict
-from ...utils.logger import get_logger, log_debug
-from ...utils.journal import journal_event
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.const import UnitOfPower
+
+from ...utils.logger import log_debug
+from ...utils.journal import journal_event
 
 from ...const import (
     DOMAIN,
@@ -19,9 +20,6 @@ from ...const import (
     SENSOR_NAME_PREFIX,
     SENSOR_ID_PREFIX,
 )
-
-_LOGGER = get_logger(__name__)
-
 
 class SunAllocatorPowerDistributionSensor(SensorEntity):
     _attr_icon = "mdi:flash"

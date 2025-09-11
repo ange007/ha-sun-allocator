@@ -1,4 +1,4 @@
-"""UI helpers for Sun Allocator: builder-класи для selector-ів, label/value, emoji, підказки."""
+"""UI helpers for Sun Allocator: builder for selectors, label/value, emoji."""
 from homeassistant.helpers.selector import selector
 
 class EntitySelectorBuilder:
@@ -17,9 +17,12 @@ class EntitySelectorBuilder:
             friendly = e.attributes.get("friendly_name", "")
             label = f"{icon} {friendly}" if friendly else f"{icon} {e.entity_id}"
             result.append({"label": label, "value": e.entity_id})
+            
         result.sort(key=lambda x: x["label"])
+
         if none_option:
             result = [{"label": "None", "value": "None"}] + result
+
         return result
 
 class NumberSelectorBuilder:
@@ -29,6 +32,7 @@ class NumberSelectorBuilder:
         self.step = step
         self.mode = mode
         self.unit = unit
+
     def build(self):
         d = {"min": self.min, "max": self.max, "step": self.step, "mode": self.mode}
         if self.unit:
@@ -43,5 +47,6 @@ class SelectSelectorBuilder:
     def __init__(self, options, mode="dropdown"):
         self.options = options
         self.mode = mode
+
     def build(self):
         return selector({"select": {"options": self.options, "mode": self.mode}})

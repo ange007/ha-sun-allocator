@@ -1,11 +1,14 @@
 """Maximum power sensor for Sun Allocator."""
 import logging
 from typing import Optional, Dict, Any
+
 from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfPower
 
 from .base import BaseSunAllocatorSensor
-from ...utils import calculate_pmax
+from ...utils.mppt import calculate_pmax
+from ...utils.logger import log_debug
+
 from ...const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
@@ -16,9 +19,6 @@ from ...const import (
     KEY_PANEL_COUNT,
     KEY_PANEL_CONFIGURATION,
 )
-
-_LOGGER = logging.getLogger(__name__)
-
 
 class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
     """Sensor for maximum theoretical power."""
@@ -68,7 +68,7 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             vmp = vmp * (1 + voc_coef * temp_diff)
             imp = imp * (1 + pmax_coef * temp_diff + voc_coef * temp_diff)
             
-            _LOGGER.debug(
+            log_debug(
                 f"Temperature compensation applied: temp_diff={temp_diff}°C, "
                 f"adjusted Vmp={vmp:.2f}V, adjusted Imp={imp:.2f}A"
             )
@@ -101,7 +101,7 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             temperature_compensated=temp_compensation is not None
         )
         
-        _LOGGER.debug(
+        log_debug(
             f"Max power calculation: Vmp={vmp:.2f}V, Imp={imp:.2f}A, "
             f"Panel Count={panel_params[KEY_PANEL_COUNT]}, "
             f"Configuration={panel_params[KEY_PANEL_CONFIGURATION]}, "

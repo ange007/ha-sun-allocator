@@ -6,6 +6,9 @@
 #  - Standard Home Assistant selector does not support these UI/UX requirements
 """
 from voluptuous import Schema, Required, Optional
+
+from homeassistant.helpers.selector import selector
+
 from ..utils.ui_helpers import SelectSelectorBuilder, NumberSelectorBuilder, BooleanSelectorBuilder
 
 from ..const import (
@@ -14,12 +17,15 @@ from ..const import (
     CONF_DEVICE_PRIORITY, CONF_SCHEDULE_ENABLED, DAYS_OF_WEEK, CONF_START_TIME, CONF_END_TIME, CONF_DAYS_OF_WEEK
 )
 
+
 def build_device_name_type_schema(defaults=None):
     if defaults is None:
         defaults = {}
+
     default_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
     if default_type == DEVICE_TYPE_NONE:
         default_type = DEVICE_TYPE_CUSTOM
+
     return Schema({
         Required(
             CONF_DEVICE_NAME,
@@ -45,13 +51,17 @@ def build_device_name_type_schema(defaults=None):
 def build_device_selection_schema(entities, device_type, defaults=None):
     if defaults is None:
         defaults = {}
+
     options = [
         {"label": label, "value": value}
         for value, label, _ in entities["all_entities"]
     ]
+
     default_entity = NONE_OPTION if defaults.get(CONF_DEVICE_ENTITY) is None else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
+    
     if len(options) <= 1:
         options.append({"label": "config.step.device_selection.data.no_devices_found", "value": NONE_OPTION})
+    
     return Schema({
         Optional(
             CONF_DEVICE_ENTITY,
@@ -66,7 +76,9 @@ def build_device_selection_schema(entities, device_type, defaults=None):
 def build_device_basic_settings_schema(defaults=None):
     if defaults is None:
         defaults = {}
+
     device_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_STANDARD)
+
     schema_dict = {
         Required(
             CONF_AUTO_CONTROL_ENABLED,
@@ -92,19 +104,22 @@ def build_device_basic_settings_schema(defaults=None):
             description={"suggested_value": defaults.get(CONF_SCHEDULE_ENABLED, False)}
         ): BooleanSelectorBuilder().build(),
     }
+
     if device_type == DEVICE_TYPE_CUSTOM:
         schema_dict[Optional(
             CONF_MAX_EXPECTED_W,
             default=defaults.get(CONF_MAX_EXPECTED_W, 0.0),
             description={"suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)}
         )] = NumberSelectorBuilder(0, 10000, 1, unit="Вт").build()
+
     return Schema(schema_dict)
 
 def build_device_schedule_schema(defaults=None):
-    from homeassistant.helpers.selector import selector
     if defaults is None:
         defaults = {}
+
     default_days = defaults.get(CONF_DAYS_OF_WEEK, DAYS_OF_WEEK)
+
     days_schema = {}
     for day in DAYS_OF_WEEK:
         days_schema[Required(
@@ -112,6 +127,7 @@ def build_device_schedule_schema(defaults=None):
             default=day in default_days,
             description={"suggested_value": day in default_days}
         )] = BooleanSelectorBuilder().build()
+
     return Schema({
         Required(
             CONF_START_TIME,

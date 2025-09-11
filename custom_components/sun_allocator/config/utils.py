@@ -1,7 +1,8 @@
 """Utility functions for Sun Allocator config flow."""
 from typing import Dict, Any, List, Optional
+
 from homeassistant.core import HomeAssistant
-# Centralized logging
+
 from ..utils.logger import log_error
 from ..utils.journal import log_exception
 
@@ -14,7 +15,6 @@ from ..const import (
     DOMAIN_INPUT_BOOLEAN,
     DOMAIN_AUTOMATION,
     DOMAIN_SCRIPT,
-    DOMAIN_SELECT,
 )
 
 

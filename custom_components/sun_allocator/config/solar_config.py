@@ -1,32 +1,24 @@
 """Solar panel configuration module for Sun Allocator config flow."""
 import voluptuous as vol
-from homeassistant.core import HomeAssistant
 from typing import Dict, Any, Optional
-# Centralized logging and audit
+
+from homeassistant.core import HomeAssistant
+
 from ..utils.logger import log_error
 from ..utils.journal import log_exception, audit_action
+from ..utils.ui_helpers import EntitySelectorBuilder
+from .solar_config_form import build_solar_config_schema
 
 from ..const import (
     STEP_USER,
-    CONF_PV_POWER,
-    CONF_PV_VOLTAGE,
     CONF_CONSUMPTION,
     CONF_BATTERY_POWER,
     CONF_VMP,
     CONF_IMP,
     CONF_VOC,
-    CONF_ISC,
     CONF_PANEL_COUNT,
-    CONF_PANEL_CONFIGURATION,
-    PANEL_CONFIG_SERIES,
-    PANEL_CONFIG_PARALLEL,
-    PANEL_CONFIG_PARALLEL_SERIES,
     NONE_OPTION,
 )
-
-# Import helpers for selector building and schema
-from ..utils.ui_helpers import EntitySelectorBuilder
-from .solar_config_form import build_solar_config_schema
 
 
 class SolarConfigMixin:

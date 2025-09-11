@@ -1,17 +1,16 @@
 
 """Excess power sensor for Sun Allocator."""
 from typing import Optional, Dict, Any
+
 from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfPower
-from ...utils.logger import get_logger, log_debug
-from ...utils.journal import journal_event
 
 from .base import BaseSunAllocatorSensor
-from ...utils import (
-    calculate_current_max_power,
-    calculate_excess_power,
-    calculate_usage_percentage,
-)
+from ...utils.logger import get_logger, log_debug
+from ...utils.journal import journal_event
+from ...utils.mppt import calculate_current_max_power
+from ...utils.sensor_utils import calculate_excess_power, calculate_usage_percentage
+
 from ...const import (
     CONF_CURVE_FACTOR_K,
     CONF_EFFICIENCY_CORRECTION_FACTOR,
@@ -35,8 +34,6 @@ from ...const import (
     KEY_VOC_RATIO,
     KEY_CALCULATION_REASON,
 )
-
-_LOGGER = get_logger(__name__)
 
 
 class SunAllocatorExcessSensor(BaseSunAllocatorSensor):

@@ -1,10 +1,13 @@
 """Temperature compensation configuration module for Sun Allocator config flow."""
 import voluptuous as vol
-from homeassistant.core import HomeAssistant
 from typing import Dict, Any, List, Optional
-# Centralized logging and audit
+
+from homeassistant.core import HomeAssistant
+
 from ..utils.logger import log_error
 from ..utils.journal import log_exception, audit_action
+from ..utils.ui_helpers import EntitySelectorBuilder
+from .temperature_config_form import build_temperature_config_schema
 
 from ..const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
@@ -13,14 +16,8 @@ from ..const import (
     CONF_TEMP_COEFFICIENT_PMAX,
     STEP_TEMPERATURE_COMPENSATION,
     NONE_OPTION,
-    DEFAULT_VOC_COEFFICIENT,
-    DEFAULT_PMAX_COEFFICIENT,
     CONF_ADVANCED_SETTINGS_ENABLED,
 )
-
-# Import helpers for selector building and schema
-from ..utils.ui_helpers import EntitySelectorBuilder
-from .temperature_config_form import build_temperature_config_schema
 
 
 class TemperatureConfigMixin:
@@ -38,6 +35,7 @@ class TemperatureConfigMixin:
         # NONE_OPTION замість "None"
         if result and result[0]["value"] == "None":
             result[0]["value"] = NONE_OPTION
+
         return result
 
     def _validate_temperature_config(self, user_input: Dict[str, Any]) -> Dict[str, str]:
@@ -85,9 +83,6 @@ class TemperatureConfigMixin:
         """Get the schema for temperature compensation configuration using temperature_config_form.py."""
         return build_temperature_config_schema(temperature_sensors, defaults)
 
-
-# Imports moved to the top for PEP8 compliance
-
     async def async_step_temperature_compensation(self, user_input=None):
         """Handle temperature compensation settings."""
         errors = {}
@@ -104,6 +99,7 @@ class TemperatureConfigMixin:
                 # Update solar panel configuration with temperature compensation settings
                 self._solar_config.update(user_input)
                 audit_action("temperature_config_saved", {"config": user_input})
+
                 # If advanced settings are enabled, chain to advanced settings step next
                 if self._solar_config.get(CONF_ADVANCED_SETTINGS_ENABLED, False) and hasattr(self, "async_step_advanced_settings"):
                     return await self.async_step_advanced_settings()

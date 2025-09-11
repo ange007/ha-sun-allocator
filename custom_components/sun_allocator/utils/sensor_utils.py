@@ -1,9 +1,12 @@
 
 """Sensor utilities for Sun Allocator integration."""
 from typing import Optional, Dict, Any, Tuple
+
+from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event
-from .logger import get_logger, log_debug, log_error
+
+from .logger import log_debug, log_error
 from .journal import journal_event
 
 from ..const import (
@@ -11,7 +14,6 @@ from ..const import (
     CONF_TEMPERATURE_SENSOR,
     CONF_TEMP_COEFFICIENT_VOC,
     CONF_TEMP_COEFFICIENT_PMAX,
-    CONF_BATTERY_POWER_REVERSED,
     PANEL_CONFIG_SERIES,
     CONF_CURVE_FACTOR_K,
     CONF_EFFICIENCY_CORRECTION_FACTOR,
@@ -20,10 +22,6 @@ from ..const import (
     DEFAULT_VOC_COEFFICIENT,
     DEFAULT_PMAX_COEFFICIENT,
 )
-from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
-
-_LOGGER = get_logger(__name__)
-
 
 def get_sensor_state_safely(hass: HomeAssistant, entity_id: Optional[str], sensor_name: str) -> Tuple[float, bool]:
     """

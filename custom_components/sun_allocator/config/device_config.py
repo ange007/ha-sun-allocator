@@ -3,27 +3,26 @@ import voluptuous as vol
 import uuid
 from datetime import time
 from typing import Dict, Any, List, Optional
+
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.selector import selector
+
 from ..utils.logger import get_logger, log_info, log_error
 from ..utils.journal import audit_action, log_exception
 from ..utils.sensor_utils import clean_entity_id_and_mode
 from .device_config_form import (
     build_device_name_type_schema, build_device_selection_schema, build_device_basic_settings_schema, build_device_schedule_schema
 )
+
 from ..const import (
     CONF_DEVICE_ENTITY,
     CONF_DEVICE_ENTITY_FRIENDLY_NAME,
     DOMAIN_CLIMATE,
-    CONF_ESPHOME_MODE_SELECT_ENTITY,
     CONF_AUTO_CONTROL_ENABLED,
     CONF_DEVICES,
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
     CONF_DEVICE_PRIORITY,
     CONF_DEVICE_TYPE,
-    DEVICE_TYPE_NONE,
-    DEVICE_TYPE_STANDARD,
     DEVICE_TYPE_CUSTOM,
     CONF_MIN_EXPECTED_W,
     CONF_MAX_EXPECTED_W,
@@ -32,24 +31,11 @@ from ..const import (
     CONF_END_TIME,
     CONF_DAYS_OF_WEEK,
     DAYS_OF_WEEK,
-    DAY_MONDAY,
-    DAY_TUESDAY,
-    DAY_WEDNESDAY,
-    DAY_THURSDAY,
-    DAY_FRIDAY,
-    DAY_SATURDAY,
-    DAY_SUNDAY,
-    STEP_DEVICES,
     STEP_DEVICE_NAME_TYPE,
     STEP_DEVICE_SELECTION,
     STEP_DEVICE_BASIC_SETTINGS,
     STEP_DEVICE_SCHEDULE,
-    STEP_MANAGE_DEVICES,
     ACTION_ADD,
-    ACTION_EDIT,
-    ACTION_REMOVE,
-    ACTION_ADD_DEVICE,
-    ACTION_MANAGE_DEVICES,
     NONE_OPTION,
     STATE_ON,
     STATE_OFF,
@@ -58,7 +44,6 @@ from ..const import (
     DOMAIN_INPUT_BOOLEAN,
     DOMAIN_AUTOMATION,
     DOMAIN_SCRIPT,
-    DOMAIN_SELECT,
 )
 
 

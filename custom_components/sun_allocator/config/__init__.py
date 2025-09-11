@@ -1,14 +1,16 @@
 """Refactored Sun Allocator config flow."""
 import voluptuous as vol
 import uuid
+from typing import Dict, Any
+
 from homeassistant import config_entries
 from homeassistant.core import callback
-from typing import Dict, Any
 
 from .solar_config import SolarConfigMixin
 from .device_config import DeviceConfigMixin
 from .temperature_config import TemperatureConfigMixin
 from .advanced_config import AdvancedConfigMixin
+
 from ..const import (
     DOMAIN,
     CONF_DEVICES,
@@ -16,7 +18,6 @@ from ..const import (
     CONF_DEVICE_NAME,
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_ADVANCED_SETTINGS_ENABLED,
-    CONF_BATTERY_POWER_REVERSED,
     CONF_ACTION,
     CONF_ESPHOME_RELAY_ENTITY,
     CONF_ESPHOME_MODE_SELECT_ENTITY,
@@ -24,18 +25,10 @@ from ..const import (
     CONF_MIN_EXPECTED_W,
     CONF_MAX_EXPECTED_W,
     CONF_DEVICE_PRIORITY,
-    CONF_CURVE_FACTOR_K,
-    CONF_EFFICIENCY_CORRECTION_FACTOR,
-    CONF_MIN_INVERTER_VOLTAGE,
     STEP_DEVICES,
-    STEP_DEVICE_NAME_TYPE,
-    STEP_DEVICE_SELECTION,
-    STEP_DEVICE_BASIC_SETTINGS,
-    STEP_DEVICE_SCHEDULE,
     STEP_MAIN_MENU,
     STEP_SETTINGS,
     STEP_MANAGE_DEVICES,
-    STEP_ADVANCED_SETTINGS,
     ACTION_ADD,
     ACTION_EDIT,
     ACTION_REMOVE,

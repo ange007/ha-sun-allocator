@@ -4,7 +4,6 @@ from typing import Tuple, Optional
 
 from ..const import (
     PANEL_CONFIG_SERIES,
-    PANEL_CONFIG_PARALLEL,
     PANEL_CONFIG_PARALLEL_SERIES,
 )
 

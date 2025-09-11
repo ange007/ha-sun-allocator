@@ -23,6 +23,21 @@ from .sensor_utils import (
     get_mppt_algorithm_config,
 )
 
+# Re-export journal utilities
+from .journal import (
+    journal_event,
+    audit_action,
+    log_exception,
+)
+
+from .logger import (
+    get_logger,
+    log_info,
+    log_debug,
+    log_warning,
+    log_error,
+)
+
 __all__ = [
     # MPPT utilities
     "calculate_current_max_power",
@@ -41,4 +56,14 @@ __all__ = [
     "calculate_usage_percentage",
     "is_excess_possible",
     "get_mppt_algorithm_config",
+    # Journal utilities
+    "journal_event",
+    "audit_action",
+    "log_exception",
+    # Logger utilities
+    "get_logger",
+    "log_info",
+    "log_debug",
+    "log_warning",
+    "log_error",
 ]

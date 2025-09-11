@@ -1,89 +1,6 @@
-from .utils.logger import get_logger, log_info, log_debug, log_warning, log_error
-from .settings import LOG_STARTUP_DEVICES
-
-_LOGGER = get_logger()
-
-async def set_mode_for_entity(hass, entity_id, mode):
-    """Set mode for a specific entity."""
-    state = hass.states.get(entity_id)
-    if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-        _LOGGER.debug(
-            f"Entity {entity_id} not found or unavailable, skipping set_relay_mode({mode})"
-        )
-        return
-
-    _LOGGER.debug(f"Setting relay mode to {mode} for entity {entity_id}")
-    await hass.services.async_call(
-        DOMAIN_SELECT, SERVICE_SELECT_OPTION,
-        {ATTR_ENTITY_ID: entity_id, "option": mode},
-        blocking=True
-    )
-
-async def set_power_for_entity(hass, entity_id, power_percent):
-    """Set power for a specific entity."""
-    state = hass.states.get(entity_id)
-    if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-        _LOGGER.debug(
-            f"Entity {entity_id} not found or unavailable, skipping set_relay_power({power_percent}%)"
-        )
-        return
-
-    hvac_mode = None
-    if '|' in entity_id:
-        entity_id, hvac_mode = entity_id.split('|', 1)
-        entity_id = entity_id.strip()
-        hvac_mode = hvac_mode.strip()
-
-    domain = entity_id.split('.')[0]
-    brightness = int((power_percent / MAX_PERCENTAGE) * MAX_BRIGHTNESS)
-
-    if power_percent <= 0:
-        _LOGGER.debug(f"Turning off entity {entity_id}")
-        if domain == DOMAIN_LIGHT:
-            await hass.services.async_call(
-                DOMAIN_LIGHT, SERVICE_TURN_OFF,
-                {ATTR_ENTITY_ID: entity_id},
-                blocking=True
-            )
-        elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
-            await hass.services.async_call(
-                domain, SERVICE_TURN_OFF,
-                {ATTR_ENTITY_ID: entity_id},
-                blocking=True
-            )
-        elif domain == DOMAIN_CLIMATE:
-            await hass.services.async_call(
-                DOMAIN_CLIMATE, "set_hvac_mode",
-                {ATTR_ENTITY_ID: entity_id, "hvac_mode": "off"},
-                blocking=True
-            )
-        else:
-            _LOGGER.warning(f"Unsupported entity domain: {domain}. Cannot turn off {entity_id}")
-    else:
-        _LOGGER.debug(f"Turning on entity {entity_id} with power {power_percent}%")
-        if domain == DOMAIN_LIGHT:
-            await hass.services.async_call(
-                DOMAIN_LIGHT, SERVICE_TURN_ON,
-                {ATTR_ENTITY_ID: entity_id, ATTR_BRIGHTNESS: brightness},
-                blocking=True
-            )
-        elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
-            await hass.services.async_call(
-                domain, SERVICE_TURN_ON,
-                {ATTR_ENTITY_ID: entity_id},
-                blocking=True
-            )
-        elif domain == DOMAIN_CLIMATE:
-            await hass.services.async_call(
-                DOMAIN_CLIMATE, "set_hvac_mode",
-                {ATTR_ENTITY_ID: entity_id, "hvac_mode": hvac_mode or "heat"},
-                blocking=True
-            )
-        else:
-            _LOGGER.warning(f"Unsupported entity domain: {domain}. Cannot turn on {entity_id}")
-import logging
 import voluptuous as vol
 from datetime import time, datetime, timedelta
+
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
@@ -100,6 +17,12 @@ from homeassistant.const import (
 from homeassistant.components.light import ATTR_BRIGHTNESS
 import homeassistant.util.dt as dt_util
 
+from . import set_mode_for_entity
+from .utils.logger import get_logger, log_info, log_debug, log_warning, log_error
+from .settings import LOG_STARTUP_DEVICES
+from .device_restore import persist_device_state, restore_entity_state, restore_all_devices
+from .services import handle_set_relay_mode, handle_set_relay_power
+from .mode_select import persist_last_mode, mode_select_state_listener
 
 from .const import (
     DOMAIN,
@@ -117,7 +40,6 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_DEVICE_PRIORITY,
     CONF_DEVICE_TYPE,
-    DEVICE_TYPE_NONE,
     DEVICE_TYPE_STANDARD,
     DEVICE_TYPE_CUSTOM,
     CONF_SCHEDULE_ENABLED,
@@ -125,15 +47,8 @@ from .const import (
     CONF_END_TIME,
     CONF_DAYS_OF_WEEK,
     DAYS_OF_WEEK,
-    DAY_MONDAY,
     CONF_MIN_EXPECTED_W,
     CONF_MAX_EXPECTED_W,
-    DAY_TUESDAY,
-    DAY_WEDNESDAY,
-    DAY_THURSDAY,
-    DAY_FRIDAY,
-    DAY_SATURDAY,
-    DAY_SUNDAY,
     CONF_POWER_ALLOCATION,
     CONF_POWER_DISTRIBUTION,
     STATE_ON,
@@ -159,8 +74,6 @@ from .const import (
     CONF_HYSTERESIS_W,
 )
 
-_LOGGER = logging.getLogger(__name__)
-
 # Service schema for set_relay_mode
 SET_RELAY_MODE_SCHEMA = vol.Schema({
     vol.Optional(ATTR_ENTITY_ID): cv.entity_id,
@@ -174,6 +87,7 @@ SET_RELAY_POWER_SCHEMA = vol.Schema({
     vol.Optional(CONF_DEVICE_ID): cv.string,
     vol.Required("power"): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
 })
+
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     # Store config entry data EARLY so it's available for all listeners
@@ -200,107 +114,9 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
         else:
             log_info("[Startup] No devices loaded from config_entry.data.")
 
-    # --- Persist last_percent and _restore_on for all devices on state change ---
-    async def _persist_device_state(entity_id, percent=None, is_on=None):
-        """Persist last_percent and _restore_on for a device in config_entry.data."""
-        data = dict(config_entry.data)
-        devs = list(data.get(CONF_DEVICES, []))
-        changed = False
-        for i, d in enumerate(devs):
-            relay_entity = d.get(CONF_ESPHOME_RELAY_ENTITY) if d.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM) == DEVICE_TYPE_CUSTOM else d.get(CONF_DEVICE_ENTITY)
-            if relay_entity == entity_id:
-                nd = dict(d)
-                if percent is not None:
-                    if nd.get("last_percent") != percent:
-                        nd["last_percent"] = percent
-                        changed = True
-                if is_on is not None:
-                    if nd.get("_restore_on") != is_on:
-                        nd["_restore_on"] = is_on
-                        changed = True
-                devs[i] = nd
-                break
-        if changed:
-            data[CONF_DEVICES] = devs
-            hass.config_entries.async_update_entry(config_entry, data=data)
-
-    # --- Restore state also when entity becomes available ---
-    async def _restore_entity_state(entity_id):
-        """Restore state for a single entity when it becomes available."""
-        devices = config_entry.data.get(CONF_DEVICES, [])
-        for device in devices:
-            device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-            relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else device.get(CONF_DEVICE_ENTITY)
-            mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else None
-            if relay_entity == entity_id:
-                percent = device.get("last_percent")
-                is_on = device.get("_restore_on")
-                if percent is not None:
-                    _LOGGER.info(f"[Restore] Setting percent {percent} for {entity_id}")
-                    await set_power_for_entity(hass, entity_id, percent)
-                elif is_on is not None:
-                    _LOGGER.info(f"[Restore] Setting ON/OFF {is_on} for {entity_id}")
-                    await set_power_for_entity(hass, entity_id, 100 if is_on else 0)
-                else:
-                    _LOGGER.info(f"[Restore] No saved state for {entity_id}")
-            if mode_select_entity == entity_id:
-                last_mode = device.get("last_mode")
-                if last_mode:
-                    _LOGGER.info(f"[Restore] Setting mode {last_mode} for {entity_id}")
-                    await set_mode_for_entity(hass, entity_id, last_mode)
-
     # --- Restore device state after Home Assistant restart ---
-    async def _restore_all_devices():
-        """Restore mode and power for all devices after restart when entities become available."""
-        devices = config_entry.data.get(CONF_DEVICES, [])
-        restored = set()
-        for device in devices:
-            device_id = device.get(CONF_DEVICE_ID)
-            device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-            relay_entity = None
-            mode_select_entity = None
-            hvac_mode = device.get("_hvac_mode")
-            if device_type == DEVICE_TYPE_CUSTOM:
-                relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
-                mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
-            else:
-                relay_entity = device.get(CONF_DEVICE_ENTITY)
-            # Restore mode for custom devices (if mode_select_entity exists)
-            if mode_select_entity:
-                last_mode = device.get("last_mode")
-                if last_mode:
-                    state = hass.states.get(mode_select_entity)
-                    if state and state.state != last_mode:
-                        _LOGGER.info(f"Restoring mode {last_mode} for {mode_select_entity}")
-                        await set_mode_for_entity(hass, mode_select_entity, last_mode)
-                        restored.add(mode_select_entity)
-            # Restore power state for relay_entity (all types)
-            if relay_entity:
-                # Try to restore ON/OFF or brightness/percent if available
-                state = hass.states.get(relay_entity)
-                if state and state.state in (STATE_ON, STATE_OFF):
-                    # If device was ON before, try to restore ON
-                    if device.get("_restore_on", False) and state.state != STATE_ON:
-                        _LOGGER.info(f"Restoring ON state for {relay_entity}")
-                        await set_power_for_entity(hass, relay_entity, 100)
-                        restored.add(relay_entity)
-                    elif not device.get("_restore_on", False) and state.state != STATE_OFF:
-                        _LOGGER.info(f"Restoring OFF state for {relay_entity}")
-                        await set_power_for_entity(hass, relay_entity, 0)
-                        restored.add(relay_entity)
-                # Optionally restore brightness/percent if stored
-                percent = device.get("last_percent")
-                if percent is not None:
-                    _LOGGER.info(f"Restoring percent {percent} for {relay_entity}")
-                    await set_power_for_entity(hass, relay_entity, percent)
-                    restored.add(relay_entity)
-        if not restored:
-            _LOGGER.info("No device states needed to be restored after restart.")
-
-    # Schedule restore after Home Assistant is fully started
     async def _on_ha_started(event):
-        await _restore_all_devices()
-
+        await restore_all_devices(hass, config_entry)
     hass.bus.async_listen_once("homeassistant_started", _on_ha_started)
 
     # Listen for entity state changes to persist and restore state
@@ -324,17 +140,16 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
                 is_on = new_state.state == STATE_ON
                 percent = 100 if is_on else 0
             elif domain == DOMAIN_CLIMATE:
-                # For climate, treat 'off' as OFF, else ON
                 is_on = new_state.state != "off"
                 percent = 100 if is_on else 0
-            await _persist_device_state(entity_id, percent=percent, is_on=is_on)
+            await persist_device_state(hass, config_entry, entity_id, percent=percent, is_on=is_on)
         except Exception as e:
-            _LOGGER.debug(f"[Persist] Error persisting state for {entity_id}: {e}")
+            log_debug(f"[Persist] Error persisting state for {entity_id}: {e}")
         # Restore if entity just became available
         was_unavailable = (old_state is None) or (old_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE))
         now_available = new_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
         if was_unavailable and now_available:
-            await _restore_entity_state(entity_id)
+            await restore_entity_state(hass, config_entry, entity_id)
 
     # Subscribe to all relevant entity state changes
     relay_entities = set()
@@ -349,7 +164,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
             mode_entities.add(mode_select_entity)
     all_entities = list(relay_entities | mode_entities)
     if all_entities:
-        # entry_data is guaranteed to exist here
         entry_data["unsub_restore_listener"] = async_track_state_change_event(
             hass, all_entities, _entity_state_listener
         )
@@ -359,73 +173,16 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     # Set up sensors
     await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
     
-    # Register services
-    async def handle_set_relay_mode(call: ServiceCall):
-        """Handle set_relay_mode service call."""
-        mode = call.data["mode"]
-        entity_id = call.data.get(ATTR_ENTITY_ID)
-        device_id = call.data.get(CONF_DEVICE_ID)
-        devices = config_entry.data.get(CONF_DEVICES, [])
-        if entity_id:
-            await set_mode_for_entity(hass, entity_id, mode)
-        elif device_id:
-            device = next((d for d in devices if d.get(CONF_DEVICE_ID) == device_id), None)
-            if device:
-                entity_id = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
-                if entity_id:
-                    await set_mode_for_entity(hass, entity_id, mode)
-                else:
-                    _LOGGER.error(f"Device {device.get(CONF_DEVICE_NAME)} has no mode select entity configured")
-            else:
-                _LOGGER.error(f"Device with ID {device_id} not found")
-        else:
-            for device in devices:
-                entity_id = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
-                if entity_id:
-                    await set_mode_for_entity(hass, entity_id, mode)
-
-    async def handle_set_relay_power(call: ServiceCall):
-        """Handle set_relay_power service call."""
-        power_percent = call.data["power"]
-        entity_id = call.data.get(ATTR_ENTITY_ID)
-        device_id = call.data.get(CONF_DEVICE_ID)
-        devices = config_entry.data.get(CONF_DEVICES, [])
-        if entity_id:
-            await set_power_for_entity(hass, entity_id, power_percent)
-        elif device_id:
-            device = next((d for d in devices if d.get(CONF_DEVICE_ID) == device_id), None)
-            if device:
-                device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-                if device_type == DEVICE_TYPE_CUSTOM:
-                    entity_id = device.get(CONF_ESPHOME_RELAY_ENTITY)
-                else:
-                    entity_id = device.get(CONF_DEVICE_ENTITY)
-                if entity_id:
-                    await set_power_for_entity(hass, entity_id, power_percent)
-                else:
-                    _LOGGER.error(f"Device {device.get(CONF_DEVICE_NAME)} has no entity configured")
-            else:
-                _LOGGER.error(f"Device with ID {device_id} not found")
-        else:
-            for device in devices:
-                device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-                if device_type == DEVICE_TYPE_CUSTOM:
-                    entity_id = device.get(CONF_ESPHOME_RELAY_ENTITY)
-                else:
-                    entity_id = device.get(CONF_DEVICE_ENTITY)
-                if entity_id:
-                    await set_power_for_entity(hass, entity_id, power_percent)
-    
     # Register the services once (global) and track entry count
     root = hass.data[DOMAIN]
     root.setdefault("_entry_count", 0)
     root.setdefault("_services_registered", False)
     if not root["_services_registered"]:
         hass.services.async_register(
-            DOMAIN, SERVICE_SET_RELAY_MODE, handle_set_relay_mode, schema=SET_RELAY_MODE_SCHEMA
+            DOMAIN, SERVICE_SET_RELAY_MODE, lambda call: handle_set_relay_mode(hass, config_entry, call), schema=SET_RELAY_MODE_SCHEMA
         )
         hass.services.async_register(
-            DOMAIN, SERVICE_SET_RELAY_POWER, handle_set_relay_power, schema=SET_RELAY_POWER_SCHEMA
+            DOMAIN, SERVICE_SET_RELAY_POWER, lambda call: handle_set_relay_power(hass, config_entry, call), schema=SET_RELAY_POWER_SCHEMA
         )
         root["_services_registered"] = True
     # Increment active entry count
@@ -453,60 +210,16 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
             if persisted in VALID_MODES:
                 desired_modes[entity] = persisted
 
-    async def _persist_last_mode(entity_id: str, mode: str):
-        # Persist last_mode to config entry data for the matching device
-        if mode not in VALID_MODES:
-            return
-        data = dict(config_entry.data)
-        devs = list(data.get(CONF_DEVICES, []))
-        changed = False
-        for i, d in enumerate(devs):
-            if d.get(CONF_ESPHOME_MODE_SELECT_ENTITY) == entity_id:
-                if d.get("last_mode") != mode:
-                    nd = dict(d)
-                    nd["last_mode"] = mode
-                    devs[i] = nd
-                    changed = True
-                break
-        if changed:
-            data[CONF_DEVICES] = devs
-            hass.config_entries.async_update_entry(config_entry, data=data)
-
     if select_entity_ids:
-        async def _mode_select_state_listener(event):
-            entity_id = event.data.get("entity_id")
-            if entity_id not in select_entity_ids:
-                return
-            new_state = event.data.get("new_state")
-            old_state = event.data.get("old_state")
-            if not new_state:
-                return
-            # Update desired mode when user/integration changes it to a valid option
-            if new_state.state in VALID_MODES:
-                desired_modes[entity_id] = new_state.state
-                await _persist_last_mode(entity_id, new_state.state)
-            # When entity becomes available, reassert desired mode once
-            was_unavailable = (old_state is None) or (old_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE))
-            now_available = new_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
-            if was_unavailable and now_available:
-                desired = desired_modes.get(entity_id)
-                if desired and new_state.state != desired:
-                    _LOGGER.debug(
-                        "Re-applying desired mode %s to %s after availability", desired, entity_id
-                    )
-                    await set_mode_for_entity(hass, entity_id, desired)
-
-        # Subscribe to state changes for all tracked select entities
         entry_data["unsub_mode_listener"] = async_track_state_change_event(
-            hass, select_entity_ids, _mode_select_state_listener
+            hass, select_entity_ids, lambda event: mode_select_state_listener(hass, config_entry, event, desired_modes, select_entity_ids)
         )
-
         # Initial re-assert of desired mode if entity already available
         for _entity_id in select_entity_ids:
             _state = hass.states.get(_entity_id)
             _desired = desired_modes.get(_entity_id)
             if _desired and _state and _state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE) and _state.state != _desired:
-                _LOGGER.debug("Initial re-applying desired mode %s to %s", _desired, _entity_id)
+                log_debug("Initial re-applying desired mode %s to %s", _desired, _entity_id)
                 await set_mode_for_entity(hass, _entity_id, _desired)
     
     # Set up auto-control
@@ -580,11 +293,11 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     # Filter devices with auto-control enabled
     auto_control_devices = [d for d in devices if d.get(CONF_AUTO_CONTROL_ENABLED, False)]
     if not auto_control_devices:
-        _LOGGER.debug("No devices with auto-control enabled")
+        log_debug("No devices with auto-control enabled")
         return
     # Sort devices by priority (higher priority first)
     auto_control_devices.sort(key=lambda d: d.get(CONF_DEVICE_PRIORITY, 50), reverse=True)
-    _LOGGER.debug(f"Setting up auto-control for {len(auto_control_devices)} devices")
+    log_debug(f"Setting up auto-control for {len(auto_control_devices)} devices")
     # Initialize power allocation tracking
     power_allocation = {}
     for device in auto_control_devices:
@@ -617,8 +330,8 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                     blocking=False,
                 )
             except Exception as e:
-                _LOGGER.warning("Watchdog OFF failed for %s: %s", entity_id, e)
-        _LOGGER.error("SunAllocator watchdog: fail-safe OFF enforced (%s)", reason)
+                log_warning("Watchdog OFF failed for %s: %s", entity_id, e)
+        log_error("SunAllocator watchdog: fail-safe OFF enforced (%s)", reason)
 
     async def _watchdog_check(now):
         last_seen = entry_data.get("watchdog_last_seen")
@@ -633,7 +346,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         else:
             if alerted:
                 entry_data["watchdog_alerted"] = False
-                _LOGGER.info("SunAllocator watchdog: data fresh again; normal operation resumed")
+                log_info("SunAllocator watchdog: data fresh again; normal operation resumed")
 
     # Start periodic watchdog timer
     entry_data["unsub_watchdog_timer"] = async_track_time_interval(hass, _watchdog_check, WATCHDOG_PERIOD)
@@ -743,7 +456,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
 
     async def process_excess_power(excess_power: float):
         """Process excess power value and control devices accordingly."""
-        _LOGGER.debug(f"Excess power: {excess_power}W")
+        log_debug(f"Excess power: {excess_power}W")
         now = dt_util.now()
         for device_id in power_allocation:
             power_allocation[device_id] = 0
@@ -789,14 +502,14 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             if relay_entity and isinstance(relay_entity, str) and "." in relay_entity:
                 service_domain = relay_entity.split(".")[0]
             if not relay_entity or service_domain not in SUPPORTED_DOMAINS:
-                _LOGGER.warning(f"Unsupported or missing relay entity domain for {device_name}: {relay_entity}")
+                log_warning(f"Unsupported or missing relay entity domain for {device_name}: {relay_entity}")
                 continue
             relay_state_obj = hass.states.get(relay_entity)
             if relay_state_obj is None or relay_state_obj.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-                _LOGGER.debug(f"Relay entity {relay_entity} not found or not available yet for device {device_name}, skipping this cycle")
+                log_debug(f"Relay entity {relay_entity} not found or not available yet for device {device_name}, skipping this cycle")
                 continue
             if not is_device_in_schedule(device, now):
-                _LOGGER.debug(f"Device {device_name} is outside scheduled time, skipping")
+                log_debug(f"Device {device_name} is outside scheduled time, skipping")
                 await hass.services.async_call(
                     service_domain, SERVICE_TURN_OFF,
                     {ATTR_ENTITY_ID: relay_entity},
@@ -805,7 +518,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                 continue
             if device_type == DEVICE_TYPE_STANDARD:
                 if is_active:
-                    _LOGGER.debug(f"Turning on standard device {device_name}")
+                    log_debug(f"Turning on standard device {device_name}")
                     if service_domain == DOMAIN_LIGHT:
                         await hass.services.async_call(
                             DOMAIN_LIGHT, SERVICE_TURN_ON,
@@ -834,7 +547,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                         status_entry["percent_target"] = 100.0
                         status_entry["percent_actual"] = 100.0
                 else:
-                    _LOGGER.debug(f"Turning off standard device {device_name} (remaining power {remaining_power}W below effective threshold {effective_min_power}W)")
+                    log_debug(f"Turning off standard device {device_name} (remaining power {remaining_power}W below effective threshold {effective_min_power}W)")
                     if service_domain == DOMAIN_CLIMATE:
                         await hass.services.async_call(
                             DOMAIN_CLIMATE, "set_hvac_mode",
@@ -852,13 +565,13 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                     status_entry["allocated_w"] = 0.0
             elif device_type == DEVICE_TYPE_CUSTOM:
                 if not mode_select_entity:
-                    _LOGGER.warning(f"Custom device {device_name} has no mode select entity")
+                    log_warning(f"Custom device {device_name} has no mode select entity")
                     if device_id:
                         device_status[device_id] = status_entry
                     continue
                 mode_state = hass.states.get(mode_select_entity)
                 if not mode_state or mode_state.state == RELAY_MODE_OFF:
-                    _LOGGER.debug(f"Device {device_name} is in Off mode, skipping")
+                    log_debug(f"Device {device_name} is in Off mode, skipping")
                     status_entry["mode"] = RELAY_MODE_OFF
                     status_entry["percent_target"] = 0.0
                     status_entry["percent_actual"] = 0.0
@@ -870,7 +583,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                 if mode_state.state == RELAY_MODE_PROPORTIONAL:
                     if is_active:
                         if max_expected_w <= 0:
-                            _LOGGER.warning(f"Device {device_name} in Proportional has no max_expected_w; forcing 0%/OFF")
+                            log_warning(f"Device {device_name} in Proportional has no max_expected_w; forcing 0%/OFF")
                             status_entry["percent_target"] = 0.0
                             if service_domain == DOMAIN_LIGHT:
                                 ramp_targets[relay_entity] = 0.0
@@ -884,7 +597,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                         else:
                             power_percent = min(MAX_PERCENTAGE, max(5, (remaining_power / max_expected_w) * 100))
                             target_percent = min(power_percent, DEVICE_MAX_PERCENT_DEFAULT)
-                            _LOGGER.debug(f"Proportional target for {device_name}: {target_percent}% (remaining power: {remaining_power}W)")
+                            log_debug(f"Proportional target for {device_name}: {target_percent}% (remaining power: {remaining_power}W)")
                             status_entry["percent_target"] = float(target_percent)
                             if service_domain == DOMAIN_LIGHT:
                                 ramp_targets[relay_entity] = target_percent
@@ -902,7 +615,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                                 power_allocation[device_id] = power_used
                                 status_entry["allocated_w"] = float(power_used)
                     else:
-                        _LOGGER.debug(f"Proportional below threshold for {device_name} → target 0 / OFF")
+                        log_debug(f"Proportional below threshold for {device_name} → target 0 / OFF")
                         status_entry["percent_target"] = 0.0
                         if service_domain == DOMAIN_LIGHT:
                             ramp_targets[relay_entity] = 0.0
@@ -915,7 +628,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                             status_entry["percent_actual"] = 0.0
                 elif mode_state.state == RELAY_MODE_ON:
                     if remaining_power >= effective_min_power:
-                        _LOGGER.debug(f"Device {device_name} is in On mode with enough excess, setting to full power")
+                        log_debug(f"Device {device_name} is in On mode with enough excess, setting to full power")
                         if service_domain == DOMAIN_LIGHT:
                             await hass.services.async_call(
                                 DOMAIN_LIGHT, SERVICE_TURN_ON,
@@ -937,7 +650,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                             status_entry["percent_target"] = 100.0
                             status_entry["percent_actual"] = 100.0
                     else:
-                        _LOGGER.debug(f"Device {device_name} is in On mode but remaining power {remaining_power}W is below threshold {effective_min_power}W; turning off")
+                        log_debug(f"Device {device_name} is in On mode but remaining power {remaining_power}W is below threshold {effective_min_power}W; turning off")
                         await hass.services.async_call(
                             service_domain, SERVICE_TURN_OFF,
                             {ATTR_ENTITY_ID: relay_entity},
@@ -971,7 +684,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             excess_power = float(new_state.state)
             await process_excess_power(excess_power)
         except (ValueError, TypeError) as e:
-            _LOGGER.error(f"Error processing excess power value: {e}")
+            log_error(f"Error processing excess power value: {e}")
     
     # Subscribe to state changes of the excess power sensor (per entry_id) with fallback for legacy entity_id
     excess_sensor_id = f"sensor.{SENSOR_ID_PREFIX}_{SENSOR_EXCESS_SUFFIX}_{config_entry.entry_id}"
@@ -989,24 +702,24 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             entry_data["watchdog_last_seen"] = dt_util.utcnow()
             entry_data["watchdog_alerted"] = False
             await process_excess_power(excess_power)
-            _LOGGER.info(
+            log_info(
                 "Performed initial auto-control pass based on current excess from %s: %sW",
                 initial_state.entity_id,
                 excess_power,
             )
         except (ValueError, TypeError):
-            _LOGGER.debug(
+            log_debug(
                 "Excess sensor state is not numeric yet for initial pass: %s",
                 initial_state.state,
             )
     else:
-        _LOGGER.debug(
+        log_debug(
             "Neither %s nor %s are ready (unknown/unavailable) for initial pass", 
             excess_sensor_id,
             legacy_excess_sensor_id,
         )
     
-    _LOGGER.info(f"Auto-control set up for {len(auto_control_devices)} devices")
+    log_info(f"Auto-control set up for {len(auto_control_devices)} devices")
 
 async def update_listener(hass: HomeAssistant, config_entry: ConfigType):
     """Handle options update."""
@@ -1051,3 +764,82 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigType):
         root["_services_registered"] = False
     
     return True
+
+async def set_mode_for_entity(hass: HomeAssistant, entity_id, mode):
+    """Set mode for a specific entity."""
+    state = hass.states.get(entity_id)
+    if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        log_debug(
+            f"Entity {entity_id} not found or unavailable, skipping set_relay_mode({mode})"
+        )
+        return
+
+    log_debug(f"Setting relay mode to {mode} for entity {entity_id}")
+    await hass.services.async_call(
+        DOMAIN_SELECT, SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: entity_id, "option": mode},
+        blocking=True
+    )
+
+async def set_power_for_entity(hass, entity_id, power_percent):
+    """Set power for a specific entity."""
+    state = hass.states.get(entity_id)
+    if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        log_debug(
+            f"Entity {entity_id} not found or unavailable, skipping set_relay_power({power_percent}%)"
+        )
+        return
+
+    hvac_mode = None
+    if '|' in entity_id:
+        entity_id, hvac_mode = entity_id.split('|', 1)
+        entity_id = entity_id.strip()
+        hvac_mode = hvac_mode.strip()
+
+    domain = entity_id.split('.')[0]
+    brightness = int((power_percent / MAX_PERCENTAGE) * MAX_BRIGHTNESS)
+
+    if power_percent <= 0:
+        log_debug(f"Turning off entity {entity_id}")
+        if domain == DOMAIN_LIGHT:
+            await hass.services.async_call(
+                DOMAIN_LIGHT, SERVICE_TURN_OFF,
+                {ATTR_ENTITY_ID: entity_id},
+                blocking=True
+            )
+        elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
+            await hass.services.async_call(
+                domain, SERVICE_TURN_OFF,
+                {ATTR_ENTITY_ID: entity_id},
+                blocking=True
+            )
+        elif domain == DOMAIN_CLIMATE:
+            await hass.services.async_call(
+                DOMAIN_CLIMATE, "set_hvac_mode",
+                {ATTR_ENTITY_ID: entity_id, "hvac_mode": "off"},
+                blocking=True
+            )
+        else:
+            log_warning(f"Unsupported entity domain: {domain}. Cannot turn off {entity_id}")
+    else:
+        log_debug(f"Turning on entity {entity_id} with power {power_percent}%")
+        if domain == DOMAIN_LIGHT:
+            await hass.services.async_call(
+                DOMAIN_LIGHT, SERVICE_TURN_ON,
+                {ATTR_ENTITY_ID: entity_id, ATTR_BRIGHTNESS: brightness},
+                blocking=True
+            )
+        elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
+            await hass.services.async_call(
+                domain, SERVICE_TURN_ON,
+                {ATTR_ENTITY_ID: entity_id},
+                blocking=True
+            )
+        elif domain == DOMAIN_CLIMATE:
+            await hass.services.async_call(
+                DOMAIN_CLIMATE, "set_hvac_mode",
+                {ATTR_ENTITY_ID: entity_id, "hvac_mode": hvac_mode or "heat"},
+                blocking=True
+            )
+        else:
+            log_warning(f"Unsupported entity domain: {domain}. Cannot turn on {entity_id}")

@@ -1,21 +1,32 @@
 """Solar config form builders for Sun Allocator."""
 from voluptuous import Schema, Required, Optional
+
+from homeassistant.helpers.selector import selector
+    
 from ..utils.ui_helpers import NumberSelectorBuilder, SelectSelectorBuilder
-try:
-    from homeassistant.helpers.selector import selector
-except ImportError:
-    # Fallback for linting outside Home Assistant
-    def selector(x):
-        return x
 
 from ..const import (
-    CONF_PV_POWER, CONF_PV_VOLTAGE, CONF_VMP, CONF_IMP, CONF_VOC, CONF_ISC, CONF_PANEL_COUNT, CONF_PANEL_CONFIGURATION,
-    CONF_CONSUMPTION, CONF_BATTERY_POWER, NONE_OPTION, PANEL_CONFIG_SERIES, PANEL_CONFIG_PARALLEL, PANEL_CONFIG_PARALLEL_SERIES
+    CONF_PV_POWER, 
+    CONF_PV_VOLTAGE, 
+    CONF_VMP, 
+    CONF_IMP,
+    CONF_VOC, 
+    CONF_ISC, 
+    CONF_PANEL_COUNT, 
+    CONF_PANEL_CONFIGURATION,
+    CONF_CONSUMPTION, 
+    CONF_BATTERY_POWER, 
+    NONE_OPTION, 
+    PANEL_CONFIG_SERIES, 
+    PANEL_CONFIG_PARALLEL, 
+    PANEL_CONFIG_PARALLEL_SERIES
 )
+
 
 def build_solar_config_schema(sensors, defaults=None):
     if defaults is None:
         defaults = {}
+
     default_consumption = NONE_OPTION if defaults.get(CONF_CONSUMPTION) is None else defaults.get(CONF_CONSUMPTION)
     default_battery_power = NONE_OPTION if defaults.get(CONF_BATTERY_POWER) is None else defaults.get(CONF_BATTERY_POWER)
     panel_config_options = [
@@ -23,6 +34,7 @@ def build_solar_config_schema(sensors, defaults=None):
         {"label": "config.step.settings.data.panel_configuration.options.parallel", "value": PANEL_CONFIG_PARALLEL},
         {"label": "config.step.settings.data.panel_configuration.options.parallel-series", "value": PANEL_CONFIG_PARALLEL_SERIES},
     ]
+
     return Schema({
         Required(
             CONF_PV_POWER,

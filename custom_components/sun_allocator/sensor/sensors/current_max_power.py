@@ -1,11 +1,13 @@
 """Current maximum power sensor for Sun Allocator."""
-import logging
 from typing import Optional, Dict, Any
+
 from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfPower
 
 from .base import BaseSunAllocatorSensor
-from ...utils import calculate_current_max_power
+from ...utils.mppt import calculate_current_max_power
+from ...utils.logger import log_debug
+
 from ...const import (
     CONF_CURVE_FACTOR_K,
     CONF_EFFICIENCY_CORRECTION_FACTOR,
@@ -26,8 +28,6 @@ from ...const import (
     KEY_VOC_RATIO,
     KEY_CALCULATION_REASON,
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 
 class SunAllocatorCurrentMaxPowerSensor(BaseSunAllocatorSensor):
@@ -94,7 +94,7 @@ class SunAllocatorCurrentMaxPowerSensor(BaseSunAllocatorSensor):
             calculation_reason=debug_info[KEY_CALCULATION_REASON]
         )
         
-        _LOGGER.debug(
+        log_debug(
             f"Current max power calculation: PV Voltage={pv_voltage}V, "
             f"PV Power={pv_power}W, Current Max Power={current_max_power}W, "
             f"Light Factor={debug_info[KEY_LIGHT_FACTOR]:.2f}, "

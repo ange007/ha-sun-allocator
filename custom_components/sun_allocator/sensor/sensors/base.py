@@ -1,11 +1,22 @@
 """Base sensor class for Sun Allocator sensors."""
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
-from ...utils.logger import get_logger, log_error
-from ...utils.journal import journal_event
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.typing import StateType
+
+from ...utils.logger import log_error
+from ...utils.journal import journal_event
+from ...utils.mppt import get_panel_parameters_with_fallbacks
+from ...utils.sensor_utils import (
+    get_sensor_state_safely,
+    get_temperature_compensation_data,
+    create_sensor_attributes,
+    setup_sensor_listeners,
+    cleanup_sensor_listeners,
+    get_mppt_algorithm_config,
+)
 
 from ...const import (
     CONF_PV_POWER,
@@ -24,17 +35,6 @@ from ...const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
 )
-from ...utils import (
-    get_sensor_state_safely,
-    get_temperature_compensation_data,
-    get_panel_parameters_with_fallbacks,
-    get_mppt_algorithm_config,
-    setup_sensor_listeners,
-    cleanup_sensor_listeners,
-    create_sensor_attributes,
-)
-
-_LOGGER = get_logger(__name__)
 
 
 class BaseSunAllocatorSensor(SensorEntity, ABC):

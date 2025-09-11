@@ -1,16 +1,12 @@
 """Advanced settings configuration module for Sun Allocator config flow."""
 import voluptuous as vol
 from typing import Dict, Any, Optional
-# Centralized logging and audit
+
 from ..utils.logger import log_error
 from ..utils.journal import log_exception, audit_action
-
-# Import helpers for schema
 from .advanced_config_form import build_advanced_config_schema
 
 from ..const import (
-    CONF_ADVANCED_SETTINGS_ENABLED,
-    CONF_BATTERY_POWER_REVERSED,
     CONF_CURVE_FACTOR_K,
     CONF_EFFICIENCY_CORRECTION_FACTOR,
     CONF_MIN_INVERTER_VOLTAGE,

@@ -1,11 +1,15 @@
 """Usage percentage sensor for Sun Allocator."""
 import logging
 from typing import Optional, Dict, Any
+
 from homeassistant.core import HomeAssistant
 from homeassistant.const import PERCENTAGE
 
 from .base import BaseSunAllocatorSensor
-from ...utils import calculate_pmax, calculate_usage_percentage
+from ...utils.mppt import calculate_pmax
+from ...utils.sensor_utils import calculate_usage_percentage
+from ...utils.logger import log_debug
+
 from ...const import (
     KEY_PV_POWER,
     KEY_PV_VOLTAGE,
@@ -16,9 +20,6 @@ from ...const import (
     KEY_PANEL_COUNT,
     KEY_PANEL_CONFIGURATION,
 )
-
-_LOGGER = logging.getLogger(__name__)
-
 
 class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
     """Sensor for usage percentage of solar panels."""
@@ -58,7 +59,7 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             vmp = vmp * (1 + voc_coef * temp_diff)
             imp = imp * (1 + pmax_coef * temp_diff + voc_coef * temp_diff)
             
-            _LOGGER.debug(
+            log_debug(
                 f"Temperature compensation applied for usage calculation: "
                 f"temp_diff={temp_diff}°C, adjusted Vmp={vmp:.2f}V, adjusted Imp={imp:.2f}A"
             )
@@ -94,7 +95,7 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             temperature_compensated=temp_compensation is not None
         )
         
-        _LOGGER.debug(
+        log_debug(
             f"Usage percentage calculation: PV Power={pv_power}W, "
             f"Pmax={pmax:.1f}W, Usage={usage:.1f}%"
         )
