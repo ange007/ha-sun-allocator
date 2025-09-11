@@ -37,7 +37,7 @@ async def persist_last_mode(hass, config_entry, entity_id, mode):
             break
     if changed:
         data[CONF_DEVICES] = devs
-        log_warning("--- MODE SELECT ---: Saving %d devices from persist_last_mode", len(devs))
+        log_warning("--- MODE SELECT ---: Saving %d devices. Data: %s", len(devs), data)
         hass.config_entries.async_update_entry(config_entry, data=data)
 
 async def mode_select_state_listener(hass, config_entry, event, desired_modes, select_entity_ids):

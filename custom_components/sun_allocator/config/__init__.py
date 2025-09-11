@@ -200,7 +200,7 @@ class SunAllocatorOptionsFlowHandler(
             }
             self._devices = self.config_entry.data.get(CONF_DEVICES, [])
         
-        log_warning("--- CONFIG FLOW INIT ---: Loaded %d devices", len(self._devices))
+        log_warning("--- CONFIG FLOW INIT ---: Loaded %d devices. Data: %s", len(self._devices), self.config_entry.data)
         # Proceed to main menu
         return await self.async_step_main_menu()
         
@@ -316,7 +316,7 @@ class SunAllocatorOptionsFlowHandler(
                     # Persist changes immediately and stay on the manage devices page
                     data = self._solar_config.copy()
                     data[CONF_DEVICES] = self._devices
-                    log_warning("--- CONFIG FLOW REMOVE ---: Saving %d devices", len(self._devices))
+                    log_warning("--- CONFIG FLOW REMOVE ---: Saving %d devices. Data: %s", len(self._devices), data)
                     self.hass.config_entries.async_update_entry(self.config_entry, data=data)
                     return await self.async_step_manage_devices()
                 errors[CONF_DEVICE_ID] = "device_name_required"
@@ -369,7 +369,7 @@ class SunAllocatorOptionsFlowHandler(
         """Save configuration, reload integration and return to main menu."""
         data = self._solar_config.copy()
         data[CONF_DEVICES] = self._devices
-        log_warning("--- CONFIG FLOW SAVE ---: Saving %d devices", len(self._devices))
+        log_warning("--- CONFIG FLOW SAVE ---: Saving %d devices. Data: %s", len(self._devices), data)
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration
         await self.hass.config_entries.async_reload(self.config_entry.entry_id)
@@ -392,7 +392,7 @@ class SunAllocatorOptionsFlowHandler(
         # Persist changes immediately so they survive HA restarts
         data = self._solar_config.copy()
         data[CONF_DEVICES] = self._devices
-        log_warning("--- CONFIG FLOW FINALIZE ---: Saving %d devices", len(self._devices))
+        log_warning("--- CONFIG FLOW FINALIZE ---: Saving %d devices. Data: %s", len(self._devices), data)
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration
         await self.hass.config_entries.async_reload(self.config_entry.entry_id)

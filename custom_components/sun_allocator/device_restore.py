@@ -43,7 +43,7 @@ async def persist_device_state(hass, config_entry, entity_id, percent=None, is_o
             break
     if changed:
         data[CONF_DEVICES] = devs
-        log_warning("--- DEVICE RESTORE ---: Saving %d devices from persist_device_state", len(devs))
+        log_warning("--- DEVICE RESTORE ---: Saving %d devices. Data: %s", len(devs), data)
         hass.config_entries.async_update_entry(config_entry, data=data)
 
 async def restore_entity_state(hass, config_entry, entity_id):
