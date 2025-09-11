@@ -1,12 +1,18 @@
 """Mode select logic for Sun Allocator."""
+from homeassistant.const import (
+    STATE_UNKNOWN, STATE_UNAVAILABLE
+)
+
 from .utils.logger import log_debug
 from .entity_control import set_mode_for_entity
 
 from .const import (
-    CONF_ESPHOME_MODE_SELECT_ENTITY, CONF_DEVICES, DEVICE_TYPE_CUSTOM, CONF_DEVICE_TYPE, STATE_UNKNOWN, STATE_UNAVAILABLE
+    CONF_ESPHOME_MODE_SELECT_ENTITY,
+    CONF_DEVICES,
 )
 
 VALID_MODES = {"off", "on", "proportional"}
+
 
 async def persist_last_mode(hass, config_entry, entity_id, mode):
     if mode not in VALID_MODES:

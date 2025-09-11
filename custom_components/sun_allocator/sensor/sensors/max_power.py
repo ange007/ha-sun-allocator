@@ -1,5 +1,4 @@
 """Maximum power sensor for Sun Allocator."""
-import logging
 from typing import Optional, Dict, Any
 
 from homeassistant.core import HomeAssistant
@@ -19,6 +18,7 @@ from ...const import (
     KEY_PANEL_COUNT,
     KEY_PANEL_CONFIGURATION,
 )
+
 
 class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
     """Sensor for maximum theoretical power."""

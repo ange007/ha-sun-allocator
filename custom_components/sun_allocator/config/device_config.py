@@ -10,7 +10,10 @@ from ..utils.logger import get_logger, log_info, log_error
 from ..utils.journal import audit_action, log_exception
 from ..utils.sensor_utils import clean_entity_id_and_mode
 from .device_config_form import (
-    build_device_name_type_schema, build_device_selection_schema, build_device_basic_settings_schema, build_device_schedule_schema
+    build_device_name_type_schema,
+    build_device_selection_schema,
+    build_device_basic_settings_schema,
+    build_device_schedule_schema
 )
 
 from ..const import (

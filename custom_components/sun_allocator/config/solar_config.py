@@ -46,6 +46,7 @@ class SolarConfigMixin:
         # Add None option
         consumption_sensors = [{"label": "None", "value": NONE_OPTION}] + consumption_sensors
         battery_sensors = [{"label": "None", "value": NONE_OPTION}] + battery_sensors
+        
         return {
             "power_sensors": power_sensors,
             "voltage_sensors": voltage_sensors,

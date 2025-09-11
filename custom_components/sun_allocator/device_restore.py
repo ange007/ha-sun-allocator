@@ -2,12 +2,16 @@
 from homeassistant.const import STATE_ON, STATE_OFF
 
 from .utils.logger import log_info
-from .settings import LOG_STARTUP_DEVICES
 from .entity_control import set_power_for_entity
 
 from .const import (
-    CONF_DEVICES, CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM, CONF_ESPHOME_RELAY_ENTITY, CONF_DEVICE_ENTITY,
-    CONF_ESPHOME_MODE_SELECT_ENTITY, CONF_DEVICE_ID
+    CONF_DEVICES, 
+    CONF_DEVICE_TYPE, 
+    DEVICE_TYPE_CUSTOM,
+    CONF_ESPHOME_RELAY_ENTITY, 
+    CONF_DEVICE_ENTITY,
+    CONF_ESPHOME_MODE_SELECT_ENTITY, 
+    CONF_DEVICE_ID,
 )
 
 

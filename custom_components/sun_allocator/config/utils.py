@@ -28,6 +28,7 @@ def convert_none_strings_to_none(data: Dict[str, Any], keys: List[str]) -> Dict[
     for key in keys:
         if data.get(key) == NONE_OPTION:
             data[key] = None
+            
     return data
 
 
@@ -42,6 +43,7 @@ def filter_entities_by_keywords(entities: List[str], keywords: List[str]) -> Lis
     for entity in entities:
         if any(keyword.lower() in entity.lower() for keyword in keywords):
             filtered.append(entity)
+
     return filtered
 
 
@@ -51,6 +53,7 @@ def exclude_entities_by_keywords(entities: List[str], keywords: List[str]) -> Li
     for entity in entities:
         if not any(keyword.lower() in entity.lower() for keyword in keywords):
             filtered.append(entity)
+
     return filtered
 
 
@@ -97,10 +100,12 @@ def validate_float_range(value: Any, min_val: float, max_val: float, field_name:
         float_val = float(value)
         if float_val < min_val or float_val > max_val:
             return f"invalid_{field_name}_range"
+        
         return None
     except (ValueError, TypeError) as e:
         log_error("[utils] Invalid float for %s: %s", field_name, value)
         log_exception(f"validate_float_range_{field_name}", e)
+
         return f"invalid_{field_name}_format"
 
 
@@ -110,10 +115,12 @@ def validate_int_range(value: Any, min_val: int, max_val: int, field_name: str) 
         int_val = int(value)
         if int_val < min_val or int_val > max_val:
             return f"invalid_{field_name}_range"
+        
         return None
     except (ValueError, TypeError) as e:
         log_error("[utils] Invalid int for %s: %s", field_name, value)
         log_exception(f"validate_int_range_{field_name}", e)
+
         return f"invalid_{field_name}_format"
 
 
@@ -127,6 +134,7 @@ def validate_time_format(time_str: str) -> Optional[str]:
     except (ValueError, AttributeError) as e:
         log_error("[utils] Invalid time format: %s", time_str)
         log_exception("validate_time_format", e)
+
         return "invalid_time_format"
 
 
@@ -145,6 +153,7 @@ def create_device_options_dict(devices: List[Dict[str, Any]], action_prefix: str
 
 def get_default_value_for_dropdown(value: Any, none_string: str = NONE_OPTION) -> str:
     """Convert None values to string for dropdown display."""
+
     return none_string if value is None else str(value)
 
 
@@ -152,4 +161,5 @@ def merge_config_data(base_config: Dict[str, Any], new_data: Dict[str, Any]) -> 
     """Merge new configuration data into base configuration."""
     merged = base_config.copy()
     merged.update(new_data)
+
     return merged

@@ -1,25 +1,22 @@
 """Entity control helpers for Sun Allocator."""
 from homeassistant.core import HomeAssistant
 from homeassistant.const import (
-    STATE_UNKNOWN, STATE_UNAVAILABLE,
+    STATE_UNKNOWN, STATE_UNAVAILABLE, SERVICE_SELECT_OPTION, 
+    ATTR_ENTITY_ID, SERVICE_TURN_ON, SERVICE_TURN_OFF,
 )
 
 from .utils.logger import log_debug, log_warning
 
 from .const import (
-    DOMAIN_SELECT, 
-    SERVICE_SELECT_OPTION, 
-    ATTR_ENTITY_ID, 
+    DOMAIN_SELECT,
     DOMAIN_LIGHT,
     DOMAIN_SWITCH,
-    DOMAIN_INPUT_BOOLEAN, 
+    DOMAIN_INPUT_BOOLEAN,
     DOMAIN_AUTOMATION,
-    DOMAIN_SCRIPT, 
-    DOMAIN_CLIMATE, 
-    SERVICE_TURN_ON, 
-    SERVICE_TURN_OFF,
-    MAX_BRIGHTNESS, 
-    MAX_PERCENTAGE
+    DOMAIN_SCRIPT,
+    DOMAIN_CLIMATE,
+    MAX_BRIGHTNESS,
+    MAX_PERCENTAGE,
 )
 
 async def set_mode_for_entity(hass: HomeAssistant, entity_id, mode):

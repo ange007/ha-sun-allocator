@@ -6,7 +6,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfPower
 
 from .base import BaseSunAllocatorSensor
-from ...utils.logger import get_logger, log_debug
+from ...utils.logger import log_debug
 from ...utils.journal import journal_event
 from ...utils.mppt import calculate_current_max_power
 from ...utils.sensor_utils import calculate_excess_power, calculate_usage_percentage

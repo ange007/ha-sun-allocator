@@ -251,6 +251,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         except Exception as e:
             log_error(f"Error calculating {self._attr_name}: {e}")
             journal_event("sensor_calc_error", {"sensor": self._attr_name, "error": str(e)})
+            
             return self._state or 0.0
     
     @abstractmethod

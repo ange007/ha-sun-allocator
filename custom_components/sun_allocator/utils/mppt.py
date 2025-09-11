@@ -2,12 +2,12 @@
 import logging
 from typing import Tuple, Optional
 
+from ..utils.logger import log_debug, log_warning, log_error
+
 from ..const import (
     PANEL_CONFIG_SERIES,
     PANEL_CONFIG_PARALLEL_SERIES,
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 
 def calculate_current_max_power(
@@ -55,7 +55,7 @@ def calculate_current_max_power(
         vmp = vmp * (1 + voc_coef * temp_diff)
         imp = imp * (1 + pmax_coef * temp_diff + voc_coef * temp_diff)
         
-        _LOGGER.debug(f"Applied temperature compensation: temp_diff={temp_diff}°C")
+        log_debug(f"Applied temperature compensation: temp_diff={temp_diff}°C")
     
     # Calculate maximum power based on panel configuration
     pmax = calculate_pmax(vmp, imp, panel_count, panel_configuration)
@@ -81,7 +81,7 @@ def calculate_current_max_power(
     voc_ratio = voc / vmp if vmp > 0 else 1.2
     if voc_ratio == 1.0:
         voc_ratio = 1.01  # Add a small buffer
-        _LOGGER.debug(f"Fix applied: Adjusted voc_ratio from 1.0 to {voc_ratio:.2f}")
+        log_debug(f"Fix applied: Adjusted voc_ratio from 1.0 to {voc_ratio:.2f}")
     
     # Calculate current max power using enhanced I-V model
     current_max_power = 0.0
@@ -168,7 +168,7 @@ def calculate_pmax(vmp: float, imp: float, panel_count: int, panel_configuration
         
         # Check if panel_count is even for equal strings
         if panel_count % string_count != 0:
-            _LOGGER.warning(
+            log_warning(
                 f"Panel count {panel_count} is not evenly divisible by {string_count} "
                 f"for parallel-series configuration. Using {int(panels_per_string)} panels per string."
             )
@@ -221,7 +221,7 @@ def calculate_power_above_mpp(
     if abs(voc_ratio - 1.0) < 0.001:
         # When voc_ratio is very close to 1.0, use a linear approximation
         position = (relative_voltage - 1.0) * 10  # Scale to get a reasonable position value
-        _LOGGER.debug(f"Using linear approximation for position calculation: {position:.4f}")
+        log_debug(f"Using linear approximation for position calculation: {position:.4f}")
     else:
         position = (relative_voltage - 1.0) / (voc_ratio - 1.0) if (voc_ratio - 1.0) > 0 else 0
     
@@ -268,29 +268,29 @@ def get_panel_parameters_with_fallbacks(
         if vmp is not None:
             _vmp = float(vmp)
         else:
-            _LOGGER.warning("Vmp is not configured, calculations will be inaccurate")
+            log_warning("Vmp is not configured, calculations will be inaccurate")
             
         if imp is not None:
             _imp = float(imp)
         else:
-            _LOGGER.warning("Imp is not configured, calculations will be inaccurate")
+            log_warning("Imp is not configured, calculations will be inaccurate")
             
         if voc is not None:
             _voc = float(voc)
         else:
-            _LOGGER.warning("Voc is not configured, using estimated value")
+            log_warning("Voc is not configured, using estimated value")
             _voc = _vmp * 1.2  # Estimate Voc as 20% higher than Vmp
             
         if isc is not None:
             _isc = float(isc)
         else:
-            _LOGGER.warning("Isc is not configured, using estimated value")
+            log_warning("Isc is not configured, using estimated value")
             _isc = _imp * 1.1  # Estimate Isc as 10% higher than Imp
             
         if panel_count is not None:
             _panel_count = int(panel_count)
             
     except (ValueError, TypeError) as e:
-        _LOGGER.error(f"Error converting panel parameters: {e}")
+        log_error(f"Error converting panel parameters: {e}")
         
     return _vmp, _imp, _voc, _isc, _panel_count

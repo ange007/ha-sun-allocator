@@ -1,9 +1,12 @@
 """Service handlers for Sun Allocator."""
+from homeassistant.const import (
+    ATTR_ENTITY_ID
+)
+
 from .utils.logger import log_error
 from .entity_control import set_power_for_entity, set_mode_for_entity
 
 from .const import (
-    ATTR_ENTITY_ID, 
     CONF_DEVICE_ID, 
     CONF_ESPHOME_MODE_SELECT_ENTITY, 
     CONF_ESPHOME_RELAY_ENTITY, 

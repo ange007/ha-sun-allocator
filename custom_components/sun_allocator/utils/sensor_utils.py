@@ -23,6 +23,7 @@ from ..const import (
     DEFAULT_PMAX_COEFFICIENT,
 )
 
+
 def get_sensor_state_safely(hass: HomeAssistant, entity_id: Optional[str], sensor_name: str) -> Tuple[float, bool]:
     """
     Safely get sensor state with proper error handling.

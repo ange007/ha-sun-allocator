@@ -65,6 +65,7 @@ class TemperatureConfigMixin:
             temp_sensor = user_input.get(CONF_TEMPERATURE_SENSOR)
             if not temp_sensor or temp_sensor == NONE_OPTION:
                 errors[CONF_TEMPERATURE_SENSOR] = "temperature_sensor_required"
+                
         return errors
 
     def _process_temperature_config_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
