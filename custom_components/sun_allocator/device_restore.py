@@ -6,10 +6,7 @@ from .entity_control import set_power_for_entity
 
 from .const import (
     DOMAIN,
-    CONF_DEVICES, 
-    CONF_DEVICE_TYPE, 
-    DEVICE_TYPE_CUSTOM,
-    CONF_ESPHOME_RELAY_ENTITY, 
+    CONF_DEVICES,
     CONF_DEVICE_ENTITY,
     CONF_ESPHOME_MODE_SELECT_ENTITY, 
     CONF_DEVICE_ID,
@@ -28,7 +25,7 @@ async def persist_device_state(hass, config_entry, entity_id, percent=None, is_o
     devs = list(data.get(CONF_DEVICES, []))
     changed = False
     for i, d in enumerate(devs):
-        relay_entity = d.get(CONF_ESPHOME_RELAY_ENTITY) if d.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM) == DEVICE_TYPE_CUSTOM else d.get(CONF_DEVICE_ENTITY)
+        relay_entity = d.get(CONF_DEVICE_ENTITY)
         if relay_entity == entity_id:
             nd = dict(d)
             if percent is not None:
@@ -49,9 +46,8 @@ async def persist_device_state(hass, config_entry, entity_id, percent=None, is_o
 async def restore_entity_state(hass, config_entry, entity_id):
     devices = config_entry.data.get(CONF_DEVICES, [])
     for device in devices:
-        device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-        relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else device.get(CONF_DEVICE_ENTITY)
-        mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else None
+        relay_entity = device.get(CONF_DEVICE_ENTITY)
+        mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
         if relay_entity == entity_id:
             percent = device.get("last_percent")
             is_on = device.get("_restore_on")
@@ -75,17 +71,11 @@ async def restore_all_devices(hass, config_entry):
     restored = set()
     for device in devices:
         device_id = device.get(CONF_DEVICE_ID)
-        device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-        relay_entity = None
-        mode_select_entity = None
         hvac_mode = device.get("_hvac_mode")
         log_info(f"Checking restore state for device_id: {device_id}")
 
-        if device_type == DEVICE_TYPE_CUSTOM:
-            relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
-            mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
-        else:
-            relay_entity = device.get(CONF_DEVICE_ENTITY)
+        relay_entity = device.get(CONF_DEVICE_ENTITY)
+        mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
 
         if mode_select_entity:
             last_mode = device.get("last_mode")

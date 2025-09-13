@@ -9,10 +9,7 @@ from .entity_control import set_power_for_entity, set_mode_for_entity
 from .const import (
     CONF_DEVICE_ID, 
     CONF_ESPHOME_MODE_SELECT_ENTITY, 
-    CONF_ESPHOME_RELAY_ENTITY, 
     CONF_DEVICE_ENTITY,
-    CONF_DEVICE_TYPE,
-    DEVICE_TYPE_CUSTOM, 
     CONF_DEVICE_NAME,
     CONF_DEVICES,
 )
@@ -52,11 +49,7 @@ async def handle_set_relay_power(hass, config_entry, call):
     elif device_id:
         device = next((d for d in devices if d.get(CONF_DEVICE_ID) == device_id), None)
         if device:
-            device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-            if device_type == DEVICE_TYPE_CUSTOM:
-                entity_id = device.get(CONF_ESPHOME_RELAY_ENTITY)
-            else:
-                entity_id = device.get(CONF_DEVICE_ENTITY)
+            entity_id = device.get(CONF_DEVICE_ENTITY)
             if entity_id:
                 await set_power_for_entity(hass, entity_id, power_percent)
             else:
@@ -65,10 +58,6 @@ async def handle_set_relay_power(hass, config_entry, call):
             log_error(f"Device with ID {device_id} not found")
     else:
         for device in devices:
-            device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-            if device_type == DEVICE_TYPE_CUSTOM:
-                entity_id = device.get(CONF_ESPHOME_RELAY_ENTITY)
-            else:
-                entity_id = device.get(CONF_DEVICE_ENTITY)
+            entity_id = device.get(CONF_DEVICE_ENTITY)
             if entity_id:
                 await set_power_for_entity(hass, entity_id, power_percent)
