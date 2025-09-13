@@ -1,15 +1,16 @@
 """Refactored Sun Allocator config flow."""
 import voluptuous as vol
 import uuid
+import json
 from typing import Dict, Any
 
 from homeassistant import config_entries
 from homeassistant.core import callback
 
-from .solar_config import SolarConfigMixin
-from .device_config import DeviceConfigMixin
-from .temperature_config import TemperatureConfigMixin
-from .advanced_config import AdvancedConfigMixin
+from . import solar_config
+from . import device_config
+from . import temperature_config
+from . import advanced_config
 from ..utils.logger import log_warning # ADDED FOR DEBUGGING
 
 from ..const import (
@@ -36,10 +37,10 @@ from ..const import (
 
 
 class SunAllocatorConfigFlow(
-    SolarConfigMixin,
-    DeviceConfigMixin,
-    TemperatureConfigMixin,
-    AdvancedConfigMixin,
+    solar_config.SolarConfigMixin,
+    device_config.DeviceConfigMixin,
+    temperature_config.TemperatureConfigMixin,
+    advanced_config.AdvancedConfigMixin,
     config_entries.ConfigFlow,
     domain=DOMAIN
 ):
@@ -144,10 +145,10 @@ class SunAllocatorConfigFlow(
 
 
 class SunAllocatorOptionsFlowHandler(
-    SolarConfigMixin,
-    DeviceConfigMixin,
-    TemperatureConfigMixin,
-    AdvancedConfigMixin,
+    solar_config.SolarConfigMixin,
+    device_config.DeviceConfigMixin,
+    temperature_config.TemperatureConfigMixin,
+    advanced_config.AdvancedConfigMixin,
     config_entries.OptionsFlow
 ):
     """Handle options flow for Sun Allocator."""
@@ -168,7 +169,7 @@ class SunAllocatorOptionsFlowHandler(
         self._solar_config = {k: v for k, v in self.config_entry.data.items() if k != CONF_DEVICES}
         self._devices = self.config_entry.data.get(CONF_DEVICES, [])
         
-        log_warning("--- CONFIG FLOW INIT ---: Loaded %d devices. Test Array: %s. Data: %s", len(self._devices), self.config_entry.data.get('test_array', 'MISSING'), self.config_entry.data)
+        log_warning("--- CONFIG FLOW INIT ---: Loaded %d devices. Devices Str: %s. Data: %s", len(self._devices), self.config_entry.data.get('devices_str', 'MISSING'), self.config_entry.data)
         # Proceed to main menu
         return await self.async_step_main_menu()
         
@@ -285,7 +286,8 @@ class SunAllocatorOptionsFlowHandler(
                     data = dict(self.config_entry.data)
                     data.update(self._solar_config)
                     data[CONF_DEVICES] = self._devices
-                    data['test_array'] = [{'a': 1, 'b': 'hello'}, {'c': True, 'd': None}]
+                    data['devices_str'] = json.dumps(self._devices)
+                    data.pop('test_array', None)
                     log_warning("--- CONFIG FLOW REMOVE ---: Saving %d devices. Data: %s", len(self._devices), data)
                     self.hass.config_entries.async_update_entry(self.config_entry, data=data)
                     return await self.async_step_manage_devices()
@@ -340,7 +342,8 @@ class SunAllocatorOptionsFlowHandler(
         data = dict(self.config_entry.data)
         data.update(self._solar_config)
         data[CONF_DEVICES] = self._devices
-        data['test_array'] = [{'a': 1, 'b': 'hello'}, {'c': True, 'd': None}]
+        data['devices_str'] = json.dumps(self._devices)
+        data.pop('test_array', None)
         log_warning("--- CONFIG FLOW SAVE ---: Saving %d devices. Data: %s", len(self._devices), data)
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration
@@ -365,7 +368,8 @@ class SunAllocatorOptionsFlowHandler(
         data = dict(self.config_entry.data)
         data.update(self._solar_config)
         data[CONF_DEVICES] = self._devices
-        data['test_array'] = [{'a': 1, 'b': 'hello'}, {'c': True, 'd': None}]
+        data['devices_str'] = json.dumps(self._devices)
+        data.pop('test_array', None)
         log_warning("--- CONFIG FLOW FINALIZE ---: Saving %d devices. Data: %s", len(self._devices), data)
         self.hass.config_entries.async_update_entry(self.config_entry, data=data)
         # Live reload integration

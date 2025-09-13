@@ -64,6 +64,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             all_devices_info = []
             all_device_ids = []
             ha_entity_ids = set(e.entity_id for e in self._hass.states.async_all())
+            filter_reasons = data.get("device_filter_reasons", {})
             for d in all_devices:
                 dev_id = d.get("id") or d.get("device_id") or d.get("entity_id")
                 entity_id = d.get("entity_id") or d.get("esphome_relay_entity") or d.get("device_entity")
@@ -75,12 +76,20 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                 elif entity_id not in ha_entity_ids:
                     reason = "Entity not found in Home Assistant"
                 elif dev_id not in device_status:
-                    reason = "Not present in device_status (possibly filtered/skipped)"
+                    if dev_id in filter_reasons:
+                        reason = f"Filtered: {filter_reasons[dev_id]}"
+                    else:
+                        reason = "Not present in device_status (processing skipped or failed)"
+
+                if reason:
+                    log_debug("Device '%s' (%s) filtered from power distribution. Reason: %s", name, dev_id, reason)
+                
                 all_devices_info.append({
                     "id": dev_id,
                     "name": name,
                     "entity_id": entity_id,
                     "type": device_type,
+                    "auto_control": d.get("auto_control_enabled", "missing"),
                     "in_device_status": dev_id in device_status,
                     "reason": reason,
                 })

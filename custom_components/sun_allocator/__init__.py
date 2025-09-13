@@ -89,7 +89,7 @@ SET_RELAY_POWER_SCHEMA = vol.Schema({
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
-    log_warning("--- COMPONENT SETUP ---: Loading entry. Test Array: %s. Data: %s", config_entry.data.get('test_array', 'MISSING'), config_entry.data)
+    log_warning("--- COMPONENT SETUP ---: Loading entry. Devices Str: %s. Data: %s", config_entry.data.get('devices_str', 'MISSING'), config_entry.data)
     # Store config entry data EARLY so it's available for all listeners
     hass.data.setdefault(DOMAIN, {})
     entry_data = {
@@ -458,214 +458,187 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         """Process excess power value and control devices accordingly."""
         log_debug(f"Excess power: {excess_power}W")
         now = dt_util.now()
-        for device_id in power_allocation:
-            power_allocation[device_id] = 0
+
+        # Get device lists and config from entry_data
+        # entry_data is available in the outer scope from setup_auto_control
+        auto_control_devices = [d for d in config_entry.data.get(CONF_DEVICES, []) if d.get(CONF_AUTO_CONTROL_ENABLED, False)]
+        auto_control_devices.sort(key=lambda d: d.get(CONF_DEVICE_PRIORITY, 50), reverse=True)
+        power_allocation = entry_data.get(CONF_POWER_ALLOCATION, {})
+        cfg = config_entry.data
+
+        # Reset allocations and statuses for this run
+        for dev_id in power_allocation:
+            power_allocation[dev_id] = 0
+        device_status = {}
+        device_filter_reasons = {}
+        entry_data["device_status"] = device_status
+        entry_data["device_filter_reasons"] = device_filter_reasons
+
         remaining_power = excess_power
         ramp_targets = {}
         entry_data["ramp_targets"] = ramp_targets
-        device_status = entry_data.get("device_status", {})
         device_on_state = entry_data.get("device_on_state", {})
+
+        # Get constants for the loop
+        SUPPORTED_DOMAINS = {DOMAIN_LIGHT, DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT, DOMAIN_CLIMATE}
+        DEFAULT_MIN_START_W_LOCAL = float(cfg.get(CONF_DEFAULT_MIN_START_W, DEFAULT_MIN_START_W))
+        HYSTERESIS_W_LOCAL = float(cfg.get(CONF_HYSTERESIS_W, DEFAULT_HYSTERESIS_W))
+        DEVICE_MAX_PERCENT_DEFAULT = 90.0
+
         for device in auto_control_devices:
             device_id = device.get(CONF_DEVICE_ID)
+            device_name = device.get(CONF_DEVICE_NAME, "Unknown")
+
+            # Determine entity_id and type
             device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-            # Use the correct config field for entity_id
-            if device_type == DEVICE_TYPE_CUSTOM:
+            if device_type == DEVICE_TYPE_STANDARD:
+                relay_entity = device.get(CONF_DEVICE_ENTITY)
+                mode_select_entity = None
+                hvac_mode = device.get("hvac_mode")
+            else: # DEVICE_TYPE_CUSTOM
                 relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
                 mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
                 hvac_mode = None
-            else:
-                relay_entity = device.get(CONF_DEVICE_ENTITY)
-                mode_select_entity = None
-                hvac_mode = device.get("_hvac_mode")
-            device_name = device.get(CONF_DEVICE_NAME, "Unknown")
-            device_priority = int(device.get(CONF_DEVICE_PRIORITY, 50))
-            max_expected_w = float(device.get(CONF_MAX_EXPECTED_W, 0) or 0)
-            min_expected_w = float(device.get(CONF_MIN_EXPECTED_W, 0) or 0)
-            effective_min_power = max(min_expected_w, DEFAULT_MIN_START_W_LOCAL)
-            on_threshold = effective_min_power + (HYSTERESIS_W_LOCAL / 2.0)
-            off_threshold = max(0.0, effective_min_power - (HYSTERESIS_W_LOCAL / 2.0))
-            prev_on = bool(entry_data.get("device_on_state", {}).get(device_id, False))
-            is_active = remaining_power >= (off_threshold if prev_on else on_threshold)
+
+            # --- Start of Filtering Checks ---
+            service_domain = relay_entity.split(".")[0] if relay_entity and "." in relay_entity else None
+            if not relay_entity or service_domain not in SUPPORTED_DOMAINS:
+                log_warning(f"Device '{device_name}' skipped: Unsupported or missing entity_id: {relay_entity}")
+                if device_id: device_filter_reasons[device_id] = "Unsupported or missing entity_id"
+                continue
+
+            relay_state_obj = hass.states.get(relay_entity)
+            if relay_state_obj is None or relay_state_obj.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                log_debug(f"Device '{device_name}' skipped: Entity {relay_entity} not found or unavailable.")
+                if device_id: device_filter_reasons[device_id] = "Entity unavailable or not found"
+                continue
+
+            if not is_device_in_schedule(device, now):
+                log_debug(f"Device '{device_name}' skipped: Outside of schedule.")
+                if device_id: device_filter_reasons[device_id] = "Outside of schedule"
+                # Ensure device is turned off if it's outside of its schedule
+                await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                continue
+            
+            # --- End of Filtering Checks ---
+
+            # Initialize status entry for this device
             status_entry = {
                 "name": device_name,
-                "priority": device_priority,
+                "priority": int(device.get(CONF_DEVICE_PRIORITY, 50)),
                 "entity_id": relay_entity,
                 "mode_entity_id": mode_select_entity,
                 "mode": None,
                 "percent_target": 0.0,
                 "percent_actual": 0.0,
                 "allocated_w": 0.0,
-                "min_expected_w": float(min_expected_w),
-                "max_expected_w": float(max_expected_w),
+                "min_expected_w": float(device.get(CONF_MIN_EXPECTED_W, 0) or 0),
+                "max_expected_w": float(device.get(CONF_MAX_EXPECTED_W, 0) or 0),
             }
-            service_domain = None
-            if relay_entity and isinstance(relay_entity, str) and "." in relay_entity:
-                service_domain = relay_entity.split(".")[0]
-            if not relay_entity or service_domain not in SUPPORTED_DOMAINS:
-                log_warning(f"Unsupported or missing relay entity domain for {device_name}: {relay_entity}")
-                continue
-            relay_state_obj = hass.states.get(relay_entity)
-            if relay_state_obj is None or relay_state_obj.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-                log_debug(f"Relay entity {relay_entity} not found or not available yet for device {device_name}, skipping this cycle")
-                continue
-            if not is_device_in_schedule(device, now):
-                log_debug(f"Device {device_name} is outside scheduled time, skipping")
-                await hass.services.async_call(
-                    service_domain, SERVICE_TURN_OFF,
-                    {ATTR_ENTITY_ID: relay_entity},
-                    blocking=False
-                )
-                continue
+
+            # Hysteresis and threshold calculation
+            min_expected_w = status_entry["min_expected_w"]
+            effective_min_power = max(min_expected_w, DEFAULT_MIN_START_W_LOCAL)
+            on_threshold = effective_min_power + (HYSTERESIS_W_LOCAL / 2.0)
+            off_threshold = max(0.0, effective_min_power - (HYSTERESIS_W_LOCAL / 2.0))
+            prev_on = bool(device_on_state.get(device_id, False))
+            is_active = remaining_power >= (off_threshold if prev_on else on_threshold)
+
+            # Logic for standard devices
             if device_type == DEVICE_TYPE_STANDARD:
                 if is_active:
                     log_debug(f"Turning on standard device {device_name}")
+                    # Call turn_on service based on domain
                     if service_domain == DOMAIN_LIGHT:
-                        await hass.services.async_call(
-                            DOMAIN_LIGHT, SERVICE_TURN_ON,
-                            {ATTR_ENTITY_ID: relay_entity, ATTR_BRIGHTNESS: MAX_BRIGHTNESS},
-                            blocking=False
-                        )
+                        await hass.services.async_call(DOMAIN_LIGHT, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity, ATTR_BRIGHTNESS: MAX_BRIGHTNESS}, blocking=False)
                     elif service_domain == DOMAIN_CLIMATE:
-                        mode = hvac_mode or "heat"
-                        await hass.services.async_call(
-                            DOMAIN_CLIMATE, "set_hvac_mode",
-                            {ATTR_ENTITY_ID: relay_entity, "hvac_mode": mode},
-                            blocking=False
-                        )
+                        await hass.services.async_call(DOMAIN_CLIMATE, "set_hvac_mode", {ATTR_ENTITY_ID: relay_entity, "hvac_mode": hvac_mode or "heat"}, blocking=False)
                     else:
-                        await hass.services.async_call(
-                            service_domain, SERVICE_TURN_ON,
-                            {ATTR_ENTITY_ID: relay_entity},
-                            blocking=False
-                        )
-                    cap = max_expected_w if max_expected_w > 0 else (DEFAULT_MIN_START_W_LOCAL * 3)
+                        await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                    
+                    # Allocate power
+                    cap = status_entry["max_expected_w"] if status_entry["max_expected_w"] > 0 else (DEFAULT_MIN_START_W_LOCAL * 3)
                     power_used = min(remaining_power, cap)
                     remaining_power -= power_used
-                    if device_id:
-                        power_allocation[device_id] = power_used
-                        status_entry["allocated_w"] = float(power_used)
-                        status_entry["percent_target"] = 100.0
-                        status_entry["percent_actual"] = 100.0
+                    if device_id: power_allocation[device_id] = power_used
+                    status_entry.update({"allocated_w": float(power_used), "percent_target": 100.0, "percent_actual": 100.0})
                 else:
-                    log_debug(f"Turning off standard device {device_name} (remaining power {remaining_power}W below effective threshold {effective_min_power}W)")
+                    log_debug(f"Turning off standard device {device_name} (remaining power {remaining_power}W below threshold)")
+                    # Call turn_off service based on domain
                     if service_domain == DOMAIN_CLIMATE:
-                        await hass.services.async_call(
-                            DOMAIN_CLIMATE, "set_hvac_mode",
-                            {ATTR_ENTITY_ID: relay_entity, "hvac_mode": "off"},
-                            blocking=False
-                        )
+                        await hass.services.async_call(DOMAIN_CLIMATE, "set_hvac_mode", {ATTR_ENTITY_ID: relay_entity, "hvac_mode": "off"}, blocking=False)
                     else:
-                        await hass.services.async_call(
-                            service_domain, SERVICE_TURN_OFF,
-                            {ATTR_ENTITY_ID: relay_entity},
-                            blocking=False
-                        )
-                    status_entry["percent_target"] = 0.0
-                    status_entry["percent_actual"] = 0.0
-                    status_entry["allocated_w"] = 0.0
+                        await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                    status_entry.update({"percent_target": 0.0, "percent_actual": 0.0, "allocated_w": 0.0})
+            
+            # Logic for custom (ESPHome) devices
             elif device_type == DEVICE_TYPE_CUSTOM:
                 if not mode_select_entity:
-                    log_warning(f"Custom device {device_name} has no mode select entity")
-                    if device_id:
-                        device_status[device_id] = status_entry
+                    log_warning(f"Custom device {device_name} has no mode select entity, skipping.")
+                    if device_id: device_filter_reasons[device_id] = "Custom device missing mode select entity"
                     continue
+
                 mode_state = hass.states.get(mode_select_entity)
                 if not mode_state or mode_state.state == RELAY_MODE_OFF:
                     log_debug(f"Device {device_name} is in Off mode, skipping")
+                    if device_id: device_filter_reasons[device_id] = "Device mode is Off"
                     status_entry["mode"] = RELAY_MODE_OFF
-                    status_entry["percent_target"] = 0.0
-                    status_entry["percent_actual"] = 0.0
-                    status_entry["allocated_w"] = 0.0
-                    if device_id:
-                        device_status[device_id] = status_entry
-                    continue
-                status_entry["mode"] = mode_state.state
-                if mode_state.state == RELAY_MODE_PROPORTIONAL:
-                    if is_active:
-                        if max_expected_w <= 0:
-                            log_warning(f"Device {device_name} in Proportional has no max_expected_w; forcing 0%/OFF")
-                            status_entry["percent_target"] = 0.0
-                            if service_domain == DOMAIN_LIGHT:
-                                ramp_targets[relay_entity] = 0.0
+                else:
+                    status_entry["mode"] = mode_state.state
+                    if mode_state.state == RELAY_MODE_PROPORTIONAL:
+                        if is_active:
+                            max_w = status_entry["max_expected_w"]
+                            if max_w <= 0:
+                                log_warning(f"Device {device_name} in Proportional has no max_expected_w; forcing 0%/OFF")
+                                target_percent = 0.0
                             else:
-                                await hass.services.async_call(
-                                    service_domain, SERVICE_TURN_OFF,
-                                    {ATTR_ENTITY_ID: relay_entity},
-                                    blocking=False
-                                )
-                                status_entry["percent_actual"] = 0.0
-                        else:
-                            power_percent = min(MAX_PERCENTAGE, max(5, (remaining_power / max_expected_w) * 100))
-                            target_percent = min(power_percent, DEVICE_MAX_PERCENT_DEFAULT)
+                                power_percent = min(MAX_PERCENTAGE, max(5, (remaining_power / max_w) * 100))
+                                target_percent = min(power_percent, DEVICE_MAX_PERCENT_DEFAULT)
+                            
                             log_debug(f"Proportional target for {device_name}: {target_percent}% (remaining power: {remaining_power}W)")
                             status_entry["percent_target"] = float(target_percent)
-                            if service_domain == DOMAIN_LIGHT:
-                                ramp_targets[relay_entity] = target_percent
-                            else:
-                                await hass.services.async_call(
-                                    service_domain, SERVICE_TURN_ON,
-                                    {ATTR_ENTITY_ID: relay_entity},
-                                    blocking=False
-                                )
-                                status_entry["percent_actual"] = float(target_percent)
-                            cap_total = max_expected_w
-                            power_used = min(remaining_power, cap_total * (target_percent / MAX_PERCENTAGE))
+                            if service_domain == DOMAIN_LIGHT: ramp_targets[relay_entity] = target_percent
+                            else: await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                            
+                            power_used = min(remaining_power, max_w * (target_percent / MAX_PERCENTAGE))
                             remaining_power -= power_used
-                            if device_id:
-                                power_allocation[device_id] = power_used
-                                status_entry["allocated_w"] = float(power_used)
-                    else:
-                        log_debug(f"Proportional below threshold for {device_name} → target 0 / OFF")
-                        status_entry["percent_target"] = 0.0
-                        if service_domain == DOMAIN_LIGHT:
-                            ramp_targets[relay_entity] = 0.0
-                        else:
-                            await hass.services.async_call(
-                                service_domain, SERVICE_TURN_OFF,
-                                {ATTR_ENTITY_ID: relay_entity},
-                                blocking=False
-                            )
-                            status_entry["percent_actual"] = 0.0
-                elif mode_state.state == RELAY_MODE_ON:
-                    if remaining_power >= effective_min_power:
-                        log_debug(f"Device {device_name} is in On mode with enough excess, setting to full power")
-                        if service_domain == DOMAIN_LIGHT:
-                            await hass.services.async_call(
-                                DOMAIN_LIGHT, SERVICE_TURN_ON,
-                                {ATTR_ENTITY_ID: relay_entity, ATTR_BRIGHTNESS: MAX_BRIGHTNESS},
-                                blocking=False
-                            )
-                        else:
-                            await hass.services.async_call(
-                                service_domain, SERVICE_TURN_ON,
-                                {ATTR_ENTITY_ID: relay_entity},
-                                blocking=False
-                            )
-                        cap = max_expected_w if max_expected_w > 0 else (DEFAULT_MIN_START_W_LOCAL * 3)
-                        power_used = min(remaining_power, cap)
-                        remaining_power -= power_used
-                        if device_id:
-                            power_allocation[device_id] = power_used
+                            if device_id: power_allocation[device_id] = power_used
                             status_entry["allocated_w"] = float(power_used)
-                            status_entry["percent_target"] = 100.0
-                            status_entry["percent_actual"] = 100.0
-                    else:
-                        log_debug(f"Device {device_name} is in On mode but remaining power {remaining_power}W is below threshold {effective_min_power}W; turning off")
-                        await hass.services.async_call(
-                            service_domain, SERVICE_TURN_OFF,
-                            {ATTR_ENTITY_ID: relay_entity},
-                            blocking=False
-                        )
+                        else:
+                            log_debug(f"Proportional below threshold for {device_name} -> target 0 / OFF")
+                            if service_domain == DOMAIN_LIGHT: ramp_targets[relay_entity] = 0.0
+                            else: await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                    
+                    elif mode_state.state == RELAY_MODE_ON:
+                        if remaining_power >= effective_min_power:
+                            log_debug(f"Device {device_name} is in On mode with enough excess, setting to full power")
+                            if service_domain == DOMAIN_LIGHT:
+                                await hass.services.async_call(DOMAIN_LIGHT, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity, ATTR_BRIGHTNESS: MAX_BRIGHTNESS}, blocking=False)
+                            else:
+                                await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                            
+                            cap = status_entry["max_expected_w"] if status_entry["max_expected_w"] > 0 else (DEFAULT_MIN_START_W_LOCAL * 3)
+                            power_used = min(remaining_power, cap)
+                            remaining_power -= power_used
+                            if device_id: power_allocation[device_id] = power_used
+                            status_entry.update({"allocated_w": float(power_used), "percent_target": 100.0, "percent_actual": 100.0})
+                        else:
+                            log_debug(f"Device {device_name} is in On mode but not enough power, turning off")
+                            await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+
+            # Finalize status for this device
             if device_id:
                 device_status[device_id] = status_entry
                 device_on_state[device_id] = is_active
+
+        # Update global state
         entry_data[CONF_POWER_DISTRIBUTION] = {
             "total_power": excess_power,
             "remaining_power": remaining_power,
             "allocated_power": excess_power - remaining_power,
             "allocation": power_allocation.copy()
         }
-        entry_data["device_status"] = device_status
+        # Note: device_status and device_filter_reasons are already updated in entry_data by reference
         entry_data["device_on_state"] = device_on_state
         async_dispatcher_send(hass, f"{SIGNAL_POWER_DISTRIBUTION_UPDATED}_{config_entry.entry_id}")
     
