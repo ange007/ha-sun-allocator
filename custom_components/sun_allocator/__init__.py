@@ -88,36 +88,6 @@ SET_RELAY_POWER_SCHEMA = vol.Schema({
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
-    # MIGRATION of device keys
-    new_data = config_entry.data.copy()
-    devices = new_data.get(CONF_DEVICES, [])
-    migrated = False
-    new_devices = []
-    for device in devices:
-        new_device = device.copy()
-        if "id" in new_device:
-            new_device[CONF_DEVICE_ID] = new_device.pop("id")
-            migrated = True
-        if "name" in new_device:
-            new_device[CONF_DEVICE_NAME] = new_device.pop("name")
-            migrated = True
-        if "type" in new_device:
-            new_device[CONF_DEVICE_TYPE] = new_device.pop("type")
-            migrated = True
-        if "esphome_relay_entity" in new_device:
-            if CONF_DEVICE_ENTITY not in new_device:
-                new_device[CONF_DEVICE_ENTITY] = new_device.pop("esphome_relay_entity")
-            else:
-                new_device.pop("esphome_relay_entity")
-            migrated = True
-        new_devices.append(new_device)
-
-    if migrated:
-        log_warning("Migrating device configuration to new keys.")
-        new_data[CONF_DEVICES] = new_devices
-        hass.config_entries.async_update_entry(config_entry, data=new_data)
-        return True
-
     log_warning("--- COMPONENT SETUP ---: Loading entry. Devices Str: %s. Data: %s", config_entry.data.get('devices_str', 'MISSING'), config_entry.data)
     # Store config entry data EARLY so it's available for all listeners
     hass.data.setdefault(DOMAIN, {})
