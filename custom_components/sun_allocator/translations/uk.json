@@ -84,7 +84,7 @@
       },
       "device_selection": {
         "data": {
-          "esphome_relay_entity": "Сутність ESPHome Реле",
+          "device_entity": "Сутність Пристрою",
           "esphome_mode_select_entity": "Сутність Вибору Режиму ESPHome",
           "no_devices_found": "Пристрої не знайдено"
         }

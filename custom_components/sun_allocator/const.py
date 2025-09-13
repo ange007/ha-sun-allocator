@@ -28,12 +28,9 @@ PANEL_CONFIG_PARALLEL = "parallel"
 PANEL_CONFIG_PARALLEL_SERIES = "parallel-series"
 
 # Device configuration keys
-# ESPHome relay entity (legacy/ESPHome-specific)
-CONF_ESPHOME_RELAY_ENTITY = "esphome_relay_entity"  # entity_id for ESPHome relay
-CONF_ESPHOME_MODE_SELECT_ENTITY = "esphome_mode_select_entity"  # ESPHome mode select entity
-# Universal device entity (switch, light, climate, etc)
-CONF_DEVICE_ENTITY = "device_entity"  # entity_id for standard device
-CONF_DEVICE_ENTITY_FRIENDLY_NAME = "device_entity_friendly_name"  # friendly_name for UI
+CONF_DEVICE_ENTITY = "device_entity"
+CONF_ESPHOME_MODE_SELECT_ENTITY = "esphome_mode_select_entity"
+CONF_DEVICE_ENTITY_FRIENDLY_NAME = "device_entity_friendly_name"
 CONF_AUTO_CONTROL_ENABLED = "auto_control_enabled"
 CONF_MIN_EXCESS_POWER = "min_excess_power"
 
@@ -91,8 +88,8 @@ CONF_TEMP_COEFFICIENT_PMAX = "temp_coefficient_pmax"
 
 # Multiple device support
 CONF_DEVICES = "devices"
-CONF_DEVICE_ID = "id"
-CONF_DEVICE_NAME = "name"
+CONF_DEVICE_ID = "device_id"
+CONF_DEVICE_NAME = "device_name"
 CONF_DEVICE_PRIORITY = "priority"
 
 # Configuration flow steps
@@ -164,8 +161,8 @@ MAX_PERCENTAGE = 100
 MIN_PERCENTAGE = 0
 
 # Variant A defaults
-DEFAULT_MIN_START_W = 75.0  # small default start threshold to avoid flicker
-DEFAULT_HYSTERESIS_W = 40.0  # hysteresis band width in watts
+DEFAULT_MIN_START_W = 75.0
+DEFAULT_HYSTERESIS_W = 40.0
 
 # Dictionary keys for sensor values
 KEY_PV_POWER = "pv_power"

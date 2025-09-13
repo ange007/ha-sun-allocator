@@ -81,7 +81,7 @@ def build_device_selection_schema(entities, device_type, defaults=None):
             default=default_entity,
             description={
                 "suggested_value": default_entity,
-                "label": "config.step.device_selection.data.esphome_relay_entity"
+                "label": "config.step.device_selection.data.device_entity"
             }
         ): SelectSelectorBuilder(options).build()
     })

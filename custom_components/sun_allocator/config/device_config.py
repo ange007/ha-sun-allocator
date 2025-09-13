@@ -65,7 +65,7 @@ class DeviceConfigMixin:
             DOMAIN_CLIMATE: "🌡️",
         }
         all_entities = []
-        device_type = getattr(self, '_device_config', {}).get('device_type', None) or getattr(self, '_device_config', {}).get('type', None)
+        device_type = getattr(self, '_device_config', {}).get(CONF_DEVICE_TYPE)
         for e in hass.states.async_all():
             domain = e.entity_id.split(".")[0]
             icon = icon_map.get(domain, "")
@@ -73,7 +73,7 @@ class DeviceConfigMixin:
             friendly = e.attributes.get("friendly_name", "")
             # ESPHome only: entity_id contains 'esphome' (e.g. switch.esphome_*)
             is_esphome = ".esphome_" in e.entity_id or e.attributes.get("integration") == "esphome"
-            if device_type == "custom":
+            if device_type == DEVICE_TYPE_CUSTOM:
                 # Only ESPHome relays (switch, light, input_boolean, script, automation) with esphome in entity_id
                 if domain in [DOMAIN_SWITCH, DOMAIN_LIGHT, DOMAIN_INPUT_BOOLEAN, DOMAIN_SCRIPT, DOMAIN_AUTOMATION] and is_esphome:
                     value, _ = clean_entity_id_and_mode(e.entity_id)

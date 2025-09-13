@@ -1,4 +1,3 @@
-
 """Power Distribution sensor for SunAllocator.
 Provides overview of total allocated power with per-device allocation in W and % plus metadata.
 """
@@ -15,10 +14,16 @@ from ...utils.journal import journal_event
 
 from ...const import (
     DOMAIN,
+    CONF_DEVICES,
     CONF_POWER_DISTRIBUTION,
     SIGNAL_POWER_DISTRIBUTION_UPDATED,
     SENSOR_NAME_PREFIX,
     SENSOR_ID_PREFIX,
+    CONF_DEVICE_ID,
+    CONF_DEVICE_NAME,
+    CONF_DEVICE_TYPE,
+    CONF_DEVICE_ENTITY,
+    CONF_AUTO_CONTROL_ENABLED,
 )
 
 class SunAllocatorPowerDistributionSensor(SensorEntity):
@@ -60,36 +65,30 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
 
             # Get all configured devices from config (for diagnostics)
             config = data.get("config", {})
-            all_devices = config.get("devices", []) or []
+            all_devices = config.get(CONF_DEVICES, []) or []
             all_devices_info = []
             all_device_ids = []
             ha_entity_ids = set(e.entity_id for e in self._hass.states.async_all())
             filter_reasons = data.get("device_filter_reasons", {})
             for d in all_devices:
-                dev_id = d.get("id") or d.get("device_id") or d.get("entity_id")
-                entity_id = d.get("entity_id") or d.get("esphome_relay_entity") or d.get("device_entity")
-                device_type = d.get("type") or d.get("device_type")
-                name = d.get("name") or d.get("device_name")
+                dev_id = d.get(CONF_DEVICE_ID)
+                entity_id = d.get(CONF_DEVICE_ENTITY)
+                device_type = d.get(CONF_DEVICE_TYPE)
+                name = d.get(CONF_DEVICE_NAME)
                 reason = None
                 if not entity_id:
                     reason = "No entity_id configured"
                 elif entity_id not in ha_entity_ids:
                     reason = "Entity not found in Home Assistant"
                 elif dev_id not in device_status:
-                    if dev_id in filter_reasons:
-                        reason = f"Filtered: {filter_reasons[dev_id]}"
-                    else:
-                        reason = "Not present in device_status (processing skipped or failed)"
-
-                if reason:
-                    log_debug("Device '%s' (%s) filtered from power distribution. Reason: %s", name, dev_id, reason)
+                    reason = filter_reasons.get(dev_id, "Filtered (unknown reason)")
                 
                 all_devices_info.append({
                     "id": dev_id,
                     "name": name,
                     "entity_id": entity_id,
                     "type": device_type,
-                    "auto_control": d.get("auto_control_enabled", "missing"),
+                    "auto_control": d.get(CONF_AUTO_CONTROL_ENABLED, "missing"),
                     "in_device_status": dev_id in device_status,
                     "reason": reason,
                 })
@@ -100,13 +99,13 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                 for dev_id in device_status.keys():
                     all_devices_info.append({
                         "id": dev_id,
-                        "name": device_status[dev_id].get("name"),
-                        "entity_id": device_status[dev_id].get("entity_id"),
-                        "type": device_status[dev_id].get("type"),
+                        "name": device_status[dev_id].get(CONF_DEVICE_NAME),
+                        "entity_id": device_status[dev_id].get(CONF_DEVICE_ENTITY),
+                        "type": device_status[dev_id].get(CONF_DEVICE_TYPE),
                         "in_device_status": True,
                         "reason": None,
                     })
-                    all_device_ids.append(device_status[dev_id].get("entity_id"))
+                    all_device_ids.append(device_status[dev_id].get(CONF_DEVICE_ENTITY))
             not_found_entities = [eid for eid in all_device_ids if eid not in ha_entity_ids]
 
             total = float(pd.get("total_power", 0.0) or 0.0)
@@ -127,7 +126,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             reasons = {}
             for dev_id, st in device_status.items():
                 reason = []
-                if st.get("auto_control_enabled") is False:
+                if st.get(CONF_AUTO_CONTROL_ENABLED) is False:
                     reason.append("Auto control disabled")
                 if st.get("schedule_enabled") and not st.get("schedule_active", True):
                     reason.append("Out of schedule")

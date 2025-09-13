@@ -31,7 +31,6 @@ from .const import (
     RELAY_MODE_OFF,
     RELAY_MODE_ON,
     RELAY_MODE_PROPORTIONAL,
-    CONF_ESPHOME_RELAY_ENTITY,
     CONF_ESPHOME_MODE_SELECT_ENTITY,
     CONF_DEVICE_ENTITY,
     CONF_AUTO_CONTROL_ENABLED,
@@ -89,6 +88,36 @@ SET_RELAY_POWER_SCHEMA = vol.Schema({
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
+    # MIGRATION of device keys
+    new_data = config_entry.data.copy()
+    devices = new_data.get(CONF_DEVICES, [])
+    migrated = False
+    new_devices = []
+    for device in devices:
+        new_device = device.copy()
+        if "id" in new_device:
+            new_device[CONF_DEVICE_ID] = new_device.pop("id")
+            migrated = True
+        if "name" in new_device:
+            new_device[CONF_DEVICE_NAME] = new_device.pop("name")
+            migrated = True
+        if "type" in new_device:
+            new_device[CONF_DEVICE_TYPE] = new_device.pop("type")
+            migrated = True
+        if "esphome_relay_entity" in new_device:
+            if CONF_DEVICE_ENTITY not in new_device:
+                new_device[CONF_DEVICE_ENTITY] = new_device.pop("esphome_relay_entity")
+            else:
+                new_device.pop("esphome_relay_entity")
+            migrated = True
+        new_devices.append(new_device)
+
+    if migrated:
+        log_warning("Migrating device configuration to new keys.")
+        new_data[CONF_DEVICES] = new_devices
+        hass.config_entries.async_update_entry(config_entry, data=new_data)
+        return True
+
     log_warning("--- COMPONENT SETUP ---: Loading entry. Devices Str: %s. Data: %s", config_entry.data.get('devices_str', 'MISSING'), config_entry.data)
     # Store config entry data EARLY so it's available for all listeners
     hass.data.setdefault(DOMAIN, {})
@@ -105,11 +134,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
         if devices:
             log_info("[Startup] Loaded %d devices from config_entry.data:", len(devices))
             for d in devices:
-                log_info("[Startup] Device: id=%s, name=%s, type=%s, entity=%s",
+                log_info("[Startup] Device: device_id=%s, device_name=%s, device_type=%s, device_entity=%s",
                     d.get(CONF_DEVICE_ID),
                     d.get(CONF_DEVICE_NAME),
                     d.get(CONF_DEVICE_TYPE),
-                    d.get(CONF_ESPHOME_RELAY_ENTITY) or d.get(CONF_DEVICE_ENTITY)
+                    d.get(CONF_DEVICE_ENTITY)
                 )
         else:
             log_info("[Startup] No devices loaded from config_entry.data.")
@@ -155,9 +184,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     relay_entities = set()
     mode_entities = set()
     for device in config_entry.data.get(CONF_DEVICES, []):
-        device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-        relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else device.get(CONF_DEVICE_ENTITY)
-        mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY) if device_type == DEVICE_TYPE_CUSTOM else None
+        relay_entity = device.get(CONF_DEVICE_ENTITY)
+        mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
         if relay_entity:
             relay_entities.add(relay_entity)
         if mode_select_entity:
@@ -318,7 +346,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     async def _enforce_all_off(reason: str):
         devices_cfg = config_entry.data.get(CONF_DEVICES, [])
         for d in devices_cfg:
-            entity_id = d.get(CONF_ESPHOME_RELAY_ENTITY)
+            entity_id = d.get(CONF_DEVICE_ENTITY)
             if not entity_id:
                 continue
             domain = entity_id.split(".")[0]
@@ -377,12 +405,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     entity_to_device_id = {}
     for d in auto_control_devices:
         did = d.get(CONF_DEVICE_ID)
-        # Use the correct config field for entity_id
-        device_type = d.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-        if device_type == DEVICE_TYPE_CUSTOM:
-            eid = d.get(CONF_ESPHOME_RELAY_ENTITY)
-        else:
-            eid = d.get(CONF_DEVICE_ENTITY)
+        eid = d.get(CONF_DEVICE_ENTITY)
         if eid and did:
             entity_to_device_id[eid] = did
     entry_data["entity_to_device_id"] = entity_to_device_id
@@ -486,19 +509,14 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         DEVICE_MAX_PERCENT_DEFAULT = 90.0
 
         for device in auto_control_devices:
+            log_debug("Processing device in auto-control: %s", device)
             device_id = device.get(CONF_DEVICE_ID)
-            device_name = device.get(CONF_DEVICE_NAME, "Unknown")
+            device_name = device.get(CONF_DEVICE_NAME)
 
             # Determine entity_id and type
-            device_type = device.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
-            if device_type == DEVICE_TYPE_STANDARD:
-                relay_entity = device.get(CONF_DEVICE_ENTITY)
-                mode_select_entity = None
-                hvac_mode = device.get("hvac_mode")
-            else: # DEVICE_TYPE_CUSTOM
-                relay_entity = device.get(CONF_ESPHOME_RELAY_ENTITY)
-                mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
-                hvac_mode = None
+            relay_entity = device.get(CONF_DEVICE_ENTITY)
+            mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
+            hvac_mode = device.get("hvac_mode")
 
             # --- Start of Filtering Checks ---
             service_domain = relay_entity.split(".")[0] if relay_entity and "." in relay_entity else None
@@ -545,6 +563,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             is_active = remaining_power >= (off_threshold if prev_on else on_threshold)
 
             # Logic for standard devices
+            device_type = device.get(CONF_DEVICE_TYPE)
             if device_type == DEVICE_TYPE_STANDARD:
                 if is_active:
                     log_debug(f"Turning on standard device {device_name}")
