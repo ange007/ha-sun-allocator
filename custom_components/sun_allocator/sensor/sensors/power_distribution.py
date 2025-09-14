@@ -84,12 +84,12 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                     reason = filter_reasons.get(dev_id, "Filtered (unknown reason)")
                 
                 all_devices_info.append({
-                    "id": dev_id,
+                    "device_id": dev_id,
                     "name": name,
                     "entity_id": entity_id,
                     "type": device_type,
                     "auto_control": d.get(CONF_AUTO_CONTROL_ENABLED, "missing"),
-                    "in_device_status": dev_id in device_status,
+                    "in_device_status": dev_id in device_status if dev_id else False,
                     "reason": reason,
                 })
                 if entity_id:

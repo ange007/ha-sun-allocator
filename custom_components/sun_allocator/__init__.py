@@ -479,6 +479,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         DEVICE_MAX_PERCENT_DEFAULT = 90.0
 
         for device in auto_control_devices:
+            log_warning("Processing device in auto-control: %s", device)
             log_debug("Processing device in auto-control: %s", device)
             device_id = device.get(CONF_DEVICE_ID)
             device_name = device.get(CONF_DEVICE_NAME)
