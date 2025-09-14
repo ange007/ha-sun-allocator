@@ -54,23 +54,10 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         self._config = config
         self._entry_id = entry_id
 
-        # Try to extract a numeric suffix from entry_id, fallback to entry_id
-        numeric_suffix = None
-        if entry_id.isdigit():
-            numeric_suffix = entry_id
-        else:
-            # Try to extract trailing digits
-            import re
-            m = re.search(r'(\d+)$', entry_id)
-            if m:
-                numeric_suffix = m.group(1)
-            else:
-                numeric_suffix = entry_id[-4:]  # fallback: last 4 chars
-
         # Sensor identification
         self._attr_name = f"{SENSOR_NAME_PREFIX} {name}"
-        self._attr_unique_id = f"{SENSOR_ID_PREFIX}_{unique_id_suffix}_{numeric_suffix}"
-        self.entity_id = f"sensor.{SENSOR_ID_PREFIX}_{unique_id_suffix}_{numeric_suffix}"
+        self._attr_unique_id = f"{SENSOR_ID_PREFIX}_{unique_id_suffix}_{entry_id}"
+        self.entity_id = f"sensor.{SENSOR_ID_PREFIX}_{unique_id_suffix}_{entry_id}"
         self._attr_native_unit_of_measurement = unit_of_measurement
         
         # Configuration values

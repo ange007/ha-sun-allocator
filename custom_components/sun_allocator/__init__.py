@@ -1,3 +1,4 @@
+import asyncio
 import voluptuous as vol
 from datetime import time, datetime, timedelta
 
@@ -265,6 +266,7 @@ def is_device_in_schedule(device, now=None):
         return start_time <= current_time <= end_time
 
 async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
+    log_warning("--- SETUP AUTO CONTROL ---")
     """Set up automatic control of the relay based on excess power."""
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
     
@@ -656,31 +658,35 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         hass, [excess_sensor_id, legacy_excess_sensor_id], handle_state_change
     )
 
-    # Perform an initial pass based on the current state of the excess sensor (prefer entry_id-based, fallback to legacy)
-    initial_state = hass.states.get(excess_sensor_id) or hass.states.get(legacy_excess_sensor_id)
-    if initial_state and initial_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-        try:
-            excess_power = float(initial_state.state)
-            # Watchdog touch on initial read to avoid false stale trigger
-            entry_data["watchdog_last_seen"] = dt_util.utcnow()
-            entry_data["watchdog_alerted"] = False
-            await process_excess_power(excess_power)
-            log_info(
-                "Performed initial auto-control pass based on current excess from %s: %sW",
-                initial_state.entity_id,
-                excess_power,
-            )
-        except (ValueError, TypeError):
-            log_debug(
-                "Excess sensor state is not numeric yet for initial pass: %s",
-                initial_state.state,
-            )
-    else:
-        log_debug(
-            "Neither %s nor %s are ready (unknown/unavailable) for initial pass", 
-            excess_sensor_id,
-            legacy_excess_sensor_id,
-        )
+    # Perform an initial pass with retry logic
+    async def initial_pass_with_retry():
+        for i in range(3): # Try 3 times
+            initial_state = hass.states.get(excess_sensor_id) or hass.states.get(legacy_excess_sensor_id)
+            log_warning("--- INITIAL PASS (attempt %d) ---: excess_sensor_id=%s, initial_state=%s", i + 1, excess_sensor_id, initial_state)
+            if initial_state and initial_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                try:
+                    excess_power = float(initial_state.state)
+                    entry_data["watchdog_last_seen"] = dt_util.utcnow()
+                    entry_data["watchdog_alerted"] = False
+                    await process_excess_power(excess_power)
+                    log_info(
+                        "Performed initial auto-control pass based on current excess from %s: %sW",
+                        initial_state.entity_id,
+                        excess_power,
+                    )
+                    return # Success
+                except (ValueError, TypeError):
+                    log_debug(
+                        "Excess sensor state is not numeric yet for initial pass: %s",
+                        initial_state.state,
+                    )
+            
+            # Wait before retrying
+            await asyncio.sleep(5 * (i + 1)) # 5s, 10s, 15s
+        
+        log_warning("Failed to perform initial pass after multiple retries. Excess sensor might be unavailable.")
+
+    hass.async_create_task(initial_pass_with_retry())
     
     log_info(f"Auto-control set up for {len(auto_control_devices)} devices")
 
