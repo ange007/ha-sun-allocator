@@ -43,7 +43,7 @@ def build_solar_config_schema(sensors, defaults=None):
                 "suggested_value": defaults.get(CONF_PV_POWER),
                 "label": "config.step.settings.data.pv_power"
             },
-        ): selector({"entity": {}}),
+        ): SelectSelectorBuilder(sensors.get("power_sensors", [])).build(),
         Required(
             CONF_PV_VOLTAGE,
             default=defaults.get(CONF_PV_VOLTAGE),
@@ -51,7 +51,7 @@ def build_solar_config_schema(sensors, defaults=None):
                 "suggested_value": defaults.get(CONF_PV_VOLTAGE),
                 "label": "config.step.settings.data.pv_voltage"
             },
-        ): selector({"entity": {}}),
+        ): SelectSelectorBuilder(sensors.get("voltage_sensors", [])).build(),
         Required(
             CONF_VMP,
             default=defaults.get(CONF_VMP, 36.0),
@@ -107,13 +107,13 @@ def build_solar_config_schema(sensors, defaults=None):
                 "suggested_value": default_consumption,
                 "label": "config.step.settings.data.consumption"
             },
-        ): selector({"entity": {}}),
-        Optional(
+        ): SelectSelectorBuilder(sensors.get("consumption_sensors", [])).build(),
+        Required(
             CONF_BATTERY_POWER,
             default=default_battery_power,
             description={
                 "suggested_value": default_battery_power,
                 "label": "config.step.settings.data.battery_power"
             },
-        ): selector({"entity": {}}),
+        ): SelectSelectorBuilder(sensors.get("battery_sensors", [])).build(),
     })

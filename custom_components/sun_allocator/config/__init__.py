@@ -71,13 +71,11 @@ class SunAllocatorConfigFlow(
             selected_device_id = user_input.get(CONF_DEVICE_ID)
 
             if action == ACTION_ADD:
-                # Add a new device
                 self._action = ACTION_ADD
                 self._device_config = {}
                 return await self.async_step_device_name_type()
 
             elif action == ACTION_EDIT:
-                # Edit an existing device (requires selected device)
                 if selected_device_id:
                     self._action = ACTION_EDIT
                     self._device_index = next(
@@ -87,56 +85,68 @@ class SunAllocatorConfigFlow(
                     if self._device_index is not None:
                         self._device_config = self._devices[self._device_index].copy()
                         return await self.async_step_device_name_type()
-                # If no device selected, stay and show error
-                errors[CONF_DEVICE_ID] = "device_name_required"
+                errors[CONF_DEVICE_ID] = "device_not_selected"
+                return await self.async_step_devices(None) # Re-show form with error
 
             elif action == ACTION_REMOVE:
-                # Remove a device (requires selected device)
                 if selected_device_id:
                     self._devices = [d for d in self._devices if d[CONF_DEVICE_ID] != selected_device_id]
-                    # Stay on the devices page
-                    return await self.async_step_devices()
-                errors[CONF_DEVICE_ID] = "device_name_required"
+                    return await self.async_step_devices(None) # Re-show form
+                errors[CONF_DEVICE_ID] = "device_not_selected"
+                return await self.async_step_devices(None) # Re-show form with error
 
             elif action == ACTION_FINISH:
-                # Finish configuration
                 data = self._solar_config.copy()
                 data[CONF_DEVICES] = self._devices
                 return self.async_create_entry(title="SunAllocator", data=data)
+            
+            elif action == ACTION_BACK:
+                # This is tricky in the initial flow. Let's just go back to user step.
+                return await self.async_step_user()
+
 
         from ..utils.ui_helpers import SelectSelectorBuilder
-        # Build devices dropdown: value=id, label=name
-        device_options = [
-            {"label": d[CONF_DEVICE_NAME], "value": d[CONF_DEVICE_ID]}
-            for d in self._devices
-        ]
-        # Build action dropdown for this step
-        action_options = [
-            {"label": "Back", "value": ACTION_BACK},
-            {"label": "Edit", "value": ACTION_EDIT},
-            {"label": "Remove", "value": ACTION_REMOVE},
-        ]
+        
         schema_dict = {}
-        # Device selector
+        
         if self._devices:
+            device_options = [
+                {"label": d[CONF_DEVICE_NAME], "value": d[CONF_DEVICE_ID]}
+                for d in self._devices
+            ]
             default_device_id = self._devices[0][CONF_DEVICE_ID]
-            schema_dict[vol.Required(
+            schema_dict[vol.Optional(
                 CONF_DEVICE_ID,
                 default=default_device_id,
                 description={"suggested_value": default_device_id}
             )] = SelectSelectorBuilder(device_options).build()
-        # Action selector
+
+            action_options = [
+                {"label": "Add another device", "value": ACTION_ADD},
+                {"label": "Edit selected device", "value": ACTION_EDIT},
+                {"label": "Remove selected device", "value": ACTION_REMOVE},
+                {"label": "Finish", "value": ACTION_FINISH},
+            ]
+            default_action = ACTION_ADD
+        else:
+            action_options = [
+                {"label": "Add a device", "value": ACTION_ADD},
+                {"label": "Finish (no devices)", "value": ACTION_FINISH},
+            ]
+            default_action = ACTION_ADD
+
         schema_dict[vol.Required(
             CONF_ACTION,
-            default=ACTION_FINISH,
-            description={"suggested_value": ACTION_FINISH}
+            default=default_action,
+            description={"suggested_value": default_action}
         )] = SelectSelectorBuilder(action_options).build()
+        
         return self.async_show_form(
             step_id=STEP_DEVICES,
             data_schema=vol.Schema(schema_dict),
             description_placeholders={
                 "devices_count": len(self._devices),
-                "devices_list": ", ".join([d[CONF_DEVICE_NAME] for d in self._devices]) or "None",
+                "devices_list": ", ".join([d.get(CONF_DEVICE_NAME, "Unnamed") for d in self._devices]) or "None",
             },
             errors=errors,
         )

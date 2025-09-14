@@ -45,7 +45,6 @@ class SolarConfigMixin:
         battery_sensors = builder.build(filter_entities(sensor_entities, "battery"), none_option=False)
         # Add None option
         consumption_sensors = [{"label": "None", "value": NONE_OPTION}] + consumption_sensors
-        battery_sensors = [{"label": "None", "value": NONE_OPTION}] + battery_sensors
         
         return {
             "power_sensors": power_sensors,
@@ -102,9 +101,6 @@ class SolarConfigMixin:
         if user_input.get(CONF_CONSUMPTION) == NONE_OPTION:
             user_input[CONF_CONSUMPTION] = None
         
-        if user_input.get(CONF_BATTERY_POWER) == NONE_OPTION:
-            user_input[CONF_BATTERY_POWER] = None
-        
         return user_input
     
     def _get_solar_config_schema(self, sensors: Dict[str, list], defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
@@ -115,6 +111,13 @@ class SolarConfigMixin:
         """Handle the initial step - solar panel configuration."""
         errors = {}
         sensors = self._get_sensor_entities(self.hass)
+
+        if not sensors["power_sensors"]:
+            return self.async_abort(reason="no_power_sensors")
+        if not sensors["voltage_sensors"]:
+            return self.async_abort(reason="no_voltage_sensors")
+        if not sensors["battery_sensors"]:
+            return self.async_abort(reason="no_battery_sensors")
 
         if user_input is not None:
             # Validate input
