@@ -29,23 +29,11 @@ from ...const import (
 class SunAllocatorPowerDistributionSensor(SensorEntity):
     _attr_icon = "mdi:flash"
 
-    def __init__(self, hass: HomeAssistant, entry_id: str):
+    def __init__(self, hass: HomeAssistant, entry_id: str, entry_index: int):
         self._hass = hass
         self._entry_id = entry_id
-        # Try to extract a numeric suffix from entry_id, fallback to entry_id
-        numeric_suffix = None
-        if entry_id.isdigit():
-            numeric_suffix = entry_id
-        else:
-            import re
-            m = re.search(r'(\d+)$', entry_id)
-            if m:
-                numeric_suffix = m.group(1)
-            else:
-                numeric_suffix = entry_id[-4:]
-        self._attr_name = f"{SENSOR_NAME_PREFIX} Power Distribution"
-        self._attr_unique_id = f"{SENSOR_ID_PREFIX}_power_distribution_{numeric_suffix}"
-        self.entity_id = f"sensor.{SENSOR_ID_PREFIX}_power_distribution_{numeric_suffix}"
+        self._attr_name = f"{SENSOR_NAME_PREFIX} Power Distribution {entry_index}"
+        self._attr_unique_id = f"{entry_id}_power_distribution"
         self._attr_native_unit_of_measurement = UnitOfPower.WATT
         self._state = 0.0
         self._attr_extra_state_attributes: Dict[str, Any] = {}

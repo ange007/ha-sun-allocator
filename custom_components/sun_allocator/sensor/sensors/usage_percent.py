@@ -24,12 +24,13 @@ from ...const import (
 class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
     """Sensor for usage percentage of solar panels."""
     
-    def __init__(self, hass: HomeAssistant, config: Dict[str, Any], entry_id: str):
+    def __init__(self, hass: HomeAssistant, config: Dict[str, Any], entry_id: str, entry_index: int):
         """Initialize the usage percentage sensor."""
         super().__init__(
             hass=hass,
             config=config,
             entry_id=entry_id,
+            entry_index=entry_index,
             name="Usage Percent",
             unique_id_suffix="usage_percent",
             unit_of_measurement=PERCENTAGE

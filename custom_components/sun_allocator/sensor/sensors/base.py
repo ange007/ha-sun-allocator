@@ -45,6 +45,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         hass: HomeAssistant, 
         config: Dict[str, Any], 
         entry_id: str, 
+        entry_index: int,
         name: str, 
         unique_id_suffix: str,
         unit_of_measurement: str = "W"
@@ -55,9 +56,8 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         self._entry_id = entry_id
 
         # Sensor identification
-        self._attr_name = f"{SENSOR_NAME_PREFIX} {name}"
-        self._attr_unique_id = f"{SENSOR_ID_PREFIX}_{unique_id_suffix}_{entry_id}"
-        self.entity_id = f"sensor.{SENSOR_ID_PREFIX}_{unique_id_suffix}_{entry_id}"
+        self._attr_name = f"{SENSOR_NAME_PREFIX} {name} {entry_index}"
+        self._attr_unique_id = f"{entry_id}_{unique_id_suffix}"
         self._attr_native_unit_of_measurement = unit_of_measurement
         
         # Configuration values

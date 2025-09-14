@@ -23,12 +23,13 @@ from ...const import (
 class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
     """Sensor for maximum theoretical power."""
     
-    def __init__(self, hass: HomeAssistant, config: Dict[str, Any], entry_id: str):
+    def __init__(self, hass: HomeAssistant, config: Dict[str, Any], entry_id: str, entry_index: int):
         """Initialize the maximum power sensor."""
         super().__init__(
             hass=hass,
             config=config,
             entry_id=entry_id,
+            entry_index=entry_index,
             name="Max Power",
             unique_id_suffix="max_power",
             unit_of_measurement=UnitOfPower.WATT
