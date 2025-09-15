@@ -12,7 +12,6 @@ from ..const import (
     CONF_RAMP_DEADBAND, 
     CONF_DEFAULT_MIN_START_W, 
     CONF_HYSTERESIS_W, 
-    CONF_BATTERY_POWER_REVERSED, 
     DEFAULT_MIN_START_W, 
     DEFAULT_HYSTERESIS_W,
 )
@@ -86,12 +85,4 @@ def build_advanced_config_schema(defaults=None):
                 "label": "config.step.advanced_settings.data.hysteresis_w"
             }
         ): NumberSelectorBuilder(0, 5000, 1).build(),
-        Required(
-            CONF_BATTERY_POWER_REVERSED,
-            default=defaults.get(CONF_BATTERY_POWER_REVERSED, False),
-            description={
-                "suggested_value": defaults.get(CONF_BATTERY_POWER_REVERSED, False),
-                "label": "config.step.settings.data.battery_power_reversed"
-            }
-        ): BooleanSelectorBuilder().build(),
     })

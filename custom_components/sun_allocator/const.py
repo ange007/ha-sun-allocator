@@ -107,6 +107,7 @@ STEP_SETTINGS = "settings"
 STEP_MANAGE_DEVICES = "manage_devices"
 STEP_TEMPERATURE_COMPENSATION = "temperature_compensation"
 STEP_ADVANCED_SETTINGS = "advanced_settings"
+STEP_CONFIRM_REMOVE = "confirm_remove"
 
 # Configuration flow actions
 ACTION_ADD = "add"

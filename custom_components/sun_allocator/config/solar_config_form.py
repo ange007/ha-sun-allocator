@@ -3,7 +3,7 @@ from voluptuous import Schema, Required, Optional
 
 from homeassistant.helpers.selector import selector
     
-from ..utils.ui_helpers import NumberSelectorBuilder, SelectSelectorBuilder
+from ..utils.ui_helpers import NumberSelectorBuilder, SelectSelectorBuilder, BooleanSelectorBuilder
 
 from ..const import (
     CONF_PV_POWER, 
@@ -16,6 +16,7 @@ from ..const import (
     CONF_PANEL_CONFIGURATION,
     CONF_CONSUMPTION, 
     CONF_BATTERY_POWER, 
+    CONF_BATTERY_POWER_REVERSED,
     NONE_OPTION, 
     PANEL_CONFIG_SERIES, 
     PANEL_CONFIG_PARALLEL, 
@@ -116,4 +117,12 @@ def build_solar_config_schema(sensors, defaults=None):
                 "label": "config.step.settings.data.battery_power"
             },
         ): SelectSelectorBuilder(sensors.get("battery_sensors", [])).build(),
+        Required(
+            CONF_BATTERY_POWER_REVERSED,
+            default=defaults.get(CONF_BATTERY_POWER_REVERSED, False),
+            description={
+                "suggested_value": defaults.get(CONF_BATTERY_POWER_REVERSED, False),
+                "label": "config.step.settings.data.battery_power_reversed"
+            }
+        ): BooleanSelectorBuilder().build(),
     })

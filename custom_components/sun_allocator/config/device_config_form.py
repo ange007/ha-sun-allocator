@@ -37,9 +37,9 @@ def build_device_name_type_schema(defaults=None):
     if defaults is None:
         defaults = {}
 
-    default_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM)
+    default_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_STANDARD)
     if default_type == DEVICE_TYPE_NONE:
-        default_type = DEVICE_TYPE_CUSTOM
+        default_type = DEVICE_TYPE_STANDARD
 
     return Schema({
         Required(
@@ -107,17 +107,26 @@ def build_device_basic_settings_schema(defaults=None):
             CONF_MIN_EXPECTED_W,
             default=defaults.get(CONF_MIN_EXPECTED_W, 0.0),
             description={"suggested_value": defaults.get(CONF_MIN_EXPECTED_W, 0.0)}
-        ): NumberSelectorBuilder(0, 10000, 1, unit="Вт").build(),
+        ): NumberSelectorBuilder(0, 10000, 1, unit="W").build(),
         Required(
             CONF_DEVICE_PRIORITY,
             default=defaults.get(CONF_DEVICE_PRIORITY, 50),
-            description={"suggested_value": defaults.get(CONF_DEVICE_PRIORITY, 50)}
-        ): NumberSelectorBuilder(1, 100, 1, mode="slider").build(),
+            description={
+                "suggested_value": defaults.get(CONF_DEVICE_PRIORITY, 50),
+                "label": "config.step.device_basic_settings.data.priority.name"
+            }
+        ): SelectSelectorBuilder([
+            {"label": "config.step.device_basic_settings.data.priority.options.very_high", "value": 100},
+            {"label": "config.step.device_basic_settings.data.priority.options.high", "value": 75},
+            {"label": "config.step.device_basic_settings.data.priority.options.medium", "value": 50},
+            {"label": "config.step.device_basic_settings.data.priority.options.low", "value": 25},
+            {"label": "config.step.device_basic_settings.data.priority.options.very_low", "value": 1}
+        ]).build(),
         Optional(
             CONF_DEBOUNCE_TIME,
             default=defaults.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME),
             description={"suggested_value": defaults.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME)}
-        ): NumberSelectorBuilder(15, 600, 1, unit="с").build(),
+        ): NumberSelectorBuilder(15, 600, 1, unit="s").build(),
         Required(
             CONF_SCHEDULE_ENABLED,
             default=defaults.get(CONF_SCHEDULE_ENABLED, False),
@@ -130,7 +139,7 @@ def build_device_basic_settings_schema(defaults=None):
             CONF_MAX_EXPECTED_W,
             default=defaults.get(CONF_MAX_EXPECTED_W, 0.0),
             description={"suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)}
-        )] = NumberSelectorBuilder(0, 10000, 1, unit="Вт").build()
+        )] = NumberSelectorBuilder(0, 10000, 1, unit="W").build()
 
     return Schema(schema_dict)
 

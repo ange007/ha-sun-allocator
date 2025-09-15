@@ -560,6 +560,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
 
             # Debouncer logic
             debounce_time_s = device.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME)
+            debounce_time_s = max(DEFAULT_DEBOUNCE_TIME, min(debounce_time_s, 300))  # N-300 seconds
             debounce_info = device_debounce_state.get(device_id, {
                 "candidate_state": None,
                 "state_change_time": None,

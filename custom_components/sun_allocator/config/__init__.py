@@ -172,6 +172,7 @@ class SunAllocatorOptionsFlowHandler(
         self._device_config = {}
         self._device_index = None
         self._action = None
+        self._device_to_remove = None
 
     async def async_step_init(self, user_input=None):
         """Manage the options for the custom component."""
@@ -193,11 +194,6 @@ class SunAllocatorOptionsFlowHandler(
             if action == ACTION_SETTINGS:
                 # Go to settings
                 return await self.async_step_settings()
-            elif action == ACTION_ADD_DEVICE:
-                # Add a new device
-                self._action = ACTION_ADD
-                self._device_config = {}
-                return await self.async_step_device_name_type()
             elif action == ACTION_MANAGE_DEVICES:
                 # Go to device management
                 return await self.async_step_manage_devices()
@@ -205,7 +201,6 @@ class SunAllocatorOptionsFlowHandler(
         # Prepare the options for the form
         options = {
             ACTION_SETTINGS: "settings",
-            ACTION_ADD_DEVICE: "add_device",
             ACTION_MANAGE_DEVICES: "manage_devices",
         }
         
@@ -277,7 +272,12 @@ class SunAllocatorOptionsFlowHandler(
             action = user_input.get(CONF_ACTION, "")
             selected_device_id = user_input.get(CONF_DEVICE_ID)
 
-            if action == ACTION_EDIT:
+            if action == ACTION_ADD_DEVICE:
+                self._action = ACTION_ADD
+                self._device_config = {}
+                return await self.async_step_device_name_type()
+
+            elif action == ACTION_EDIT:
                 self._action = ACTION_EDIT
                 if selected_device_id:
                     self._device_index = next(
@@ -291,16 +291,8 @@ class SunAllocatorOptionsFlowHandler(
 
             elif action == ACTION_REMOVE:
                 if selected_device_id:
-                    self._devices = [d for d in self._devices if d[CONF_DEVICE_ID] != selected_device_id]
-                    # Persist changes immediately and stay on the manage devices page
-                    data = dict(self.config_entry.data)
-                    data.update(self._solar_config)
-                    data[CONF_DEVICES] = self._devices
-                    data['devices_str'] = json.dumps(self._devices)
-                    data.pop('test_array', None)
-                    log_warning("--- CONFIG FLOW REMOVE ---: Saving %d devices. Data: %s", len(self._devices), data)
-                    self.hass.config_entries.async_update_entry(self.config_entry, data=data)
-                    return await self.async_step_manage_devices()
+                    self._device_to_remove = selected_device_id
+                    return await self.async_step_confirm_remove()
                 errors[CONF_DEVICE_ID] = "device_name_required"
 
             elif action == ACTION_BACK:
@@ -314,6 +306,7 @@ class SunAllocatorOptionsFlowHandler(
 
         # Action dropdown for manage screen
         action_options = {
+            ACTION_ADD_DEVICE: "add_device",
             ACTION_EDIT: "edit",
             ACTION_REMOVE: "remove",
             ACTION_BACK: "back",
@@ -346,6 +339,37 @@ class SunAllocatorOptionsFlowHandler(
             },
             errors=errors,
         )
+
+    async def async_step_confirm_remove(self, user_input=None):
+        """Confirmation step for device removal."""
+        if user_input is not None:
+            if user_input.get("confirm"):
+                self._devices = [d for d in self._devices if d[CONF_DEVICE_ID] != self._device_to_remove]
+                # Persist changes immediately and stay on the manage devices page
+                data = dict(self.config_entry.data)
+                data.update(self._solar_config)
+                data[CONF_DEVICES] = self._devices
+                data['devices_str'] = json.dumps(self._devices)
+                data.pop('test_array', None)
+                log_warning("--- CONFIG FLOW REMOVE ---: Saving %d devices. Data: %s", len(self._devices), data)
+                self.hass.config_entries.async_update_entry(self.config_entry, data=data)
+                return await self.async_step_manage_devices()
+            else:
+                # Cancel and return to manage devices
+                return await self.async_step_manage_devices()
+
+        return self.async_show_form(
+            step_id=STEP_CONFIRM_REMOVE,
+            data_schema=vol.Schema({vol.Required("confirm", default=False): bool}),
+            description_placeholders={"device_name": self._get_device_name(self._device_to_remove)},
+        )
+
+    def _get_device_name(self, device_id):
+        """Get device name by its ID."""
+        for device in self._devices:
+            if device[CONF_DEVICE_ID] == device_id:
+                return device.get(CONF_DEVICE_NAME, "Unnamed device")
+        return "Unknown device"
 
     async def _save_and_return(self):
         """Save configuration, reload integration and return to main menu."""

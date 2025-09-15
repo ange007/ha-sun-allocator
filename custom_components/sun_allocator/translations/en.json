@@ -94,7 +94,16 @@
           "auto_control_enabled": "Enable Auto Control",
           "min_expected_w": "Minimum Expected Load (W)",
           "max_expected_w": "Maximum Expected Load (W)",
-          "priority": "Device Priority",
+          "priority": {
+            "name": "Device Priority",
+            "options": {
+              "very_high": "Very High",
+              "high": "High",
+              "medium": "Medium",
+              "low": "Low",
+              "very_low": "Very Low"
+            }
+          },
           "schedule_enabled": "Enable Schedule"
         }
       },
@@ -128,6 +137,13 @@
           "ramp_deadband": "Ramp Deadband (%)",
           "default_min_start_w": "Default Min Start (W)",
           "hysteresis_w": "Hysteresis (W)"
+        }
+      },
+      "confirm_remove": {
+        "title": "Confirm Removal",
+        "description": "Are you sure you want to remove the device {device_name}?",
+        "data": {
+          "confirm": "Yes, remove the device"
         }
       }
     }
