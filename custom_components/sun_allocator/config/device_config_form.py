@@ -95,14 +95,6 @@ def build_device_basic_settings_schema(defaults=None):
     device_type = defaults.get(CONF_DEVICE_TYPE, DEVICE_TYPE_STANDARD)
 
     schema_dict = {
-        Required(
-            CONF_AUTO_CONTROL_ENABLED,
-            default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
-            description={
-                "suggested_value": defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
-                "label": "config.step.device_basic_settings.data.auto_control_enabled"
-            }
-        ): BooleanSelectorBuilder().build(),
         Optional(
             CONF_MIN_EXPECTED_W,
             default=defaults.get(CONF_MIN_EXPECTED_W, 0.0),
@@ -127,6 +119,14 @@ def build_device_basic_settings_schema(defaults=None):
             default=defaults.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME),
             description={"suggested_value": defaults.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME)}
         ): NumberSelectorBuilder(15, 600, 1, unit="s").build(),
+        Required(
+            CONF_AUTO_CONTROL_ENABLED,
+            default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
+            description={
+                "suggested_value": defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
+                "label": "config.step.device_basic_settings.data.auto_control_enabled"
+            }
+        ): BooleanSelectorBuilder().build(),
         Required(
             CONF_SCHEDULE_ENABLED,
             default=defaults.get(CONF_SCHEDULE_ENABLED, False),

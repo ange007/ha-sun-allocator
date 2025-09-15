@@ -166,12 +166,13 @@ class DeviceConfigMixin:
             errors[CONF_MAX_EXPECTED_W] = "invalid_max_expected_w"
 
         # Validate debounce time
-        try:
-            debounce_time = int(user_input.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME))
-            if debounce_time < 15 or debounce_time > 600:
+        if CONF_DEBOUNCE_TIME in user_input and user_input[CONF_DEBOUNCE_TIME] is not None:
+            try:
+                debounce_time = int(user_input[CONF_DEBOUNCE_TIME])
+                if debounce_time < 15 or debounce_time > 600:
+                    errors[CONF_DEBOUNCE_TIME] = "invalid_debounce_time"
+            except (ValueError, TypeError):
                 errors[CONF_DEBOUNCE_TIME] = "invalid_debounce_time"
-        except (ValueError, TypeError):
-            errors[CONF_DEBOUNCE_TIME] = "invalid_debounce_time"
 
         # Enforce Variant A: For Custom devices with Auto Control, max_expected_w must be > 0
         try:
