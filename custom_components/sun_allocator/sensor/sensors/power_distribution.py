@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.const import UnitOfPower
+from homeassistant.helpers.entity import DeviceInfo
 
 from ...utils.logger import log_debug
 from ...utils.journal import journal_event
@@ -37,6 +38,15 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
         self._attr_native_unit_of_measurement = UnitOfPower.WATT
         self._state = 0.0
         self._attr_extra_state_attributes: Dict[str, Any] = {}
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry_id)},
+            name=f"{SENSOR_NAME_PREFIX}",
+            manufacturer="Sun Allocator",
+        )
 
     @property
     def should_poll(self) -> bool:

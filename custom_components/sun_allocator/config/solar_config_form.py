@@ -53,6 +53,30 @@ def build_solar_config_schema(sensors, defaults=None):
                 "label": "config.step.settings.data.pv_voltage"
             },
         ): SelectSelectorBuilder(sensors.get("voltage_sensors", [])).build(),
+        Optional(
+            CONF_CONSUMPTION,
+            default=default_consumption,
+            description={
+                "suggested_value": default_consumption,
+                "label": "config.step.settings.data.consumption"
+            },
+        ): SelectSelectorBuilder(sensors.get("consumption_sensors", [])).build(),
+        Required(
+            CONF_BATTERY_POWER,
+            default=default_battery_power,
+            description={
+                "suggested_value": default_battery_power,
+                "label": "config.step.settings.data.battery_power"
+            },
+        ): SelectSelectorBuilder(sensors.get("battery_sensors", [])).build(),
+        Required(
+            CONF_BATTERY_POWER_REVERSED,
+            default=defaults.get(CONF_BATTERY_POWER_REVERSED, False),
+            description={
+                "suggested_value": defaults.get(CONF_BATTERY_POWER_REVERSED, False),
+                "label": "config.step.settings.data.battery_power_reversed"
+            }
+        ): BooleanSelectorBuilder().build(),
         Required(
             CONF_VMP,
             default=defaults.get(CONF_VMP, 36.0),
@@ -101,28 +125,4 @@ def build_solar_config_schema(sensors, defaults=None):
                 "label": "config.step.settings.data.panel_configuration.name"
             },
         ): SelectSelectorBuilder(panel_config_options).build(),
-        Optional(
-            CONF_CONSUMPTION,
-            default=default_consumption,
-            description={
-                "suggested_value": default_consumption,
-                "label": "config.step.settings.data.consumption"
-            },
-        ): SelectSelectorBuilder(sensors.get("consumption_sensors", [])).build(),
-        Required(
-            CONF_BATTERY_POWER,
-            default=default_battery_power,
-            description={
-                "suggested_value": default_battery_power,
-                "label": "config.step.settings.data.battery_power"
-            },
-        ): SelectSelectorBuilder(sensors.get("battery_sensors", [])).build(),
-        Required(
-            CONF_BATTERY_POWER_REVERSED,
-            default=defaults.get(CONF_BATTERY_POWER_REVERSED, False),
-            description={
-                "suggested_value": defaults.get(CONF_BATTERY_POWER_REVERSED, False),
-                "label": "config.step.settings.data.battery_power_reversed"
-            }
-        ): BooleanSelectorBuilder().build(),
     })

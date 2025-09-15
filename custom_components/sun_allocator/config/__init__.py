@@ -166,7 +166,6 @@ class SunAllocatorOptionsFlowHandler(
     def __init__(self, config_entry):
         """Initialize options flow."""
         super().__init__()
-        self.config_entry = config_entry
         self._solar_config = {}
         self._devices = []
         self._device_config = {}
