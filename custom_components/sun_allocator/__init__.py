@@ -526,6 +526,11 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             # --- End of Filtering Checks ---
 
             # Initialize status entry for this device
+            min_expected_w = float(device.get(CONF_MIN_EXPECTED_W, 0) or 0)
+            max_expected_w = float(device.get(CONF_MAX_EXPECTED_W, 0) or 0)
+            if max_expected_w <= 0 and min_expected_w > 0:
+                max_expected_w = min_expected_w * 1.1
+            
             status_entry = {
                 "name": device_name,
                 "priority": int(device.get(CONF_DEVICE_PRIORITY, 50)),
@@ -535,8 +540,8 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                 "percent_target": 0.0,
                 "percent_actual": 0.0,
                 "allocated_w": 0.0,
-                "min_expected_w": float(device.get(CONF_MIN_EXPECTED_W, 0) or 0),
-                "max_expected_w": float(device.get(CONF_MAX_EXPECTED_W, 0) or 0),
+                "min_expected_w": min_expected_w,
+                "max_expected_w": max_expected_w,
             }
 
             # Hysteresis and threshold calculation
