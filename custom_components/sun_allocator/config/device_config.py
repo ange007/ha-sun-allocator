@@ -29,6 +29,8 @@ from ..const import (
     DEVICE_TYPE_CUSTOM,
     CONF_MIN_EXPECTED_W,
     CONF_MAX_EXPECTED_W,
+    CONF_DEBOUNCE_TIME,
+    DEFAULT_DEBOUNCE_TIME,
     CONF_SCHEDULE_ENABLED,
     CONF_START_TIME,
     CONF_END_TIME,
@@ -162,6 +164,14 @@ class DeviceConfigMixin:
                 errors[CONF_MAX_EXPECTED_W] = "invalid_max_expected_w"
         except (ValueError, TypeError):
             errors[CONF_MAX_EXPECTED_W] = "invalid_max_expected_w"
+
+        # Validate debounce time
+        try:
+            debounce_time = int(user_input.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME))
+            if debounce_time < 15 or debounce_time > 600:
+                errors[CONF_DEBOUNCE_TIME] = "invalid_debounce_time"
+        except (ValueError, TypeError):
+            errors[CONF_DEBOUNCE_TIME] = "invalid_debounce_time"
 
         # Enforce Variant A: For Custom devices with Auto Control, max_expected_w must be > 0
         try:

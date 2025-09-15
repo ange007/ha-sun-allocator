@@ -1,5 +1,19 @@
 {
   "config": {
+    "error": {
+      "invalid_debounce_time": "Debounce time must be between 15 and 600 seconds.",
+      "device_name_required": "Device name is required.",
+      "invalid_priority": "Priority must be a number between 1 and 100.",
+      "invalid_min_expected_w": "Minimum expected load must be a non-negative number.",
+      "invalid_max_expected_w": "Maximum expected load must be a non-negative number.",
+      "duplicate_entity_id": "This entity is already used by another device.",
+      "invalid_time_format": "Invalid time format. Please use HH:MM.",
+      "voc_equal_to_vmp": "Voc cannot be equal to Vmp.",
+      "invalid_values": "Invalid values provided.",
+      "invalid_panel_count": "Panel count must be a positive number.",
+      "invalid_vmp": "Vmp must be a positive number.",
+      "invalid_imp": "Imp must be a positive number."
+    },
     "step": {
       "main_menu": {
         "data": {
@@ -104,6 +118,7 @@
               "very_low": "Very Low"
             }
           },
+          "debounce_time": "Debounce Time (s)",
           "schedule_enabled": "Enable Schedule"
         }
       },
