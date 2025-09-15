@@ -50,6 +50,7 @@ async def set_power_for_entity(hass, entity_id, power_percent):
         return
     domain = entity_id.split('.')[0]
     brightness = int((power_percent / MAX_PERCENTAGE) * MAX_BRIGHTNESS)
+    
     if power_percent <= 0:
         log_debug(f"Turning off entity {entity_id}")
         if domain == DOMAIN_LIGHT:

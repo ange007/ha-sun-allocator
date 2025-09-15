@@ -6,6 +6,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.const import UnitOfPower
+from homeassistant.helpers.entity import DeviceInfo
 
 from ...const import (
     DOMAIN,
@@ -27,14 +28,24 @@ class SunAllocatorDevicePowerSensor(SensorEntity):
         self._hass = hass
         self._entry_id = entry_id
         self._device_id = device_config.get(CONF_DEVICE_ID)
-        device_name = device_config.get(CONF_DEVICE_NAME)
+        self._device_name = device_config.get(CONF_DEVICE_NAME)
 
-        self._attr_name = f"{SENSOR_NAME_PREFIX} {device_name}"
+        self._attr_name = f"{SENSOR_NAME_PREFIX} {self._device_name}"
         # Note: entry_index is removed as device_id should be unique enough across entries if managed well
         self._attr_unique_id = f"{entry_id}_{self._device_id}"
         self._attr_native_unit_of_measurement = UnitOfPower.WATT
         self._state = 0.0
         self._attr_extra_state_attributes: Dict[str, Any] = {}
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._device_id)},
+            name=self._device_name,
+            manufacturer="Sun Allocator",
+            via_device=(DOMAIN, self._entry_id),
+        )
 
     @callback
     def _update_state(self):
