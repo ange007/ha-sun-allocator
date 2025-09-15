@@ -77,21 +77,21 @@ class DeviceConfigMixin:
             if device_type == DEVICE_TYPE_CUSTOM:
                 # Only ESPHome relays (switch, light, input_boolean, script, automation) with esphome in entity_id
                 if domain in [DOMAIN_SWITCH, DOMAIN_LIGHT, DOMAIN_INPUT_BOOLEAN, DOMAIN_SCRIPT, DOMAIN_AUTOMATION] and is_esphome:
-                    value, _ = clean_entity_id_and_mode(e.entity_id)
+                    value = e.entity_id
                     label = f"{icon} {friendly}" if friendly else f"{icon} {value}"
                     all_entities.append((value, label, friendly))
             else:
                 if domain in allowed_domains:
                     if domain == DOMAIN_CLIMATE:
-                        value_heat, _ = clean_entity_id_and_mode(f"{e.entity_id}|heat")
+                        value_heat = f"{e.entity_id}|heat"
                         label_heat = f"{icon} {friendly} (Heat)" if friendly else f"{icon} {e.entity_id} (Heat)"
                         all_entities.append((value_heat, label_heat, friendly))
-                        value_cool, _ = clean_entity_id_and_mode(f"{e.entity_id}|cool")
+                        value_cool = f"{e.entity_id}|cool"
                         label_cool = f"{icon} {friendly} (Cool)" if friendly else f"{icon} {e.entity_id} (Cool)"
                         all_entities.append((value_cool, label_cool, friendly))
                     elif state in [STATE_ON, STATE_OFF]:
                         if "sun_allocator" not in e.entity_id.lower() and "sunallocator" not in e.entity_id.lower():
-                            value, _ = clean_entity_id_and_mode(e.entity_id)
+                            value = e.entity_id
                             label = f"{icon} {friendly}" if friendly else f"{icon} {value}"
                             all_entities.append((value, label, friendly))
         all_entities.sort(key=lambda x: x[1])
