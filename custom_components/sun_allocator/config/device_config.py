@@ -30,7 +30,6 @@ from ..const import (
     CONF_MIN_EXPECTED_W,
     CONF_MAX_EXPECTED_W,
     CONF_DEBOUNCE_TIME,
-    DEFAULT_DEBOUNCE_TIME,
     CONF_SCHEDULE_ENABLED,
     CONF_START_TIME,
     CONF_END_TIME,
@@ -211,7 +210,7 @@ class DeviceConfigMixin:
         
         return errors
     
-    def _process_device_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_device_input(self, user_input: Dict[str, Any], entities: Dict[str, list]) -> Dict[str, Any]:
         """Process and clean device configuration input."""
         # Convert "None" string to actual None value
         if user_input.get(CONF_DEVICE_ENTITY) == NONE_OPTION:
@@ -219,18 +218,21 @@ class DeviceConfigMixin:
             user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = None
             user_input['hvac_mode'] = None
         else:
-            label = user_input.get(CONF_DEVICE_ENTITY)
+            entity_id_from_input = user_input.get(CONF_DEVICE_ENTITY)
             # Always normalize entity_id and extract hvac_mode
-            cleaned_id, hvac_mode = clean_entity_id_and_mode(label)
+            cleaned_id, hvac_mode = clean_entity_id_and_mode(entity_id_from_input)
             user_input[CONF_DEVICE_ENTITY] = cleaned_id
             user_input['hvac_mode'] = hvac_mode
-            # Parse friendly_name from label if present
-            if label and "(" in label and label.endswith(")"):
-                entity_id = label.split(" (", 1)[0]
-                friendly = label[label.find("(")+1:-1]
-                user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = friendly
-            else:
-                user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = None
+
+            # Find friendly name from the entities list
+            friendly_name = None
+            if entities and "all_entities" in entities:
+                for value, _, fn in entities["all_entities"]:
+                    if value == entity_id_from_input:
+                        friendly_name = fn
+                        break
+            
+            user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = friendly_name
         return user_input
     
     def _process_schedule_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
@@ -277,7 +279,6 @@ class DeviceConfigMixin:
 
     async def _finalize_device_config(self):
         """Finalize device configuration, persist devices, and return to appropriate screen."""
-        _LOGGER = get_logger(__name__)
         # Add or update device ID
         if self._action == ACTION_ADD:
             self._device_config[CONF_DEVICE_ID] = str(uuid.uuid4())
@@ -346,7 +347,7 @@ class DeviceConfigMixin:
         
         if user_input is not None:
             # Process input
-            user_input = self._process_device_input(user_input)
+            user_input = self._process_device_input(user_input, entities)
             
             # Store device selection
             self._device_config.update(user_input)
