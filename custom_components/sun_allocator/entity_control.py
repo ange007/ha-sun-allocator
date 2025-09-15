@@ -36,18 +36,18 @@ async def set_mode_for_entity(hass: HomeAssistant, entity_id, mode):
     )
 
 async def set_power_for_entity(hass, entity_id, power_percent):
+    hvac_mode = None
+    if '|' in entity_id:
+        entity_id, hvac_mode = entity_id.split('|', 1)
+        entity_id = entity_id.strip()
+        hvac_mode = hvac_mode.strip()
+
     state = hass.states.get(entity_id)
     if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
         log_debug(
             f"Entity {entity_id} not found or unavailable, skipping set_relay_power({power_percent}%)"
         )
         return
-    
-    hvac_mode = None
-    if '|' in entity_id:
-        entity_id, hvac_mode = entity_id.split('|', 1)
-        entity_id = entity_id.strip()
-        hvac_mode = hvac_mode.strip()
     domain = entity_id.split('.')[0]
     brightness = int((power_percent / MAX_PERCENTAGE) * MAX_BRIGHTNESS)
     if power_percent <= 0:
