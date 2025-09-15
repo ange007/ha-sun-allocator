@@ -71,6 +71,8 @@ from .const import (
     CONF_RAMP_DEADBAND,
     CONF_DEFAULT_MIN_START_W,
     CONF_HYSTERESIS_W,
+    CONF_DEBOUNCE_TIME,
+    DEFAULT_DEBOUNCE_TIME,
 )
 
 # Service schema for set_relay_mode
@@ -398,6 +400,9 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     if entry_data.get("device_on_state") is None:
         entry_data["device_on_state"] = {}
 
+    if entry_data.get("device_debounce_state") is None:
+        entry_data["device_debounce_state"] = {}
+
     async def _ramp_tick(now):
         targets = entry_data.get("ramp_targets", {})
         currents = entry_data.get("ramp_currents", {})
@@ -479,6 +484,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         ramp_targets = {}
         entry_data["ramp_targets"] = ramp_targets
         device_on_state = entry_data.get("device_on_state", {})
+        device_debounce_state = entry_data.get("device_debounce_state", {})
 
         # Get constants for the loop
         SUPPORTED_DOMAINS = {DOMAIN_LIGHT, DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT, DOMAIN_CLIMATE}
@@ -487,7 +493,6 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         DEVICE_MAX_PERCENT_DEFAULT = 90.0
 
         for device in auto_control_devices:
-            log_warning("Processing device in auto-control: %s", device)
             log_debug("Processing device in auto-control: %s", device)
             device_id = device.get(CONF_DEVICE_ID)
             device_name = device.get(CONF_DEVICE_NAME)
@@ -520,7 +525,8 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                 log_debug(f"Device '{device_name}' skipped: Outside of schedule.")
                 if device_id: device_filter_reasons[device_id] = "Outside of schedule"
                 # Ensure device is turned off if it's outside of its schedule
-                await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                if relay_state_obj.state == STATE_ON:
+                    await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
                 continue
             
             # --- End of Filtering Checks ---
@@ -550,20 +556,38 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             on_threshold = effective_min_power + (HYSTERESIS_W_LOCAL / 2.0)
             off_threshold = max(0.0, effective_min_power - (HYSTERESIS_W_LOCAL / 2.0))
             prev_on = bool(device_on_state.get(device_id, False))
-            is_active = remaining_power >= (off_threshold if prev_on else on_threshold)
+            is_active_candidate = remaining_power >= (off_threshold if prev_on else on_threshold)
+
+            # Debouncer logic
+            debounce_time_s = device.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME)
+            debounce_info = device_debounce_state.get(device_id, {
+                "candidate_state": None,
+                "state_change_time": None,
+            })
+
+            is_active = prev_on # Assume current state until debounce confirms change
+
+            if is_active_candidate != debounce_info["candidate_state"]:
+                debounce_info["candidate_state"] = is_active_candidate
+                debounce_info["state_change_time"] = now
+                device_debounce_state[device_id] = debounce_info
+            else:
+                if debounce_info["state_change_time"] and (now - debounce_info["state_change_time"]).total_seconds() >= debounce_time_s:
+                    is_active = is_active_candidate
 
             # Logic for standard devices
             device_type = device.get(CONF_DEVICE_TYPE)
             if device_type == DEVICE_TYPE_STANDARD:
                 if is_active:
-                    log_debug(f"Turning on standard device {device_name}")
-                    # Call turn_on service based on domain
-                    if service_domain == DOMAIN_LIGHT:
-                        await hass.services.async_call(DOMAIN_LIGHT, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity, ATTR_BRIGHTNESS: MAX_BRIGHTNESS}, blocking=False)
-                    elif service_domain == DOMAIN_CLIMATE:
-                        await hass.services.async_call(DOMAIN_CLIMATE, "set_hvac_mode", {ATTR_ENTITY_ID: relay_entity, "hvac_mode": hvac_mode or "heat"}, blocking=False)
-                    else:
-                        await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                    if not prev_on: # Only call turn_on if it was previously off
+                        log_debug(f"Turning on standard device {device_name}")
+                        # Call turn_on service based on domain
+                        if service_domain == DOMAIN_LIGHT:
+                            await hass.services.async_call(DOMAIN_LIGHT, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity, ATTR_BRIGHTNESS: MAX_BRIGHTNESS}, blocking=False)
+                        elif service_domain == DOMAIN_CLIMATE:
+                            await hass.services.async_call(DOMAIN_CLIMATE, "set_hvac_mode", {ATTR_ENTITY_ID: relay_entity, "hvac_mode": hvac_mode or "heat"}, blocking=False)
+                        else:
+                            await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
                     
                     # Allocate power
                     cap = status_entry["max_expected_w"] if status_entry["max_expected_w"] > 0 else (DEFAULT_MIN_START_W_LOCAL * 3)
@@ -572,12 +596,13 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                     if device_id: power_allocation[device_id] = power_used
                     status_entry.update({"allocated_w": float(power_used), "percent_target": 100.0, "percent_actual": 100.0})
                 else:
-                    log_debug(f"Turning off standard device {device_name} (remaining power {remaining_power}W below threshold)")
-                    # Call turn_off service based on domain
-                    if service_domain == DOMAIN_CLIMATE:
-                        await hass.services.async_call(DOMAIN_CLIMATE, "set_hvac_mode", {ATTR_ENTITY_ID: relay_entity, "hvac_mode": "off"}, blocking=False)
-                    else:
-                        await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                    if prev_on: # Only call turn_off if it was previously on
+                        log_debug(f"Turning off standard device {device_name} (remaining power {remaining_power}W below threshold)")
+                        # Call turn_off service based on domain
+                        if service_domain == DOMAIN_CLIMATE:
+                            await hass.services.async_call(DOMAIN_CLIMATE, "set_hvac_mode", {ATTR_ENTITY_ID: relay_entity, "hvac_mode": "off"}, blocking=False)
+                        else:
+                            await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
                     status_entry.update({"percent_target": 0.0, "percent_actual": 0.0, "allocated_w": 0.0})
             
             # Logic for custom (ESPHome) devices
@@ -604,10 +629,13 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                                 power_percent = min(MAX_PERCENTAGE, max(5, (remaining_power / max_w) * 100))
                                 target_percent = min(power_percent, DEVICE_MAX_PERCENT_DEFAULT)
                             
-                            log_debug(f"Proportional target for {device_name}: {target_percent}% (remaining power: {remaining_power}W)")
+                            log_debug(f"Proportional target for {device_name}: {target_percent}%% (remaining power: {remaining_power}W)")
                             status_entry["percent_target"] = float(target_percent)
-                            if service_domain == DOMAIN_LIGHT: ramp_targets[relay_entity] = target_percent
-                            else: await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                            if service_domain == DOMAIN_LIGHT: 
+                                ramp_targets[relay_entity] = target_percent
+                            else: 
+                                if not prev_on:
+                                    await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
                             
                             power_used = min(remaining_power, max_w * (target_percent / MAX_PERCENTAGE))
                             remaining_power -= power_used
@@ -615,16 +643,20 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                             status_entry["allocated_w"] = float(power_used)
                         else:
                             log_debug(f"Proportional below threshold for {device_name} -> target 0 / OFF")
-                            if service_domain == DOMAIN_LIGHT: ramp_targets[relay_entity] = 0.0
-                            else: await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                            if service_domain == DOMAIN_LIGHT: 
+                                ramp_targets[relay_entity] = 0.0
+                            else: 
+                                if prev_on:
+                                    await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
                     
                     elif mode_state.state == RELAY_MODE_ON:
-                        if remaining_power >= effective_min_power:
-                            log_debug(f"Device {device_name} is in On mode with enough excess, setting to full power")
-                            if service_domain == DOMAIN_LIGHT:
-                                await hass.services.async_call(DOMAIN_LIGHT, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity, ATTR_BRIGHTNESS: MAX_BRIGHTNESS}, blocking=False)
-                            else:
-                                await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                        if is_active:
+                            if not prev_on:
+                                log_debug(f"Device {device_name} is in On mode with enough excess, setting to full power")
+                                if service_domain == DOMAIN_LIGHT:
+                                    await hass.services.async_call(DOMAIN_LIGHT, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity, ATTR_BRIGHTNESS: MAX_BRIGHTNESS}, blocking=False)
+                                else:
+                                    await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
                             
                             cap = status_entry["max_expected_w"] if status_entry["max_expected_w"] > 0 else (DEFAULT_MIN_START_W_LOCAL * 3)
                             power_used = min(remaining_power, cap)
@@ -632,8 +664,9 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                             if device_id: power_allocation[device_id] = power_used
                             status_entry.update({"allocated_w": float(power_used), "percent_target": 100.0, "percent_actual": 100.0})
                         else:
-                            log_debug(f"Device {device_name} is in On mode but not enough power, turning off")
-                            await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                            if prev_on:
+                                log_debug(f"Device {device_name} is in On mode but not enough power, turning off")
+                                await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
 
             # Finalize status for this device
             if device_id:
@@ -649,6 +682,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         }
         # Note: device_status and device_filter_reasons are already updated in entry_data by reference
         entry_data["device_on_state"] = device_on_state
+        entry_data["device_debounce_state"] = device_debounce_state
         async_dispatcher_send(hass, f"{SIGNAL_POWER_DISTRIBUTION_UPDATED}_{config_entry.entry_id}")
     
     @callback

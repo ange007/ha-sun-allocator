@@ -43,6 +43,8 @@ DEVICE_TYPE_CUSTOM = "custom"
 # Per-device expected load limits
 CONF_MIN_EXPECTED_W = "min_expected_w"
 CONF_MAX_EXPECTED_W = "max_expected_w"
+CONF_DEBOUNCE_TIME = "debounce_time"
+DEFAULT_DEBOUNCE_TIME = 15
 
 # Scheduling constants
 CONF_SCHEDULE_ENABLED = "schedule_enabled"

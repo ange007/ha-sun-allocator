@@ -28,6 +28,8 @@ from ..const import (
     CONF_START_TIME,
     CONF_END_TIME,
     CONF_DAYS_OF_WEEK,
+    CONF_DEBOUNCE_TIME,
+    DEFAULT_DEBOUNCE_TIME,
 )
 
 
@@ -111,6 +113,11 @@ def build_device_basic_settings_schema(defaults=None):
             default=defaults.get(CONF_DEVICE_PRIORITY, 50),
             description={"suggested_value": defaults.get(CONF_DEVICE_PRIORITY, 50)}
         ): NumberSelectorBuilder(1, 100, 1, mode="slider").build(),
+        Optional(
+            CONF_DEBOUNCE_TIME,
+            default=defaults.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME),
+            description={"suggested_value": defaults.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME)}
+        ): NumberSelectorBuilder(15, 600, 1, unit="с").build(),
         Required(
             CONF_SCHEDULE_ENABLED,
             default=defaults.get(CONF_SCHEDULE_ENABLED, False),
