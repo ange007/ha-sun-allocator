@@ -16,7 +16,7 @@ class EntitySelectorBuilder:
             icon = self.icon_map.get(domain, "")
             friendly = e.attributes.get("friendly_name", "")
             label = f"{icon} {friendly}" if friendly else f"{icon} {e.entity_id}"
-            result.append({"label": label, "value": e.entity_id})
+            result.append({"label": label, "value": str(e.entity_id)})
             
         result.sort(key=lambda x: x["label"])
 

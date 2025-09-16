@@ -102,17 +102,17 @@ def build_device_basic_settings_schema(defaults=None):
         ): NumberSelectorBuilder(0, 10000, 1, unit="W").build(),
         Required(
             CONF_DEVICE_PRIORITY,
-            default=defaults.get(CONF_DEVICE_PRIORITY, 50),
+            default=str(defaults.get(CONF_DEVICE_PRIORITY, 50)),
             description={
-                "suggested_value": defaults.get(CONF_DEVICE_PRIORITY, 50),
+                "suggested_value": str(defaults.get(CONF_DEVICE_PRIORITY, 50)),
                 "label": "config.step.device_basic_settings.data.priority.name"
             }
         ): SelectSelectorBuilder([
-            {"label": "config.step.device_basic_settings.data.priority.options.very_high", "value": 100},
-            {"label": "config.step.device_basic_settings.data.priority.options.high", "value": 75},
-            {"label": "config.step.device_basic_settings.data.priority.options.medium", "value": 50},
-            {"label": "config.step.device_basic_settings.data.priority.options.low", "value": 25},
-            {"label": "config.step.device_basic_settings.data.priority.options.very_low", "value": 1}
+            {"label": "config.step.device_basic_settings.data.priority.options.very_high", "value": "100"},
+            {"label": "config.step.device_basic_settings.data.priority.options.high", "value": "75"},
+            {"label": "config.step.device_basic_settings.data.priority.options.medium", "value": "50"},
+            {"label": "config.step.device_basic_settings.data.priority.options.low", "value": "25"},
+            {"label": "config.step.device_basic_settings.data.priority.options.very_low", "value": "1"}
         ]).build(),
         Optional(
             CONF_DEBOUNCE_TIME,
