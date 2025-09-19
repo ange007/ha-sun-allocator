@@ -41,6 +41,7 @@ CONF_DEVICE_TYPE = "device_type"
 DEVICE_TYPE_NONE = "none"
 DEVICE_TYPE_STANDARD = "standard"
 DEVICE_TYPE_CUSTOM = "custom"
+DEVICE_TYPE_CLIMATE = "climate"
 
 # Per-device expected load limits
 CONF_MIN_EXPECTED_W = "min_expected_w"
@@ -128,6 +129,7 @@ ACTION_BACK = "back"
 
 # Configuration field constants
 CONF_ACTION = "action"
+CONF_CONFIRM = "confirm"
 
 # UI constants
 NONE_OPTION = "None"
@@ -192,3 +194,8 @@ KEY_LIGHT_FACTOR = "light_factor"
 KEY_RELATIVE_VOLTAGE = "relative_voltage"
 KEY_VOC_RATIO = "voc_ratio"
 KEY_CALCULATION_REASON = "calculation_reason"
+
+# Dictionary keys for temperature compensation
+KEY_TEMP_DIFF = "temp_diff"
+KEY_VOC_COEF = "voc_coef"
+KEY_PMAX_COEF = "pmax_coef"

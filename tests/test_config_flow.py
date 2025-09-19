@@ -18,6 +18,14 @@ from custom_components.sun_allocator.const import (
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
     PANEL_CONFIG_SERIES,
+    STEP_DEVICES,
+    ACTION_ADD,
+    STEP_DEVICE_NAME_TYPE,
+    STEP_DEVICE_SELECTION,
+    STEP_DEVICE_BASIC_SETTINGS,
+    CONF_DEVICE_NAME,
+    CONF_DEVICE_TYPE,
+    CONF_DEVICE_ENTITY,
 )
 
 
@@ -77,41 +85,41 @@ async def test_form_device_selection_step(hass: HomeAssistant) -> None:
 
     # We should now be at the device management step
     assert result2["type"] == FlowResultType.FORM
-    assert result2["step_id"] == "devices"
+    assert result2["step_id"] == STEP_DEVICES
 
     # "Press" the "add device" option
     result3 = await hass.config_entries.flow.async_configure(
         result2["flow_id"],
-        {"action": "add"},
+        {"action": ACTION_ADD},
     )
     await hass.async_block_till_done()
     
     # We should now be at the device name/type step
     assert result3["type"] == FlowResultType.FORM
-    assert result3["step_id"] == "device_name_type"
+    assert result3["step_id"] == STEP_DEVICE_NAME_TYPE
 
     # Provide device name and type
     result4 = await hass.config_entries.flow.async_configure(
         result3["flow_id"],
         {
-            "device_name": "Test Device",
-            "device_type": "standard",
+            CONF_DEVICE_NAME: "Test Device",
+            CONF_DEVICE_TYPE: "standard",
         },
     )
     await hass.async_block_till_done()
 
     # We should now be at the device selection step, which is what we want to test
     assert result4["type"] == FlowResultType.FORM
-    assert result4["step_id"] == "device_selection"
+    assert result4["step_id"] == STEP_DEVICE_SELECTION
 
     # Submit the device selection form
     result5 = await hass.config_entries.flow.async_configure(
         result4["flow_id"],
-        {"device_entity": "switch.test_switch"},
+        {CONF_DEVICE_ENTITY: "switch.test_switch"},
     )
     await hass.async_block_till_done()
 
     # Check if we successfully moved to the next step
     assert result5["type"] == FlowResultType.FORM, f"Expected a form, but got {result5}"
-    assert result5["step_id"] == "device_basic_settings"
+    assert result5["step_id"] == STEP_DEVICE_BASIC_SETTINGS
     assert "errors" not in result5 or not result5["errors"]

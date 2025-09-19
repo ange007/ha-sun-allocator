@@ -7,6 +7,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
 
 from . import solar_config
 from . import device_config
@@ -366,6 +367,14 @@ class SunAllocatorOptionsFlowHandler(
         """Confirmation step for device removal."""
         if user_input is not None:
             if user_input.get("confirm"):
+                # Remove device from device registry
+                device_registry = dr.async_get(self.hass)
+                device_to_remove = device_registry.async_get_device(
+                    identifiers={(DOMAIN, self._device_to_remove)}
+                )
+                if device_to_remove:
+                    device_registry.async_remove_device(device_to_remove.id)
+
                 self._devices = [
                     d
                     for d in self._devices

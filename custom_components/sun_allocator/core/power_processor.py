@@ -109,7 +109,7 @@ async def _filter_device(hass, device, now):
         log_debug(f"Device '{device_name}' skipped: Outside of schedule.")
         # Ensure device is turned off if it's outside of its schedule
         if relay_state_obj.state == STATE_ON:
-            await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+            await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=True)
         return "Outside of schedule"
         
     return None # No filter reason means the device is valid
@@ -192,7 +192,8 @@ async def _control_standard_device(hass, device, is_active, prev_on, remaining_p
             elif service_domain == DOMAIN_CLIMATE:
                 service_name = "set_hvac_mode"
                 service_data["hvac_mode"] = hvac_mode or "heat"
-            await hass.services.async_call(service_domain, service_name, service_data, blocking=False)
+            log_debug(f"Calling service {service_domain}.{service_name} with data {service_data}")
+            await hass.services.async_call(service_domain, service_name, service_data, blocking=True)
 
         cap = status_entry["max_expected_w"] if status_entry["max_expected_w"] > 0 else (default_min_start_w * 3)
         power_used = min(remaining_power, cap)
@@ -205,7 +206,8 @@ async def _control_standard_device(hass, device, is_active, prev_on, remaining_p
             if service_domain == DOMAIN_CLIMATE:
                 service_name = "set_hvac_mode"
                 service_data["hvac_mode"] = "off"
-            await hass.services.async_call(service_domain, service_name, service_data, blocking=False)
+            log_debug(f"Calling service {service_domain}.{service_name} with data {service_data}")
+            await hass.services.async_call(service_domain, service_name, service_data, blocking=True)
         status_entry.update({"percent_target": 0.0, "percent_actual": 0.0, "allocated_w": 0.0})
         
     return power_used, status_entry
@@ -247,7 +249,8 @@ async def _control_custom_device(hass, device, is_active, prev_on, remaining_pow
             if service_domain == DOMAIN_LIGHT:
                 ramp_targets[relay_entity] = target_percent
             elif not prev_on:
-                await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                log_debug(f"Calling service {service_domain}.{SERVICE_TURN_ON} with data {{ATTR_ENTITY_ID: {relay_entity}}}")
+                await hass.services.async_call(service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=True)
 
             power_used = min(remaining_power, max_w * (target_percent / MAX_PERCENTAGE))
             status_entry["allocated_w"] = float(power_used)
@@ -256,7 +259,8 @@ async def _control_custom_device(hass, device, is_active, prev_on, remaining_pow
             if service_domain == DOMAIN_LIGHT:
                 ramp_targets[relay_entity] = 0.0
             elif prev_on:
-                await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=False)
+                log_debug(f"Calling service {service_domain}.{SERVICE_TURN_OFF} with data {{ATTR_ENTITY_ID: {relay_entity}}}")
+                await hass.services.async_call(service_domain, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: relay_entity}, blocking=True)
 
     elif mode_state.state == RELAY_MODE_ON:
         # This logic is identical to a standard device

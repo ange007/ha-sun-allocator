@@ -33,8 +33,9 @@ async def set_mode_for_entity(hass: HomeAssistant, entity_id, mode):
     await hass.services.async_call(
         DOMAIN_SELECT, SERVICE_SELECT_OPTION,
         {ATTR_ENTITY_ID: entity_id, "option": mode},
-        blocking=True
+        blocking=False
     )
+    await hass.async_block_till_done()
 
 
 async def set_power_for_entity(hass, entity_id, power_percent):
@@ -61,41 +62,43 @@ async def set_power_for_entity(hass, entity_id, power_percent):
             await hass.services.async_call(
                 DOMAIN_LIGHT, SERVICE_TURN_OFF,
                 {ATTR_ENTITY_ID: entity_id},
-                blocking=True
+                blocking=False
             )
         elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
             await hass.services.async_call(
                 domain, SERVICE_TURN_OFF,
                 {ATTR_ENTITY_ID: entity_id},
-                blocking=True
+                blocking=False
             )
         elif domain == DOMAIN_CLIMATE:
             await hass.services.async_call(
                 DOMAIN_CLIMATE, "set_hvac_mode",
                 {ATTR_ENTITY_ID: entity_id, "hvac_mode": "off"},
-                blocking=True
+                blocking=False
             )
         else:
             log_warning(f"Unsupported entity domain: {domain}. Cannot turn off {entity_id}")
+        await hass.async_block_till_done()
     else:
         log_debug(f"Turning on entity {entity_id} with power {power_percent}%")
         if domain == DOMAIN_LIGHT:
             await hass.services.async_call(
                 DOMAIN_LIGHT, SERVICE_TURN_ON,
                 {ATTR_ENTITY_ID: entity_id, "brightness": brightness},
-                blocking=True
+                blocking=False
             )
         elif domain in [DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT]:
             await hass.services.async_call(
                 domain, SERVICE_TURN_ON,
                 {ATTR_ENTITY_ID: entity_id},
-                blocking=True
+                blocking=False
             )
         elif domain == DOMAIN_CLIMATE:
             await hass.services.async_call(
                 DOMAIN_CLIMATE, "set_hvac_mode",
                 {ATTR_ENTITY_ID: entity_id, "hvac_mode": hvac_mode or "heat"},
-                blocking=True
+                blocking=False
             )
         else:
             log_warning(f"Unsupported entity domain: {domain}. Cannot turn on {entity_id}")
+        await hass.async_block_till_done()

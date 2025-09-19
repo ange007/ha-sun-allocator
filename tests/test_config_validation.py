@@ -1,6 +1,13 @@
 """Tests for configuration validation."""
 import pytest
 from custom_components.sun_allocator.config.utils import validate_solar_config
+from custom_components.sun_allocator.const import (
+    CONF_VMP,
+    CONF_IMP,
+    CONF_VOC,
+    CONF_ISC,
+    CONF_PANEL_COUNT,
+)
 
 @pytest.mark.parametrize("vmp,imp,voc,isc,valid", [
     (30.0, 8.0, 36.0, 8.5, True),   # Valid config
@@ -12,11 +19,11 @@ from custom_components.sun_allocator.config.utils import validate_solar_config
 async def test_solar_config_validation(vmp, imp, voc, isc, valid):
     """Test solar panel configuration validation."""
     config = {
-        "vmp": vmp,
-        "imp": imp, 
-        "voc": voc,
-        "isc": isc,
-        "panel_count": 1
+        CONF_VMP: vmp,
+        CONF_IMP: imp, 
+        CONF_VOC: voc,
+        CONF_ISC: isc,
+        CONF_PANEL_COUNT: 1
     }
 
     result = validate_solar_config(config)
@@ -47,4 +54,3 @@ async def test_device_entity_validation():
 
     for entity in invalid_entities:
         assert validate_device_entity(entity) is False
-
