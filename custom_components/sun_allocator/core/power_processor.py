@@ -74,7 +74,7 @@ def _initialize_run(entry_data, devices_config):
     
     # Get and sort devices with auto-control enabled
     auto_control_devices = [d for d in devices_config if d.get(CONF_AUTO_CONTROL_ENABLED, False)]
-    auto_control_devices.sort(key=lambda d: d.get(CONF_DEVICE_PRIORITY, 50), reverse=True)
+    auto_control_devices.sort(key=lambda d: int(d.get(CONF_DEVICE_PRIORITY, 50)), reverse=True)
     
     return auto_control_devices
 

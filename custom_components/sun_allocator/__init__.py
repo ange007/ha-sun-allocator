@@ -316,7 +316,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         log_debug("No devices with auto-control enabled")
         return
     
-    auto_control_devices.sort(key=lambda dev: dev.get(CONF_DEVICE_PRIORITY, 50), reverse=True)
+    auto_control_devices.sort(key=lambda dev: int(dev.get(CONF_DEVICE_PRIORITY, 50)), reverse=True)
     log_debug(f"Setting up auto-control for {len(auto_control_devices)} devices")
     
     power_allocation = {}
