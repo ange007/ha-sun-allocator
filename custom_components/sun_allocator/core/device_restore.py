@@ -1,33 +1,34 @@
 """Device restore and persist logic for Sun Allocator."""
 from homeassistant.const import STATE_ON, STATE_OFF
 
-from .utils.logger import log_info, log_debug, log_warning
-from .entity_control import set_power_for_entity
+from .logger import log_info, log_debug, log_warning
+from .entity_control import set_power_for_entity, set_mode_for_entity
 
-from .const import (
+from ..const import (
     DOMAIN,
+    DOMAIN_CLIMATE,
     CONF_DEVICES,
     CONF_DEVICE_ENTITY,
-    CONF_ESPHOME_MODE_SELECT_ENTITY, 
     CONF_DEVICE_ID,
-    DOMAIN_CLIMATE,
+    CONF_ESPHOME_MODE_SELECT_ENTITY,
 )
 
 
 async def persist_device_state(hass, config_entry, entity_id, percent=None, is_on=None):
+    """Persist the device state to the config entry."""
     # Defer persistence if a config flow is in progress to avoid race conditions
     active_flows = config_entry.async_get_active_flows(hass)
-    if any(flow['handler'] == DOMAIN for flow in active_flows):
+    if any(flow.get('handler') == DOMAIN for flow in active_flows):
         log_debug("Config flow in progress. Deferring persistence of device state for %s.", entity_id)
         return
 
     data = dict(config_entry.data)
     devs = list(data.get(CONF_DEVICES, []))
     changed = False
-    for i, d in enumerate(devs):
-        relay_entity = d.get(CONF_DEVICE_ENTITY)
+    for i, dev in enumerate(devs):
+        relay_entity = dev.get(CONF_DEVICE_ENTITY)
         if relay_entity == entity_id:
-            nd = dict(d)
+            nd = dict(dev)
             if percent is not None:
                 if nd.get("last_percent") != percent:
                     nd["last_percent"] = percent
@@ -43,7 +44,9 @@ async def persist_device_state(hass, config_entry, entity_id, percent=None, is_o
         log_warning("--- DEVICE RESTORE ---: Saving %d devices. Data: %s", len(devs), data)
         hass.config_entries.async_update_entry(config_entry, data=data)
 
+
 async def restore_entity_state(hass, config_entry, entity_id):
+    """Restore the entity state after Home Assistant restart."""
     devices = config_entry.data.get(CONF_DEVICES, [])
     for device in devices:
         relay_entity = device.get(CONF_DEVICE_ENTITY)
@@ -65,7 +68,9 @@ async def restore_entity_state(hass, config_entry, entity_id):
                 log_info(f"[Restore] Setting mode {last_mode} for {entity_id}")
                 await set_mode_for_entity(hass, entity_id, last_mode)
 
+
 async def restore_all_devices(hass, config_entry):
+    """Restore all devices after Home Assistant restart."""
     devices = config_entry.data.get(CONF_DEVICES, [])
     log_info("Found %d devices to check for restore state", len(devices))
     restored = set()
@@ -83,7 +88,6 @@ async def restore_all_devices(hass, config_entry):
                 state = hass.states.get(mode_select_entity)
                 if state and state.state != last_mode:
                     log_info(f"Restoring mode '{last_mode}' for {mode_select_entity}")
-                    from . import set_mode_for_entity
                     await set_mode_for_entity(hass, mode_select_entity, last_mode)
                     restored.add(mode_select_entity)
 
@@ -97,19 +101,16 @@ async def restore_all_devices(hass, config_entry):
             if state and state.state in (STATE_ON, STATE_OFF):
                 if device.get("_restore_on", False) and state.state != STATE_ON:
                     log_info(f"Restoring ON state for {entity_to_restore}")
-                    from . import set_power_for_entity
                     await set_power_for_entity(hass, entity_to_restore, 100)
                     restored.add(relay_entity)
                 elif not device.get("_restore_on", False) and state.state != STATE_OFF:
-                    log_info(f"Restoring OFF state for {relay_entity}")
-                    from . import set_power_for_entity
-                    await set_power_for_entity(hass, relay_entity, 0)
+                    log_info(f"Restoring OFF state for {entity_to_restore}")
+                    await set_power_for_entity(hass, entity_to_restore, 0)
                     restored.add(relay_entity)
-            
+
             percent = device.get("last_percent")
             if percent is not None:
                 log_info(f"Restoring percent {percent} for {entity_to_restore}")
-                from . import set_power_for_entity
                 await set_power_for_entity(hass, entity_to_restore, percent)
                 restored.add(relay_entity)
 

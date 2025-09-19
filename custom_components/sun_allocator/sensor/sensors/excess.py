@@ -1,4 +1,3 @@
-
 """Excess power sensor for Sun Allocator."""
 from typing import Optional, Dict, Any
 
@@ -6,10 +5,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfPower
 
 from .base import BaseSunAllocatorSensor
-from ...utils.logger import log_debug
-from ...utils.journal import journal_event
-from ...utils.mppt import calculate_current_max_power
-from ...utils.sensor_utils import calculate_excess_power, calculate_usage_percentage
+from ...core.logger import log_debug, journal_event
+from ...core.solar_optimizer import calculate_current_max_power
+from ..utils import calculate_excess_power, calculate_usage_percentage
 
 from ...const import (
     CONF_CURVE_FACTOR_K,
@@ -28,18 +26,17 @@ from ...const import (
     KEY_PANEL_CONFIGURATION,
     KEY_PMAX,
     KEY_ENERGY_HARVESTING_POSSIBLE,
-    KEY_MIN_SYSTEM_VOLTAGE,
-    KEY_LIGHT_FACTOR,
     KEY_RELATIVE_VOLTAGE,
-    KEY_VOC_RATIO,
     KEY_CALCULATION_REASON,
 )
 
 
 class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
     """Sensor for excess power (untapped potential)."""
-    
-    def __init__(self, hass: HomeAssistant, config: Dict[str, Any], entry_id: str, entry_index: int):
+
+    def __init__(
+        self, hass: HomeAssistant, config: Dict[str, Any], entry_id: str, entry_index: int
+    ):
         """Initialize the excess power sensor."""
         super().__init__(
             hass=hass,
@@ -48,22 +45,23 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             entry_index=entry_index,
             name="Excess",
             unique_id_suffix="excess",
-            unit_of_measurement=UnitOfPower.WATT
+            unit_of_measurement=UnitOfPower.WATT,
         )
-    
+
+    # pylint: disable=too-many-locals
     def _calculate_value(
         self,
         sensor_values: Dict[str, Any],
         panel_params: Dict[str, Any],
         mppt_config: Dict[str, float],
-        temp_compensation: Optional[Dict[str, float]]
+        temp_compensation: Optional[Dict[str, float]],
     ) -> float:
         """Calculate excess power (untapped potential)."""
         pv_power = sensor_values[KEY_PV_POWER]
         pv_voltage = sensor_values[KEY_PV_VOLTAGE]
         consumption = sensor_values[KEY_CONSUMPTION]
         battery_power = sensor_values[KEY_BATTERY_POWER]
-        
+
         # Calculate current maximum power using MPPT algorithm
         current_max_power, debug_info = calculate_current_max_power(
             pv_voltage=pv_voltage,
@@ -75,11 +73,13 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             panel_count=panel_params[KEY_PANEL_COUNT],
             panel_configuration=panel_params[KEY_PANEL_CONFIGURATION],
             curve_factor_k=mppt_config[CONF_CURVE_FACTOR_K],
-            efficiency_correction_factor=mppt_config[CONF_EFFICIENCY_CORRECTION_FACTOR],
+            efficiency_correction_factor=mppt_config[
+                CONF_EFFICIENCY_CORRECTION_FACTOR
+            ],
             min_inverter_voltage=mppt_config[CONF_MIN_INVERTER_VOLTAGE],
-            temperature_compensation=temp_compensation
+            temperature_compensation=temp_compensation,
         )
-        
+
         # Calculate excess power with topology constraints and battery charging accounted
         battery_power_reversed = self._config.get(CONF_BATTERY_POWER_REVERSED, False)
         excess = calculate_excess_power(
@@ -88,14 +88,18 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             battery_power=battery_power,
             battery_power_reversed=battery_power_reversed,
             relative_voltage=debug_info[KEY_RELATIVE_VOLTAGE],
-            energy_harvesting_possible=debug_info[KEY_ENERGY_HARVESTING_POSSIBLE],
+            energy_harvesting_possible=debug_info[
+                KEY_ENERGY_HARVESTING_POSSIBLE
+            ],
         )
         # Determine if battery is discharging (for diagnostics/UI)
-        battery_discharging = (battery_power > 0) if battery_power_reversed else (battery_power < 0)
-        
+        battery_discharging = (
+            battery_power > 0 if battery_power_reversed else (battery_power < 0)
+        )
+
         # Calculate usage percentage
         usage = calculate_usage_percentage(pv_power, debug_info[KEY_PMAX])
-        
+
         # Determine actionable and topology-based excess flags
         epsilon = 5.0  # small hysteresis to avoid flicker
         topology_excess_possible = (
@@ -103,47 +107,42 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             and debug_info[KEY_ENERGY_HARVESTING_POSSIBLE]
         )
         excess_possible = (excess > epsilon) and topology_excess_possible
-        
+
         # Update attributes with all relevant information
-        self._update_attributes(
+        common_attrs = self._get_common_attributes(
+            debug_info=debug_info,
+            panel_params=panel_params,
             pv_power=pv_power,
             pv_voltage=pv_voltage,
+            current_max_power=current_max_power,
+        )
+        self._update_attributes(
+            **common_attrs,
             consumption=consumption,
             battery_power=battery_power,
             battery_discharging=battery_discharging,
             excess_possible=excess_possible,
             excess_possible_topology=topology_excess_possible,
-            energy_harvesting_possible=debug_info[KEY_ENERGY_HARVESTING_POSSIBLE],
-            min_system_voltage=debug_info[KEY_MIN_SYSTEM_VOLTAGE],
-            vmp=panel_params[KEY_VMP],
-            imp=panel_params[KEY_IMP],
-            voc=panel_params[KEY_VOC],
-            isc=panel_params[KEY_ISC],
-            panel_count=panel_params[KEY_PANEL_COUNT],
-            panel_configuration=panel_params[KEY_PANEL_CONFIGURATION],
-            pmax=debug_info[KEY_PMAX],
-            current_max_power=current_max_power,
             usage_percent=usage,
-            light_factor=debug_info[KEY_LIGHT_FACTOR],
-            relative_voltage=debug_info[KEY_RELATIVE_VOLTAGE],
-            voc_ratio=debug_info[KEY_VOC_RATIO],
-            calculation_reason=debug_info[KEY_CALCULATION_REASON]
         )
-        
+
         log_debug(
             f"Excess power calculation: PV Power={pv_power}W, "
             f"Current Max Power={current_max_power}W, Excess={excess}W, "
             f"Reason: {debug_info[KEY_CALCULATION_REASON]}"
         )
-        journal_event("excess_power_calc", {
-            "pv_power": pv_power,
-            "current_max_power": current_max_power,
-            "excess": excess,
-            "reason": debug_info[KEY_CALCULATION_REASON],
-            "usage_percent": usage,
-            "battery_discharging": battery_discharging,
-            "excess_possible": excess_possible,
-            "topology_excess_possible": topology_excess_possible
-        })
-        
+        journal_event(
+            "excess_power_calc",
+            {
+                "pv_power": pv_power,
+                "current_max_power": current_max_power,
+                "excess": excess,
+                "reason": debug_info[KEY_CALCULATION_REASON],
+                "usage_percent": usage,
+                "battery_discharging": battery_discharging,
+                "excess_possible": excess_possible,
+                "topology_excess_possible": topology_excess_possible,
+            },
+        )
+
         return excess

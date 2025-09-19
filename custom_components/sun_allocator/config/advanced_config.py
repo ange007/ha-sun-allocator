@@ -1,9 +1,9 @@
 """Advanced settings configuration module for Sun Allocator config flow."""
-import voluptuous as vol
 from typing import Dict, Any, Optional
 
-from ..utils.logger import log_error
-from ..utils.journal import log_exception, audit_action
+import voluptuous as vol
+
+from ..core.logger import log_error, log_exception, audit_action
 from .advanced_config_form import build_advanced_config_schema
 
 from ..const import (
@@ -30,20 +30,28 @@ class AdvancedConfigMixin:
         # Validate curve factor
         try:
             curve_factor = float(user_input.get(CONF_CURVE_FACTOR_K, 0.2))
-            if curve_factor <= 0 or curve_factor > 1.0:
+            if not 0 < curve_factor <= 1.0:
                 errors[CONF_CURVE_FACTOR_K] = "invalid_curve_factor"
         except (ValueError, TypeError) as e:
             errors[CONF_CURVE_FACTOR_K] = "invalid_curve_factor"
-            log_error("[AdvancedConfigMixin] Invalid curve factor: %s", user_input.get(CONF_CURVE_FACTOR_K))
+            log_error(
+                "[AdvancedConfigMixin] Invalid curve factor: %s",
+                user_input.get(CONF_CURVE_FACTOR_K),
+            )
             log_exception("advanced_config_curve_factor", e)
         # Validate efficiency correction factor
         try:
-            efficiency_factor = float(user_input.get(CONF_EFFICIENCY_CORRECTION_FACTOR, 1.05))
-            if efficiency_factor < 1.0 or efficiency_factor > 1.5:
+            efficiency_factor = float(
+                user_input.get(CONF_EFFICIENCY_CORRECTION_FACTOR, 1.05)
+            )
+            if not 1.0 <= efficiency_factor <= 1.5:
                 errors[CONF_EFFICIENCY_CORRECTION_FACTOR] = "invalid_efficiency_factor"
         except (ValueError, TypeError) as e:
             errors[CONF_EFFICIENCY_CORRECTION_FACTOR] = "invalid_efficiency_factor"
-            log_error("[AdvancedConfigMixin] Invalid efficiency factor: %s", user_input.get(CONF_EFFICIENCY_CORRECTION_FACTOR))
+            log_error(
+                "[AdvancedConfigMixin] Invalid efficiency factor: %s",
+                user_input.get(CONF_EFFICIENCY_CORRECTION_FACTOR),
+            )
             log_exception("advanced_config_efficiency_factor", e)
         # Validate minimum inverter voltage
         try:
@@ -52,48 +60,66 @@ class AdvancedConfigMixin:
                 errors[CONF_MIN_INVERTER_VOLTAGE] = "invalid_min_voltage"
         except (ValueError, TypeError) as e:
             errors[CONF_MIN_INVERTER_VOLTAGE] = "invalid_min_voltage"
-            log_error("[AdvancedConfigMixin] Invalid min inverter voltage: %s", user_input.get(CONF_MIN_INVERTER_VOLTAGE))
+            log_error(
+                "[AdvancedConfigMixin] Invalid min inverter voltage: %s",
+                user_input.get(CONF_MIN_INVERTER_VOLTAGE),
+            )
             log_exception("advanced_config_min_voltage", e)
         # Validate ramp/hysteresis tunables
         try:
             up = float(user_input.get(CONF_RAMP_UP_STEP, 10.0))
-            if up <= 0 or up > 100:
+            if not 0 < up <= 100:
                 errors[CONF_RAMP_UP_STEP] = "invalid_ramp_up_step"
         except (ValueError, TypeError) as e:
             errors[CONF_RAMP_UP_STEP] = "invalid_ramp_up_step"
-            log_error("[AdvancedConfigMixin] Invalid ramp up step: %s", user_input.get(CONF_RAMP_UP_STEP))
+            log_error(
+                "[AdvancedConfigMixin] Invalid ramp up step: %s",
+                user_input.get(CONF_RAMP_UP_STEP),
+            )
             log_exception("advanced_config_ramp_up_step", e)
         try:
             down = float(user_input.get(CONF_RAMP_DOWN_STEP, 20.0))
-            if down <= 0 or down > 100:
+            if not 0 < down <= 100:
                 errors[CONF_RAMP_DOWN_STEP] = "invalid_ramp_down_step"
         except (ValueError, TypeError) as e:
             errors[CONF_RAMP_DOWN_STEP] = "invalid_ramp_down_step"
-            log_error("[AdvancedConfigMixin] Invalid ramp down step: %s", user_input.get(CONF_RAMP_DOWN_STEP))
+            log_error(
+                "[AdvancedConfigMixin] Invalid ramp down step: %s",
+                user_input.get(CONF_RAMP_DOWN_STEP),
+            )
             log_exception("advanced_config_ramp_down_step", e)
         try:
             db = float(user_input.get(CONF_RAMP_DEADBAND, 1.0))
-            if db < 0 or db > 10:
+            if not 0 <= db <= 10:
                 errors[CONF_RAMP_DEADBAND] = "invalid_ramp_deadband"
         except (ValueError, TypeError) as e:
             errors[CONF_RAMP_DEADBAND] = "invalid_ramp_deadband"
-            log_error("[AdvancedConfigMixin] Invalid ramp deadband: %s", user_input.get(CONF_RAMP_DEADBAND))
+            log_error(
+                "[AdvancedConfigMixin] Invalid ramp deadband: %s",
+                user_input.get(CONF_RAMP_DEADBAND),
+            )
             log_exception("advanced_config_ramp_deadband", e)
         try:
             dmin = float(user_input.get(CONF_DEFAULT_MIN_START_W, DEFAULT_MIN_START_W))
-            if dmin < 0 or dmin > 5000:
+            if not 0 <= dmin <= 5000:
                 errors[CONF_DEFAULT_MIN_START_W] = "invalid_default_min_start_w"
         except (ValueError, TypeError) as e:
             errors[CONF_DEFAULT_MIN_START_W] = "invalid_default_min_start_w"
-            log_error("[AdvancedConfigMixin] Invalid min start W: %s", user_input.get(CONF_DEFAULT_MIN_START_W))
+            log_error(
+                "[AdvancedConfigMixin] Invalid min start W: %s",
+                user_input.get(CONF_DEFAULT_MIN_START_W),
+            )
             log_exception("advanced_config_min_start_w", e)
         try:
             hyst = float(user_input.get(CONF_HYSTERESIS_W, DEFAULT_HYSTERESIS_W))
-            if hyst < 0 or hyst > 5000:
+            if not 0 <= hyst <= 5000:
                 errors[CONF_HYSTERESIS_W] = "invalid_hysteresis_w"
         except (ValueError, TypeError) as e:
             errors[CONF_HYSTERESIS_W] = "invalid_hysteresis_w"
-            log_error("[AdvancedConfigMixin] Invalid hysteresis W: %s", user_input.get(CONF_HYSTERESIS_W))
+            log_error(
+                "[AdvancedConfigMixin] Invalid hysteresis W: %s",
+                user_input.get(CONF_HYSTERESIS_W),
+            )
             log_exception("advanced_config_hysteresis_w", e)
         return errors
 
@@ -137,4 +163,6 @@ class AdvancedConfigMixin:
         """Save configuration and return to appropriate step."""
         # This method should be implemented by the main config flow class
         # to handle saving and returning to the correct step
-        raise NotImplementedError("_save_and_return must be implemented by the main config flow class")
+        raise NotImplementedError(
+            "_save_and_return must be implemented by the main config flow class"
+        )

@@ -1,12 +1,10 @@
 """Mode select logic for Sun Allocator."""
-from homeassistant.const import (
-    STATE_UNKNOWN, STATE_UNAVAILABLE
-)
+from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
 
-from .utils.logger import log_debug, log_warning
+from .logger import log_debug, log_warning
 from .entity_control import set_mode_for_entity
 
-from .const import (
+from ..const import (
     DOMAIN,
     CONF_ESPHOME_MODE_SELECT_ENTITY,
     CONF_DEVICES,
@@ -16,6 +14,7 @@ VALID_MODES = {"off", "on", "proportional"}
 
 
 async def persist_last_mode(hass, config_entry, entity_id, mode):
+    """Persist the last mode of the device."""
     # Defer persistence if a config flow is in progress to avoid race conditions
     active_flows = config_entry.async_get_active_flows(hass)
     if any(flow['handler'] == DOMAIN for flow in active_flows):
@@ -27,10 +26,10 @@ async def persist_last_mode(hass, config_entry, entity_id, mode):
     data = dict(config_entry.data)
     devs = list(data.get(CONF_DEVICES, []))
     changed = False
-    for i, d in enumerate(devs):
-        if d.get(CONF_ESPHOME_MODE_SELECT_ENTITY) == entity_id:
-            if d.get("last_mode") != mode:
-                nd = dict(d)
+    for i, dev in enumerate(devs):
+        if dev.get(CONF_ESPHOME_MODE_SELECT_ENTITY) == entity_id:
+            if dev.get("last_mode") != mode:
+                nd = dict(dev)
                 nd["last_mode"] = mode
                 devs[i] = nd
                 changed = True
@@ -41,6 +40,7 @@ async def persist_last_mode(hass, config_entry, entity_id, mode):
         hass.config_entries.async_update_entry(config_entry, data=data)
 
 async def mode_select_state_listener(hass, config_entry, event, desired_modes, select_entity_ids):
+    """Handle state changes for the mode select entity."""
     entity_id = event.data.get("entity_id")
     if entity_id not in select_entity_ids:
         return

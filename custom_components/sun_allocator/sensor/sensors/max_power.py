@@ -5,8 +5,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfPower
 
 from .base import BaseSunAllocatorSensor
-from ...utils.mppt import calculate_pmax
-from ...utils.logger import log_debug
+from ...core.solar_optimizer import calculate_pmax
+from ...core.logger import log_debug
 
 from ...const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
@@ -22,7 +22,7 @@ from ...const import (
 
 class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
     """Sensor for maximum theoretical power."""
-    
+
     def __init__(self, hass: HomeAssistant, config: Dict[str, Any], entry_id: str, entry_index: int):
         """Initialize the maximum power sensor."""
         super().__init__(
@@ -34,20 +34,20 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             unique_id_suffix="max_power",
             unit_of_measurement=UnitOfPower.WATT
         )
-    
+
     def _get_entity_ids_to_listen(self) -> list:
         """Override to listen only to temperature sensor if temperature compensation is enabled."""
         entity_ids = []
-        
+
         # Only listen to temperature sensor if temperature compensation is enabled
         # Max power doesn't depend on current PV conditions, only on configuration
         if self._config.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False):
             temp_sensor = self._config.get(CONF_TEMPERATURE_SENSOR)
             if temp_sensor:
                 entity_ids.append(temp_sensor)
-        
+
         return entity_ids
-    
+
     def _calculate_value(
         self,
         sensor_values: Dict[str, Any],
@@ -58,22 +58,22 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
         """Calculate maximum theoretical power."""
         vmp = panel_params[KEY_VMP]
         imp = panel_params[KEY_IMP]
-        
+
         # Apply temperature compensation if provided
         if temp_compensation:
             temp_diff = temp_compensation["temp_diff"]
             voc_coef = temp_compensation["voc_coef"]
             pmax_coef = temp_compensation["pmax_coef"]
-            
+
             # Adjust Vmp and Imp for temperature
             vmp = vmp * (1 + voc_coef * temp_diff)
             imp = imp * (1 + pmax_coef * temp_diff + voc_coef * temp_diff)
-            
+
             log_debug(
                 f"Temperature compensation applied: temp_diff={temp_diff}°C, "
                 f"adjusted Vmp={vmp:.2f}V, adjusted Imp={imp:.2f}A"
             )
-        
+
         # Calculate maximum power based on panel configuration
         pmax = calculate_pmax(
             vmp=vmp,
@@ -81,7 +81,7 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             panel_count=panel_params[KEY_PANEL_COUNT],
             panel_configuration=panel_params[KEY_PANEL_CONFIGURATION]
         )
-        
+
         # Update attributes with panel information
         self._update_attributes(
             pv_power=0.0,  # Not applicable for max power sensor
@@ -101,12 +101,12 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             usage_percent=0.0,  # Not applicable for max power sensor
             temperature_compensated=temp_compensation is not None
         )
-        
+
         log_debug(
             f"Max power calculation: Vmp={vmp:.2f}V, Imp={imp:.2f}A, "
             f"Panel Count={panel_params[KEY_PANEL_COUNT]}, "
             f"Configuration={panel_params[KEY_PANEL_CONFIGURATION]}, "
             f"Pmax={pmax:.1f}W"
         )
-        
+
         return pmax

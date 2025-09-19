@@ -9,7 +9,7 @@ from voluptuous import Schema, Required, Optional
 
 from homeassistant.helpers.selector import selector
 
-from ..utils.ui_helpers import SelectSelectorBuilder, NumberSelectorBuilder, BooleanSelectorBuilder
+from ..config.ui_helpers import SelectSelectorBuilder, NumberSelectorBuilder
 
 from ..const import (
     CONF_DEVICE_NAME,
@@ -34,6 +34,7 @@ from ..const import (
 
 
 def build_device_name_type_schema(defaults=None):
+    """Builds the schema for device name and type configuration."""
     if defaults is None:
         defaults = {}
 
@@ -41,29 +42,41 @@ def build_device_name_type_schema(defaults=None):
     if default_type == DEVICE_TYPE_NONE:
         default_type = DEVICE_TYPE_STANDARD
 
-    return Schema({
-        Required(
-            CONF_DEVICE_NAME,
-            default=defaults.get(CONF_DEVICE_NAME, ""),
-            description={
-                "suggested_value": defaults.get(CONF_DEVICE_NAME, ""),
-                "label": "config.step.device_name_type.data.name"
-            }
-        ): str,
-        Required(
-            CONF_DEVICE_TYPE,
-            default=default_type,
-            description={
-                "suggested_value": default_type,
-                "label": "config.step.device_name_type.data.device_type.name"
-            }
-        ): SelectSelectorBuilder([
-            {"label": "config.step.device_name_type.data.device_type.options.standard", "value": DEVICE_TYPE_STANDARD},
-            {"label": "config.step.device_name_type.data.device_type.options.custom", "value": DEVICE_TYPE_CUSTOM}
-        ]).build()
-    })
+    return Schema(
+        {
+            Required(
+                CONF_DEVICE_NAME,
+                default=defaults.get(CONF_DEVICE_NAME, ""),
+                description={
+                    "suggested_value": defaults.get(CONF_DEVICE_NAME, ""),
+                    "label": "config.step.device_name_type.data.name",
+                },
+            ): str,
+            Required(
+                CONF_DEVICE_TYPE,
+                default=default_type,
+                description={
+                    "suggested_value": default_type,
+                    "label": "config.step.device_name_type.data.device_type.name",
+                },
+            ): SelectSelectorBuilder(
+                [
+                    {
+                        "label": "config.step.device_name_type.data.device_type.options.standard",
+                        "value": DEVICE_TYPE_STANDARD,
+                    },
+                    {
+                        "label": "config.step.device_name_type.data.device_type.options.custom",
+                        "value": DEVICE_TYPE_CUSTOM,
+                    },
+                ]
+            ).build(),
+        }
+    )
 
-def build_device_selection_schema(entities, device_type, defaults=None):
+
+def build_device_selection_schema(entities, defaults=None):
+    """Builds the schema for device selection configuration."""
     if defaults is None:
         defaults = {}
 
@@ -72,23 +85,36 @@ def build_device_selection_schema(entities, device_type, defaults=None):
         for value, label, _ in entities["all_entities"]
     ]
 
-    default_entity = NONE_OPTION if defaults.get(CONF_DEVICE_ENTITY) is None else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
-    
+    default_entity = (
+        NONE_OPTION
+        if defaults.get(CONF_DEVICE_ENTITY) is None
+        else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
+    )
+
     if len(options) <= 1:
-        options.append({"label": "config.step.device_selection.data.no_devices_found", "value": NONE_OPTION})
-    
-    return Schema({
-        Optional(
-            CONF_DEVICE_ENTITY,
-            default=default_entity,
-            description={
-                "suggested_value": default_entity,
-                "label": "config.step.device_selection.data.device_entity"
+        options.append(
+            {
+                "label": "config.step.device_selection.data.no_devices_found",
+                "value": NONE_OPTION,
             }
-        ): SelectSelectorBuilder(options).build()
-    })
+        )
+
+    return Schema(
+        {
+            Optional(
+                CONF_DEVICE_ENTITY,
+                default=default_entity,
+                description={
+                    "suggested_value": default_entity,
+                    "label": "config.step.device_selection.data.device_entity",
+                },
+            ): SelectSelectorBuilder(options).build()
+        }
+    )
+
 
 def build_device_basic_settings_schema(defaults=None):
+    """Builds the schema for device basic settings configuration."""
     if defaults is None:
         defaults = {}
 
@@ -98,52 +124,79 @@ def build_device_basic_settings_schema(defaults=None):
         Optional(
             CONF_MIN_EXPECTED_W,
             default=defaults.get(CONF_MIN_EXPECTED_W, 0.0),
-            description={"suggested_value": defaults.get(CONF_MIN_EXPECTED_W, 0.0)}
+            description={"suggested_value": defaults.get(CONF_MIN_EXPECTED_W, 0.0)},
         ): NumberSelectorBuilder(0, 10000, 1, unit="W").build(),
         Required(
             CONF_DEVICE_PRIORITY,
             default=str(defaults.get(CONF_DEVICE_PRIORITY, 50)),
             description={
                 "suggested_value": str(defaults.get(CONF_DEVICE_PRIORITY, 50)),
-                "label": "config.step.device_basic_settings.data.priority.name"
-            }
-        ): SelectSelectorBuilder([
-            {"label": "config.step.device_basic_settings.data.priority.options.very_high", "value": "100"},
-            {"label": "config.step.device_basic_settings.data.priority.options.high", "value": "75"},
-            {"label": "config.step.device_basic_settings.data.priority.options.medium", "value": "50"},
-            {"label": "config.step.device_basic_settings.data.priority.options.low", "value": "25"},
-            {"label": "config.step.device_basic_settings.data.priority.options.very_low", "value": "1"}
-        ]).build(),
+                "label": "config.step.device_basic_settings.data.priority.name",
+            },
+        ): SelectSelectorBuilder(
+            [
+                {
+                    "label": "config.step.device_basic_settings.data.priority.options.very_high",
+                    "value": "100",
+                },
+                {
+                    "label": "config.step.device_basic_settings.data.priority.options.high",
+                    "value": "75",
+                },
+                {
+                    "label": "config.step.device_basic_settings.data.priority.options.medium",
+                    "value": "50",
+                },
+                {
+                    "label": "config.step.device_basic_settings.data.priority.options.low",
+                    "value": "25",
+                },
+                {
+                    "label": "config.step.device_basic_settings.data.priority.options.very_low",
+                    "value": "1",
+                },
+            ]
+        ).build(),
         Optional(
             CONF_DEBOUNCE_TIME,
             default=defaults.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME),
-            description={"suggested_value": defaults.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME)}
+            description={
+                "suggested_value": defaults.get(
+                    CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME
+                )
+            },
         ): NumberSelectorBuilder(15, 600, 1, unit="s").build(),
         Required(
             CONF_AUTO_CONTROL_ENABLED,
             default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
             description={
                 "suggested_value": defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
-                "label": "config.step.device_basic_settings.data.auto_control_enabled"
-            }
-        ): BooleanSelectorBuilder().build(),
+                "label": "config.step.device_basic_settings.data.auto_control_enabled",
+            },
+        ): selector({"boolean": {}}),
         Required(
             CONF_SCHEDULE_ENABLED,
             default=defaults.get(CONF_SCHEDULE_ENABLED, False),
-            description={"suggested_value": defaults.get(CONF_SCHEDULE_ENABLED, False)}
-        ): BooleanSelectorBuilder().build(),
+            description={"suggested_value": defaults.get(CONF_SCHEDULE_ENABLED, False)},
+        ): selector({"boolean": {}}),
     }
 
     if device_type == DEVICE_TYPE_CUSTOM:
-        schema_dict[Optional(
-            CONF_MAX_EXPECTED_W,
-            default=defaults.get(CONF_MAX_EXPECTED_W, 0.0),
-            description={"suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)}
-        )] = NumberSelectorBuilder(0, 10000, 1, unit="W").build()
+        schema_dict[
+            Optional(
+                CONF_MAX_EXPECTED_W,
+                default=defaults.get(CONF_MAX_EXPECTED_W, 0.0),
+                description={
+                    "suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)
+                },
+            )
+        ] = NumberSelectorBuilder(0, 10000, 1, unit="W").build()
 
     return Schema(schema_dict)
 
+
 def build_device_schedule_schema(defaults=None):
+    """Builds the schema for device schedule configuration."""
     if defaults is None:
         defaults = {}
 
@@ -151,22 +204,26 @@ def build_device_schedule_schema(defaults=None):
 
     days_schema = {}
     for day in DAYS_OF_WEEK:
-        days_schema[Required(
-            day,
-            default=day in default_days,
-            description={"suggested_value": day in default_days}
-        )] = BooleanSelectorBuilder().build()
+        days_schema[
+            Required(
+                day,
+                default=day in default_days,
+                description={"suggested_value": day in default_days},
+            )
+        ] = selector({"boolean": {}})
 
-    return Schema({
-        Required(
-            CONF_START_TIME,
-            default=defaults.get(CONF_START_TIME, "08:00"),
-            description={"suggested_value": defaults.get(CONF_START_TIME, "08:00")}
-        ): selector({"time": {}}),
-        Required(
-            CONF_END_TIME,
-            default=defaults.get(CONF_END_TIME, "20:00"),
-            description={"suggested_value": defaults.get(CONF_END_TIME, "20:00")}
-        ): selector({"time": {}}),
-        **days_schema
-    })
+    return Schema(
+        {
+            Required(
+                CONF_START_TIME,
+                default=defaults.get(CONF_START_TIME, "08:00"),
+                description={"suggested_value": defaults.get(CONF_START_TIME, "08:00")},
+            ): selector({"time": {}}),
+            Required(
+                CONF_END_TIME,
+                default=defaults.get(CONF_END_TIME, "20:00"),
+                description={"suggested_value": defaults.get(CONF_END_TIME, "20:00")},
+            ): selector({"time": {}}),
+            **days_schema,
+        }
+    )

@@ -10,8 +10,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.const import UnitOfPower
 from homeassistant.helpers.entity import DeviceInfo
 
-from ...utils.logger import log_debug
-from ...utils.journal import journal_event
+from ...core.logger import log_debug, journal_event
 
 from ...const import (
     DOMAIN,
@@ -19,7 +18,6 @@ from ...const import (
     CONF_POWER_DISTRIBUTION,
     SIGNAL_POWER_DISTRIBUTION_UPDATED,
     SENSOR_NAME_PREFIX,
-    SENSOR_ID_PREFIX,
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
     CONF_DEVICE_TYPE,
@@ -28,16 +26,21 @@ from ...const import (
 )
 
 class SunAllocatorPowerDistributionSensor(SensorEntity):
+    """Representation of a SunAllocator power distribution sensor."""
+
     _attr_icon = "mdi:flash"
+    _attr_should_poll = False
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_extra_state_attributes: dict[str, Any] | None = None
+    _unsub: Any = None
 
     def __init__(self, hass: HomeAssistant, entry_id: str, entry_index: int):
+        """Initialize the sensor."""
         self._hass = hass
         self._entry_id = entry_id
         self._attr_name = f"{SENSOR_NAME_PREFIX} Power Distribution {entry_index}"
         self._attr_unique_id = f"{entry_id}_power_distribution"
-        self._attr_native_unit_of_measurement = UnitOfPower.WATT
         self._state = 0.0
-        self._attr_extra_state_attributes: Dict[str, Any] = {}
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -49,30 +52,27 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
         )
 
     @property
-    def should_poll(self) -> bool:
-        return False
-
-    @property
     def native_value(self):
+        """Return the state of the sensor."""
         try:
             # Get integration data for this entry
             data = self._hass.data.get(DOMAIN, {}).get(self._entry_id, {})
-            pd: Dict[str, Any] = data.get(CONF_POWER_DISTRIBUTION, {}) or {}
+            pd_data: Dict[str, Any] = data.get(CONF_POWER_DISTRIBUTION, {}) or {}
             device_status: Dict[str, Any] = data.get("device_status", {}) or {}
-            allocation: Dict[str, float] = pd.get("allocation", {}) or {}
+            allocation: Dict[str, float] = pd_data.get("allocation", {}) or {}
 
             # Get all configured devices from config (for diagnostics)
             config = data.get("config", {})
             all_devices = config.get(CONF_DEVICES, []) or []
             all_devices_info = []
             all_device_ids = []
-            ha_entity_ids = set(e.entity_id for e in self._hass.states.async_all())
+            ha_entity_ids = set(entity.entity_id for entity in self._hass.states.async_all())
             filter_reasons = data.get("device_filter_reasons", {})
-            for d in all_devices:
-                dev_id = d.get(CONF_DEVICE_ID)
-                entity_id = d.get(CONF_DEVICE_ENTITY)
-                device_type = d.get(CONF_DEVICE_TYPE)
-                name = d.get(CONF_DEVICE_NAME)
+            for dev in all_devices:
+                dev_id = dev.get(CONF_DEVICE_ID)
+                entity_id = dev.get(CONF_DEVICE_ENTITY)
+                device_type = dev.get(CONF_DEVICE_TYPE)
+                name = dev.get(CONF_DEVICE_NAME)
                 reason = None
                 if not entity_id:
                     reason = "No entity_id configured"
@@ -80,13 +80,13 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                     reason = "Entity not found in Home Assistant"
                 elif dev_id not in device_status:
                     reason = filter_reasons.get(dev_id, "Filtered (unknown reason)")
-                
+
                 all_devices_info.append({
                     "device_id": dev_id,
                     "name": name,
                     "entity_id": entity_id,
                     "type": device_type,
-                    "auto_control": d.get(CONF_AUTO_CONTROL_ENABLED, "missing"),
+                    "auto_control": dev.get(CONF_AUTO_CONTROL_ENABLED, "missing"),
                     "in_device_status": dev_id in device_status if dev_id else False,
                     "reason": reason,
                 })
@@ -94,7 +94,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                     all_device_ids.append(entity_id)
             # If no devices in config, fallback to device_status keys
             if not all_devices_info:
-                for dev_id in device_status.keys():
+                for dev_id in device_status:
                     all_devices_info.append({
                         "id": dev_id,
                         "name": device_status[dev_id].get(CONF_DEVICE_NAME),
@@ -104,11 +104,11 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                         "reason": None,
                     })
                     all_device_ids.append(device_status[dev_id].get(CONF_DEVICE_ENTITY))
-            not_found_entities = [eid for eid in all_device_ids if eid not in ha_entity_ids]
+            not_found_entities = [entity_id for entity_id in all_device_ids if entity_id not in ha_entity_ids]
 
-            total = float(pd.get("total_power", 0.0) or 0.0)
-            remaining = float(pd.get("remaining_power", 0.0) or 0.0)
-            allocated = float(pd.get("allocated_power", total - remaining) or 0.0)
+            total = float(pd_data.get("total_power", 0.0) or 0.0)
+            remaining = float(pd_data.get("remaining_power", 0.0) or 0.0)
+            allocated = float(pd_data.get("allocated_power", total - remaining) or 0.0)
 
             allocation_percent: Dict[str, float] = {}
             for dev_id, st in device_status.items():
@@ -123,18 +123,18 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             # Diagnostic reasons for each device
             reasons = {}
             for dev_id, st in device_status.items():
-                reason = []
+                reason_list = []
                 if st.get(CONF_AUTO_CONTROL_ENABLED) is False:
-                    reason.append("Auto control disabled")
+                    reason_list.append("Auto control disabled")
                 if st.get("schedule_enabled") and not st.get("schedule_active", True):
-                    reason.append("Out of schedule")
+                    reason_list.append("Out of schedule")
                 if st.get("allocated_w", 0) < st.get("min_expected_w", 0):
-                    reason.append("Not enough excess power")
+                    reason_list.append("Not enough excess power")
                 if st.get("manual_override", False):
-                    reason.append("Manual override")
-                if not reason and st.get("percent_actual", 0) > 0:
-                    reason.append("Active")
-                reasons[dev_id] = ", ".join(reason)
+                    reason_list.append("Manual override")
+                if not reason_list and st.get("percent_actual", 0) > 0:
+                    reason_list.append("Active")
+                reasons[dev_id] = ", ".join(reason_list)
 
             # Add debug logging for troubleshooting
             log_debug("SunAllocatorPowerDistributionSensor data: %s", data)
@@ -177,28 +177,32 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
 
             self._state = allocated
             return self._state
-        except Exception as e:
-            log_debug("PowerDistribution sensor error: %s", e)
-            journal_event("power_distribution_error", {"error": str(e)})
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            log_debug("PowerDistribution sensor error: %s", exc)
+            journal_event("power_distribution_error", {"error": str(exc)})
             return self._state
 
     async def async_added_to_hass(self):
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+
         @callback
         def _update(*_):
+            """Update the sensor's state."""
             self.async_schedule_update_ha_state(True)
         # Subscribe to dispatcher updates
         self._unsub = async_dispatcher_connect(
             self._hass, f"{SIGNAL_POWER_DISTRIBUTION_UPDATED}_{self._entry_id}", _update
         )
-        # Initial update
+        # Initial state update
         self.async_schedule_update_ha_state(True)
 
     async def async_will_remove_from_hass(self) -> None:
+        """Clean up when entity is removed."""
         # Unsubscribe from dispatcher if set
-        unsub = getattr(self, "_unsub", None)
-        if unsub:
+        if self._unsub:
             try:
-                unsub()
-            except Exception:
+                self._unsub()
+            except (TypeError, AttributeError):
                 pass
             self._unsub = None

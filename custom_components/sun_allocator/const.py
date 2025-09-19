@@ -1,3 +1,5 @@
+"""Constants for the Sun Allocator integration."""
+
 DOMAIN = "sun_allocator"
 
 # Service constants
@@ -60,7 +62,8 @@ DAY_THURSDAY = "thursday"
 DAY_FRIDAY = "friday"
 DAY_SATURDAY = "saturday"
 DAY_SUNDAY = "sunday"
-DAYS_OF_WEEK = [DAY_MONDAY, DAY_TUESDAY, DAY_WEDNESDAY, DAY_THURSDAY, DAY_FRIDAY, DAY_SATURDAY, DAY_SUNDAY]
+DAYS_OF_WEEK = [DAY_MONDAY, DAY_TUESDAY, DAY_WEDNESDAY, DAY_THURSDAY, DAY_FRIDAY,
+                DAY_SATURDAY, DAY_SUNDAY]
 
 # Power distribution constants
 CONF_POWER_ALLOCATION = "power_allocation"

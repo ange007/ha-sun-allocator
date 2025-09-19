@@ -2,22 +2,25 @@
 from homeassistant.helpers.selector import selector
 
 class EntitySelectorBuilder:
+    """Builds entity selectors with custom options."""
     def __init__(self, icon_map=None):
+        """Initialize the EntitySelectorBuilder."""
         self.icon_map = icon_map or {}
 
     def build(self, entities, domain_filter=None, esphome_only=False, none_option=True):
+        """Builds the entity selector options."""
         result = []
-        for e in entities:
-            domain = e.entity_id.split(".")[0]
+        for entity in entities:
+            domain = entity.entity_id.split(".")[0]
             if domain_filter and domain not in domain_filter:
                 continue
-            if esphome_only and ".esphome_" not in e.entity_id:
+            if esphome_only and ".esphome_" not in entity.entity_id:
                 continue
             icon = self.icon_map.get(domain, "")
-            friendly = e.attributes.get("friendly_name", "")
-            label = f"{icon} {friendly}" if friendly else f"{icon} {e.entity_id}"
-            result.append({"label": label, "value": str(e.entity_id)})
-            
+            friendly = entity.attributes.get("friendly_name", "")
+            label = f"{icon} {friendly}" if friendly else f"{icon} {entity.entity_id}"
+            result.append({"label": label, "value": str(entity.entity_id)})
+
         result.sort(key=lambda x: x["label"])
 
         if none_option:
@@ -26,7 +29,9 @@ class EntitySelectorBuilder:
         return result
 
 class NumberSelectorBuilder:
+    """Builds number selectors."""
     def __init__(self, min_value, max_value, step, mode="box", unit=None):
+        """Initialize the NumberSelectorBuilder."""
         self.min = min_value
         self.max = max_value
         self.step = step
@@ -34,19 +39,25 @@ class NumberSelectorBuilder:
         self.unit = unit
 
     def build(self):
+        """Builds the number selector."""
         d = {"min": self.min, "max": self.max, "step": self.step, "mode": self.mode}
         if self.unit:
             d["unit_of_measurement"] = self.unit
         return selector({"number": d})
 
 class BooleanSelectorBuilder:
+    """Builds boolean selectors."""
     def build(self):
+        """Builds the boolean selector."""
         return selector({"boolean": {}})
 
 class SelectSelectorBuilder:
+    """Builds select selectors."""
     def __init__(self, options, mode="dropdown"):
+        """Initialize the SelectSelectorBuilder."""
         self.options = options
         self.mode = mode
 
     def build(self):
+        """Builds the select selector."""
         return selector({"select": {"options": self.options, "mode": self.mode}})

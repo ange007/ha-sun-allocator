@@ -1,4 +1,4 @@
-# Centralized settings and advanced parameters for SunAllocator
+"""Centralized settings and advanced parameters for SunAllocator."""
 
 # Logging
 LOG_STARTUP_DEVICES = True

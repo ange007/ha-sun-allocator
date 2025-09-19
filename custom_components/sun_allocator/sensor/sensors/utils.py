@@ -1,13 +1,12 @@
-
 """Sensor utilities for Sun Allocator integration."""
+import re
 from typing import Optional, Dict, Any, Tuple
 
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from .logger import log_debug, log_error
-from .journal import journal_event
+from ..core.logger import log_debug, log_error, journal_event
 
 from ..const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
@@ -24,7 +23,9 @@ from ..const import (
 )
 
 
-def get_sensor_state_safely(hass: HomeAssistant, entity_id: Optional[str], sensor_name: str) -> Tuple[float, bool]:
+def get_sensor_state_safely(
+    hass: HomeAssistant, entity_id: Optional[str], sensor_name: str
+) -> Tuple[float, bool]:
     """
     Safely get sensor state with proper error handling.
 
@@ -34,7 +35,7 @@ def get_sensor_state_safely(hass: HomeAssistant, entity_id: Optional[str], senso
         sensor_name: Human-readable name for logging
 
     Returns:
-        Tuple of (value, success) where success indicates if the value was retrieved successfully
+        Tuple of (value, success) where success indicates if the value was retrieved
     """
     if not entity_id:
         log_debug(f"{sensor_name} entity ID not configured")
@@ -43,27 +44,44 @@ def get_sensor_state_safely(hass: HomeAssistant, entity_id: Optional[str], senso
 
     state = hass.states.get(entity_id)
     if state is None:
-        log_debug(f"{sensor_name} sensor '{entity_id}' not found - this is normal during startup")
-        journal_event("sensor_not_found", {"sensor": sensor_name, "entity_id": entity_id})
+        log_debug(
+            f"{sensor_name} sensor '{entity_id}' not found - normal during startup"
+        )
+        journal_event(
+            "sensor_not_found", {"sensor": sensor_name, "entity_id": entity_id}
+        )
         return 0.0, False
 
     if state.state in (None, STATE_UNKNOWN, STATE_UNAVAILABLE):
-        log_debug(f"{sensor_name} sensor '{entity_id}' is {state.state} - waiting for sensor to become available")
-        journal_event("sensor_unavailable", {"sensor": sensor_name, "entity_id": entity_id, "state": state.state})
+        log_debug(
+            f"{sensor_name} sensor '{entity_id}' is {state.state} - waiting for it"
+        )
+        journal_event(
+            "sensor_unavailable",
+            {"sensor": sensor_name, "entity_id": entity_id, "state": state.state},
+        )
         return 0.0, False
 
     try:
         value = float(state.state)
         log_debug(f"{sensor_name}: {value}")
-        journal_event("sensor_value", {"sensor": sensor_name, "entity_id": entity_id, "value": value})
+        journal_event(
+            "sensor_value",
+            {"sensor": sensor_name, "entity_id": entity_id, "value": value},
+        )
         return value, True
     except (ValueError, TypeError):
         log_error(f"Could not convert {sensor_name} state '{state.state}' to float")
-        journal_event("sensor_value_error", {"sensor": sensor_name, "entity_id": entity_id, "state": state.state})
+        journal_event(
+            "sensor_value_error",
+            {"sensor": sensor_name, "entity_id": entity_id, "state": state.state},
+        )
         return 0.0, False
 
 
-def get_temperature_compensation_data(hass: HomeAssistant, config: Dict[str, Any]) -> Optional[Dict[str, float]]:
+def get_temperature_compensation_data(
+    hass: HomeAssistant, config: Dict[str, Any]
+) -> Optional[Dict[str, float]]:
     """
     Get temperature compensation data if enabled.
 
@@ -85,19 +103,23 @@ def get_temperature_compensation_data(hass: HomeAssistant, config: Dict[str, Any
     if not success:
         return None
 
-    temp_diff = temp_value - DEFAULT_STANDARD_TEMPERATURE  # Difference from standard conditions (25°C)
+    temp_diff = (
+        temp_value - DEFAULT_STANDARD_TEMPERATURE
+    )  # Difference from standard conditions (25°C)
 
     # Coefficients in % per degree, convert to decimal
     voc_coef = config.get(CONF_TEMP_COEFFICIENT_VOC, DEFAULT_VOC_COEFFICIENT) / 100
     pmax_coef = config.get(CONF_TEMP_COEFFICIENT_PMAX, DEFAULT_PMAX_COEFFICIENT) / 100
 
     log_debug(f"Temperature compensation: {temp_value}°C, diff: {temp_diff}°C")
-    journal_event("temperature_compensation", {"temp_value": temp_value, "temp_diff": temp_diff})
+    journal_event(
+        "temperature_compensation", {"temp_value": temp_value, "temp_diff": temp_diff}
+    )
 
     return {
         "temp_diff": temp_diff,
         "voc_coef": voc_coef,
-        "pmax_coef": pmax_coef
+        "pmax_coef": pmax_coef,
     }
 
 
@@ -118,18 +140,10 @@ def create_sensor_attributes(
     pmax: float = 0.0,
     current_max_power: float = 0.0,
     usage_percent: float = 0.0,
-    **kwargs
+    **kwargs,
 ) -> Dict[str, Any]:
-    """
-    Create standardized sensor attributes dictionary.
-
-    Args:
-        Various sensor values and parameters
-        **kwargs: Additional attributes to include
-
-    Returns:
-        Dictionary of sensor attributes
-    """
+    """Create standardized sensor attributes dictionary."""
+    # pylint: disable=too-many-arguments,too-many-locals
     attributes = {
         "pv_power": pv_power,
         "pv_voltage": pv_voltage,
@@ -146,7 +160,7 @@ def create_sensor_attributes(
         "panel_configuration": panel_configuration,
         "pmax": pmax,
         "current_max_power": current_max_power,
-        "usage_percent": usage_percent
+        "usage_percent": usage_percent,
     }
 
     # Add any additional attributes
@@ -156,20 +170,9 @@ def create_sensor_attributes(
 
 
 def setup_sensor_listeners(
-    hass: HomeAssistant,
-    entity_ids: list,
-    update_callback: callback,
-    unsub_listeners: list
+    hass: HomeAssistant, entity_ids: list, update_callback: callback, unsub_listeners: list
 ) -> None:
-    """
-    Set up state change listeners for multiple entities.
-
-    Args:
-        hass: Home Assistant instance
-        entity_ids: List of entity IDs to listen to
-        update_callback: Callback function to call on state change
-        unsub_listeners: List to store unsubscribe functions
-    """
+    """Set up state change listeners for multiple entities."""
     for entity_id in entity_ids:
         if entity_id:
             unsub_listeners.append(
@@ -178,12 +181,7 @@ def setup_sensor_listeners(
 
 
 def cleanup_sensor_listeners(unsub_listeners: list) -> None:
-    """
-    Clean up state change listeners.
-
-    Args:
-        unsub_listeners: List of unsubscribe functions
-    """
+    """Clean up state change listeners."""
     for unsub in unsub_listeners:
         unsub()
     unsub_listeners.clear()
@@ -198,15 +196,7 @@ def calculate_excess_power(
     relative_voltage: float | None = None,
     energy_harvesting_possible: bool | None = None,
 ) -> float:
-    """
-    Calculate excess (untapped potential) with internal accounting for battery charge
-    and topology constraints.
-
-    Rules:
-    - If battery is discharging → return 0
-    - If topology disallows harvesting (relative_voltage <= 1.0 or EHP is False) → return 0
-    - Else excess = max(current_max_power - (pv_power + battery_charge_w), 0)
-    """
+    """Calculate excess power with internal accounting for battery charge."""
     # 1) Discharge guard
     if battery_power_reversed:
         # reversed polarity: positive means discharging
@@ -237,63 +227,23 @@ def calculate_excess_power(
 
 
 def calculate_usage_percentage(actual_power: float, max_power: float) -> float:
-    """
-    Calculate usage percentage.
-
-    Args:
-        actual_power: Actual power being generated
-        max_power: Maximum theoretical power
-
-    Returns:
-        Usage percentage (0-100)
-    """
+    """Calculate usage percentage."""
     if max_power > 0:
         return round((actual_power / max_power) * 100, 1)
     return 0.0
 
 
 def is_excess_possible(pv_voltage: float, vmp: float) -> bool:
-    """
-    Check if excess power is possible based on voltage.
-
-    Args:
-        pv_voltage: Current PV voltage
-        vmp: Voltage at maximum power point
-
-    Returns:
-        True if excess power is possible
-    """
+    """Check if excess power is possible based on voltage."""
     return pv_voltage > vmp if pv_voltage > 0 else False
 
 
 def get_mppt_algorithm_config(config: Dict[str, Any]) -> Dict[str, float]:
-    """
-    Get MPPT algorithm configuration parameters.
-
-    Args:
-        config: Configuration dictionary
-
-    Returns:
-        Dictionary with MPPT algorithm parameters
-    """
+    """Get MPPT algorithm configuration parameters."""
     return {
         CONF_CURVE_FACTOR_K: config.get(CONF_CURVE_FACTOR_K, 0.2),
-        CONF_EFFICIENCY_CORRECTION_FACTOR: config.get(CONF_EFFICIENCY_CORRECTION_FACTOR, 1.05),
-        CONF_MIN_INVERTER_VOLTAGE: config.get(CONF_MIN_INVERTER_VOLTAGE, 100.0)
+        CONF_EFFICIENCY_CORRECTION_FACTOR: config.get(
+            CONF_EFFICIENCY_CORRECTION_FACTOR, 1.05
+        ),
+        CONF_MIN_INVERTER_VOLTAGE: config.get(CONF_MIN_INVERTER_VOLTAGE, 100.0),
     }
-
-
-def clean_entity_id_and_mode(entity_id_raw):
-    """Normalize entity_id and extract hvac_mode if present."""
-    import re
-    if not entity_id_raw or not isinstance(entity_id_raw, str):
-        return entity_id_raw, None
-    entity_id = entity_id_raw.strip()
-    entity_id = re.sub(r"^[^a-zA-Z0-9]*", "", entity_id)
-    # Extract mode if present in parentheses (e.g., (Heat) or (Cool))
-    mode_match = re.search(r"\((.*?)\)", entity_id)
-    hvac_mode = mode_match.group(1).strip().lower() if mode_match else None
-    entity_id = re.sub(r"\s*\(.*?\)", "", entity_id)
-    entity_id = re.sub(r"\s*\[.*?\]", "", entity_id)
-    entity_id = entity_id.strip()
-    return entity_id, hvac_mode

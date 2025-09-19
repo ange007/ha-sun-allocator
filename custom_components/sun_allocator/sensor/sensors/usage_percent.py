@@ -1,14 +1,13 @@
 """Usage percentage sensor for Sun Allocator."""
-import logging
 from typing import Optional, Dict, Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.const import PERCENTAGE
 
 from .base import BaseSunAllocatorSensor
-from ...utils.mppt import calculate_pmax
-from ...utils.sensor_utils import calculate_usage_percentage
-from ...utils.logger import log_debug
+from ...core.solar_optimizer import calculate_pmax
+from ..utils import calculate_usage_percentage
+from ...core.logger import log_debug
 
 from ...const import (
     KEY_PV_POWER,
@@ -23,7 +22,7 @@ from ...const import (
 
 class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
     """Sensor for usage percentage of solar panels."""
-    
+
     def __init__(self, hass: HomeAssistant, config: Dict[str, Any], entry_id: str, entry_index: int):
         """Initialize the usage percentage sensor."""
         super().__init__(
@@ -35,7 +34,7 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             unique_id_suffix="usage_percent",
             unit_of_measurement=PERCENTAGE
         )
-    
+
     def _calculate_value(
         self,
         sensor_values: Dict[str, Any],
@@ -46,25 +45,25 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
         """Calculate usage percentage of solar panels."""
         pv_power = sensor_values[KEY_PV_POWER]
         pv_voltage = sensor_values[KEY_PV_VOLTAGE]
-        
+
         vmp = panel_params[KEY_VMP]
         imp = panel_params[KEY_IMP]
-        
+
         # Apply temperature compensation if provided
         if temp_compensation:
             temp_diff = temp_compensation["temp_diff"]
             voc_coef = temp_compensation["voc_coef"]
             pmax_coef = temp_compensation["pmax_coef"]
-            
+
             # Adjust Vmp and Imp for temperature
             vmp = vmp * (1 + voc_coef * temp_diff)
             imp = imp * (1 + pmax_coef * temp_diff + voc_coef * temp_diff)
-            
+
             log_debug(
                 f"Temperature compensation applied for usage calculation: "
                 f"temp_diff={temp_diff}°C, adjusted Vmp={vmp:.2f}V, adjusted Imp={imp:.2f}A"
             )
-        
+
         # Calculate maximum theoretical power
         pmax = calculate_pmax(
             vmp=vmp,
@@ -72,10 +71,10 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             panel_count=panel_params[KEY_PANEL_COUNT],
             panel_configuration=panel_params[KEY_PANEL_CONFIGURATION]
         )
-        
+
         # Calculate usage percentage
         usage = calculate_usage_percentage(pv_power, pmax)
-        
+
         # Update attributes with relevant information
         self._update_attributes(
             pv_power=pv_power,
@@ -95,10 +94,10 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             usage_percent=usage,
             temperature_compensated=temp_compensation is not None
         )
-        
+
         log_debug(
             f"Usage percentage calculation: PV Power={pv_power}W, "
             f"Pmax={pmax:.1f}W, Usage={usage:.1f}%"
         )
-        
+
         return usage
