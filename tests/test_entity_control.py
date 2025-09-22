@@ -101,8 +101,8 @@ async def test_simple_power_allocation(hass: HomeAssistant) -> None:
         await async_setup_entry(hass, config_entry)
         await hass.async_block_till_done()
 
-        # At this point, excess power should be 0, and the switch should be off
-        assert hass.states.get("switch.test_switch").state == "off"
+        # With the new logic, excess power is now 100W, so the switch should turn on immediately.
+        assert hass.states.get("switch.test_switch").state == "on"
 
         # Now, simulate a state change that should generate excess power
         hass.states.async_set("sensor.test_pv_voltage", "35")  # Voltage > Vmp (30)

@@ -189,14 +189,25 @@ def cleanup_sensor_listeners(unsub_listeners: list) -> None:
 
 def calculate_excess_power(
     current_max_power: float,
-    pv_power: float,
+    pv_power: float = 0.0,
     battery_power: float = 0.0,
     battery_power_reversed: bool = False,
+    consumption: float | None = None,
+    allocated_power: float = 0.0,
     *,
     relative_voltage: float | None = None,
     energy_harvesting_possible: bool | None = None,
 ) -> float:
-    """Calculate excess power with internal accounting for battery charge."""
+    """
+    Calculate excess power with proper accounting for battery charge and consumption.
+    
+    The logic ensures consistency between scenarios with and without consumption sensor:
+    - With consumption sensor: excess = current_max_power - consumption - battery_charge_w
+    - Without consumption sensor: excess = current_max_power - pv_power - battery_charge_w
+    
+    The allocated_power is not subtracted from consumption to avoid double counting,
+    as it represents power that will be allocated, not power already consumed.
+    """
     # 1) Discharge guard
     if battery_power_reversed:
         # reversed polarity: positive means discharging
@@ -222,8 +233,17 @@ def calculate_excess_power(
         # normal polarity: positive means charging
         battery_charge_w = max(battery_power, 0.0)
 
-    actual_harvested = pv_power + battery_charge_w
-    return max(current_max_power - actual_harvested, 0.0)
+    # 4) Calculate excess power consistently
+    if consumption is not None:
+        # With consumption sensor: subtract total consumption and battery charging
+        # Note: We don't subtract allocated_power here to avoid double counting
+        # since consumption should already include power used by controlled devices
+        return max(current_max_power - consumption - battery_charge_w, 0.0)
+    else:
+        # Without consumption sensor: use actual PV power as baseline
+        # This represents the power currently being harvested
+        actual_harvested = pv_power + battery_charge_w
+        return max(current_max_power - actual_harvested, 0.0)
 
 
 def calculate_usage_percentage(actual_power: float, max_power: float) -> float:

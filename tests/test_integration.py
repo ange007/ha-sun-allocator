@@ -1,43 +1,94 @@
 """Integration tests for full system functionality."""
 import pytest
 from unittest.mock import patch
+from datetime import timedelta
 
-# Import the required functions
-from conftest import create_test_config_entry
-from custom_components.sun_allocator import async_setup_entry
+import homeassistant.util.dt as dt_util
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+from conftest import create_test_config_entry, create_test_device
+from custom_components.sun_allocator import async_setup_entry, async_unload_entry
+
 
 @pytest.mark.asyncio
-async def test_full_system_integration(hass):
+async def test_full_system_integration_and_device_control(hass):
     """Test complete system from sensor update to device control."""
-    # Setup complete system
     config_entry = create_test_config_entry()
-    await async_setup_entry(hass, config_entry)
+    device = create_test_device('test_device')
+    device["debounce_time"] = 0  # No debounce for this test
+    config_entry.data["devices"].append(device)
 
-    # Simulate sensor updates with values that should produce excess power
-    # Set voltage higher than Vmp (30V) to enable excess calculation
+    # Set initial states before setting up the component
+    hass.states.async_set("switch.test_device", "off")
     hass.states.async_set("sensor.pv_power", "200")
-    hass.states.async_set("sensor.pv_voltage", "35")
+    hass.states.async_set("sensor.pv_voltage", "35")  # > Vmp=30
+    hass.states.async_set("sensor.battery_power", "0")
+    hass.states.async_set("sensor.consumption", "50")
 
-    # Wait for processing
-    await hass.async_block_till_done()
+    with patch("homeassistant.core.ServiceRegistry.async_call") as mock_async_call:
+        try:
+            # Setup complete system
+            assert await async_setup_entry(hass, config_entry)
+            await hass.async_block_till_done()
 
-    # Verify sensors are updated
-    excess_sensor = hass.states.get("sensor.sunallocator_excess_1")
-    assert excess_sensor is not None
-    # The test may show 0 excess if conditions aren't met for energy harvesting
-    # Just verify the sensor exists and has a numeric value
-    assert excess_sensor.state is not None
-    assert isinstance(float(excess_sensor.state), float)
+            # Verify sensors are updated
+            excess_sensor = hass.states.get("sensor.sunallocator_excess_1")
+            assert excess_sensor is not None
+            assert float(excess_sensor.state) > 100  # Check for a reasonable excess value
 
-    # Skip device control test since no devices are configured in the test
-    # device_state = hass.states.get("switch.test_device")
-    # assert device_state.state == "on"
+            # Verify device control
+            mock_async_call.assert_called_with(
+                'switch', 'turn_on', {'entity_id': 'switch.test_device'}, blocking=True
+            )
+        finally:
+            # Clean up
+            await async_unload_entry(hass, config_entry)
+
 
 @pytest.mark.asyncio
-async def test_multi_device_coordination(hass):
-    """Test coordination between multiple devices."""
-    # Test with 3 devices of different priorities
-    # Verify correct power distribution
-    # Test device interactions and conflicts
-    pass
+async def test_device_turn_on_with_debounce(hass, freezer):
+    """Test that a device turns on after the debounce period."""
+    config_entry = create_test_config_entry()
+    device = create_test_device('test_device')
+    device["debounce_time"] = 15
+    config_entry.data["devices"].append(device)
 
+    # Set initial states before setting up the component
+    hass.states.async_set("switch.test_device", "off")
+    hass.states.async_set("sensor.pv_power", "200")
+    hass.states.async_set("sensor.pv_voltage", "35")  # > Vmp=30
+    hass.states.async_set("sensor.battery_power", "0")
+    hass.states.async_set("sensor.consumption", "0")
+
+    with patch("homeassistant.core.ServiceRegistry.async_call") as mock_async_call:
+        try:
+            # Setup component
+            assert await async_setup_entry(hass, config_entry)
+            await hass.async_block_till_done()
+
+            # At t=0, device should be off and debouncing
+            dist_sensor = hass.states.get("sensor.sunallocator_power_distribution_1")
+            assert dist_sensor is not None
+            assert dist_sensor.attributes["reasons"][device["device_id"]] == "Debouncing"
+            mock_async_call.assert_not_called()
+
+            # Advance time by 10 seconds (less than debounce time)
+            freezer.tick(timedelta(seconds=10))
+            hass.states.async_set("sensor.pv_power", "201") # Trigger update
+            await hass.async_block_till_done()
+
+            # Device should still be off
+            mock_async_call.assert_not_called()
+
+            # Advance time by another 10 seconds (total 20s > 15s debounce)
+            freezer.tick(timedelta(seconds=10))
+            hass.states.async_set("sensor.pv_power", "202") # Trigger update
+            await hass.async_block_till_done()
+
+            # Now the device should be turned on
+            mock_async_call.assert_called_with(
+                'switch', 'turn_on', {'entity_id': 'switch.test_device'}, blocking=True
+            )
+        finally:
+            # Clean up
+            await async_unload_entry(hass, config_entry)

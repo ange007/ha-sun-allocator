@@ -7,7 +7,11 @@ from homeassistant.const import UnitOfPower
 from .base import BaseSunAllocatorSensor
 from ...core.logger import log_debug, journal_event
 from ...core.solar_optimizer import calculate_current_max_power
-from ..utils import calculate_excess_power, calculate_usage_percentage
+from ..utils import (
+    calculate_excess_power,
+    calculate_usage_percentage,
+    get_sensor_state_safely,
+)
 
 from ...const import (
     CONF_CURVE_FACTOR_K,
@@ -28,6 +32,8 @@ from ...const import (
     KEY_ENERGY_HARVESTING_POSSIBLE,
     KEY_RELATIVE_VOLTAGE,
     KEY_CALCULATION_REASON,
+    SENSOR_ID_PREFIX,
+    SENSOR_POWER_DISTRIBUTION_SUFFIX,
 )
 
 
@@ -59,8 +65,12 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         """Calculate excess power (untapped potential)."""
         pv_power = sensor_values[KEY_PV_POWER]
         pv_voltage = sensor_values[KEY_PV_VOLTAGE]
-        consumption = sensor_values[KEY_CONSUMPTION]
         battery_power = sensor_values[KEY_BATTERY_POWER]
+
+        # Get consumption value and success flag
+        consumption, consumption_success = get_sensor_state_safely(
+            self.hass, self._config.get(KEY_CONSUMPTION), "Consumption"
+        )
 
         # Calculate current maximum power using MPPT algorithm
         current_max_power, debug_info = calculate_current_max_power(
@@ -80,18 +90,17 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             temperature_compensation=temp_compensation,
         )
 
-        # Calculate excess power with topology constraints and battery charging accounted
+        # Calculate excess power based on generation, consumption, and battery
+        # Note: allocated_power is no longer used in the calculation to avoid double counting
         battery_power_reversed = self._config.get(CONF_BATTERY_POWER_REVERSED, False)
         excess = calculate_excess_power(
             current_max_power=current_max_power,
             pv_power=pv_power,
+            consumption=consumption if consumption_success else None,
             battery_power=battery_power,
             battery_power_reversed=battery_power_reversed,
-            relative_voltage=debug_info[KEY_RELATIVE_VOLTAGE],
-            energy_harvesting_possible=debug_info[
-                KEY_ENERGY_HARVESTING_POSSIBLE
-            ],
         )
+
         # Determine if battery is discharging (for diagnostics/UI)
         battery_discharging = (
             battery_power > 0 if battery_power_reversed else (battery_power < 0)
@@ -100,13 +109,9 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         # Calculate usage percentage
         usage = calculate_usage_percentage(pv_power, debug_info[KEY_PMAX])
 
-        # Determine actionable and topology-based excess flags
+        # Determine actionable excess flag
         epsilon = 5.0  # small hysteresis to avoid flicker
-        topology_excess_possible = (
-            debug_info[KEY_RELATIVE_VOLTAGE] > 1.0
-            and debug_info[KEY_ENERGY_HARVESTING_POSSIBLE]
-        )
-        excess_possible = (excess > epsilon) and topology_excess_possible
+        excess_possible = excess > epsilon
 
         # Update attributes with all relevant information
         common_attrs = self._get_common_attributes(
@@ -122,7 +127,6 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             battery_power=battery_power,
             battery_discharging=battery_discharging,
             excess_possible=excess_possible,
-            excess_possible_topology=topology_excess_possible,
             usage_percent=usage,
         )
 
@@ -141,7 +145,6 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
                 "usage_percent": usage,
                 "battery_discharging": battery_discharging,
                 "excess_possible": excess_possible,
-                "topology_excess_possible": topology_excess_possible,
             },
         )
 
