@@ -125,8 +125,8 @@ def _calculate_device_state(device, remaining_power, device_on_state, device_deb
 
     # Hysteresis and threshold calculation
     effective_min_power = max(min_expected_w, default_min_start_w)
-    on_threshold = effective_min_power + (hysteresis_w / 2.0)
-    off_threshold = max(0.0, effective_min_power - (hysteresis_w / 2.0))
+    on_threshold = effective_min_power
+    off_threshold = max(0.0, effective_min_power - hysteresis_w)
     
     prev_on = bool(device_on_state.get(device_id, False))
     is_active_candidate = remaining_power >= (off_threshold if prev_on else on_threshold)
@@ -151,7 +151,7 @@ def _calculate_device_state(device, remaining_power, device_on_state, device_deb
             is_active = is_active_candidate
             
     log_debug(f"Device {device_name}: final is_active={is_active}")
-    return is_active
+    return is_active, is_active_candidate
 
 def _initialize_status_entry(device):
     """Initialize the status dictionary for a device."""
@@ -285,12 +285,14 @@ async def process_excess_power(hass: HomeAssistant, config_entry: ConfigType, ex
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
     cfg = config_entry.data
 
+    # Ensure state dictionaries exist and get a reference to them
+    device_on_state = entry_data.setdefault("device_on_state", {})
+    device_debounce_state = entry_data.setdefault("device_debounce_state", {})
+
     # 1. Initialize states for the run
     auto_control_devices = _initialize_run(entry_data, cfg.get(CONF_DEVICES, []))
 
     remaining_power = excess_power
-    device_on_state = entry_data.get("device_on_state", {})
-    device_debounce_state = entry_data.get("device_debounce_state", {})
 
     # 2. Main processing loop
     for device in auto_control_devices:
@@ -307,9 +309,10 @@ async def process_excess_power(hass: HomeAssistant, config_entry: ConfigType, ex
         status_entry = _initialize_status_entry(device)
 
         # 2c. Calculate desired state (on/off) based on power and debounce
-        is_active = _calculate_device_state(
+        is_active, is_active_candidate = _calculate_device_state(
             device, remaining_power, device_on_state, device_debounce_state, cfg, now
         )
+        status_entry['is_active_candidate'] = is_active_candidate
         
         # 2d. Execute control logic based on device type
         power_used = 0.0
