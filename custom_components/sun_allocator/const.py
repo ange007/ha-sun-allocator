@@ -141,6 +141,7 @@ SENSOR_EXCESS_SUFFIX = "excess"
 SENSOR_MAX_POWER_SUFFIX = "max_power"
 SENSOR_CURRENT_MAX_POWER_SUFFIX = "current_max_power"
 SENSOR_USAGE_PERCENT_SUFFIX = "usage_percent"
+SENSOR_POWER_DISTRIBUTION_SUFFIX = "power_distribution"
 
 # Temperature compensation defaults
 DEFAULT_STANDARD_TEMPERATURE = 25.0

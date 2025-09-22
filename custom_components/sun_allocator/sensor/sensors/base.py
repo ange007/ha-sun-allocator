@@ -68,6 +68,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         self._hass = hass
         self._config = config
         self._entry_id = entry_id
+        self._entry_index = entry_index
 
         # Sensor identification
         self._attr_name = f"{SENSOR_NAME_PREFIX} {name} {entry_index}"

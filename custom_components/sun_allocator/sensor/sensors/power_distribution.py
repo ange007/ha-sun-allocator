@@ -128,11 +128,22 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                     reason_list.append("Auto control disabled")
                 if st.get("schedule_enabled") and not st.get("schedule_active", True):
                     reason_list.append("Out of schedule")
-                if st.get("allocated_w", 0) < st.get("min_expected_w", 0):
-                    reason_list.append("Not enough excess power")
+
+                is_active = st.get("allocated_w", 0) > 0
+                is_active_candidate = st.get('is_active_candidate')
+
+                if is_active_candidate is not None:
+                    if not is_active and not is_active_candidate:
+                        reason_list.append("Not enough excess power")
+                    elif not is_active and is_active_candidate:
+                        reason_list.append("Debouncing")
+                elif not is_active:  # Fallback for old data
+                    if st.get("allocated_w", 0) < st.get("min_expected_w", 0):
+                        reason_list.append("Not enough excess power")
+
                 if st.get("manual_override", False):
                     reason_list.append("Manual override")
-                if not reason_list and st.get("percent_actual", 0) > 0:
+                if not reason_list and is_active:
                     reason_list.append("Active")
                 reasons[dev_id] = ", ".join(reason_list)
 
