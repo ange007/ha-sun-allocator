@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 from homeassistant.exceptions import ServiceNotFound
 
 # Import the correct functions from the actual codebase
-from custom_components.sun_allocator.sensor.utils import calculate_excess_power, get_sensor_state_safely
+from custom_components.sun_allocator.sensor.utils import calculate_excess_power_mppt, get_sensor_state_safely
 from custom_components.sun_allocator.core.entity_control import set_mode_for_entity
 
 @pytest.mark.asyncio
@@ -16,7 +16,7 @@ async def test_unavailable_sensor_handling(hass):
 
     # Test the function with proper parameters
     # When sensors are unavailable, current_max_power and pv_power should be 0
-    excess_power = calculate_excess_power(
+    excess_power = calculate_excess_power_mppt(
         current_max_power=0.0,
         pv_power=0.0,
         consumption=0.0,

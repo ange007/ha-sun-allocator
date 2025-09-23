@@ -69,6 +69,7 @@ DAYS_OF_WEEK = [DAY_MONDAY, DAY_TUESDAY, DAY_WEDNESDAY, DAY_THURSDAY, DAY_FRIDAY
 # Power distribution constants
 CONF_POWER_ALLOCATION = "power_allocation"
 CONF_POWER_DISTRIBUTION = "power_distribution"
+
 # Dispatcher signal names
 SIGNAL_POWER_DISTRIBUTION_UPDATED = "sunallocator_power_distribution_updated"
 
@@ -79,6 +80,10 @@ CONF_MIN_INVERTER_VOLTAGE = "min_inverter_voltage"
 
 # Advanced settings constants
 CONF_ADVANCED_SETTINGS_ENABLED = "advanced_settings_enabled"
+CONF_PARALLEL_DISTRIBUTION_ENABLED = "parallel_distribution_enabled"
+CONF_RESERVE_BATTERY_POWER = "reserve_battery_power"
+PASSIVE_CHARGING_THRESHOLD_W = 50
+
 # Ramp/hysteresis tunables (Advanced)
 CONF_RAMP_UP_STEP = "ramp_up_step"
 CONF_RAMP_DOWN_STEP = "ramp_down_step"

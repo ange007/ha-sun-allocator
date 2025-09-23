@@ -20,6 +20,7 @@ from ..const import (
     DEFAULT_STANDARD_TEMPERATURE,
     DEFAULT_VOC_COEFFICIENT,
     DEFAULT_PMAX_COEFFICIENT,
+    PASSIVE_CHARGING_THRESHOLD_W,
 )
 
 
@@ -187,7 +188,39 @@ def cleanup_sensor_listeners(unsub_listeners: list) -> None:
     unsub_listeners.clear()
 
 
-def calculate_excess_power(
+def calculate_excess_power_parallel(
+    pv_power: float,
+    consumption: float,
+    battery_power: float,
+    battery_power_reversed: bool,
+    configured_reserve: float,
+) -> float:
+    """Calculate excess power using the simple parallel distribution method."""
+
+    # Adjust battery power direction (positive = charging)
+    if battery_power_reversed:
+        battery_power = -battery_power
+
+    effective_reserve = configured_reserve
+    # Check for passive charging
+    if 0 < battery_power < PASSIVE_CHARGING_THRESHOLD_W:
+        effective_reserve = min(configured_reserve, battery_power)
+        log_debug(
+            f"Passive charging detected ({battery_power}W < {PASSIVE_CHARGING_THRESHOLD_W}W). "
+            f"Effective reserve adjusted from {configured_reserve}W to {effective_reserve}W."
+        )
+
+    excess = float(pv_power) - float(effective_reserve) - float(consumption)
+
+    log_debug(
+        f"Parallel Distribution: PV={pv_power}W, Effective Reserve={effective_reserve}W, "
+        f"Consumption={consumption}W -> Excess={excess}W"
+    )
+
+    return excess
+
+
+def calculate_excess_power_mppt(
     current_max_power: float,
     pv_power: float = 0.0,
     battery_power: float = 0.0,
@@ -200,11 +233,11 @@ def calculate_excess_power(
 ) -> float:
     """
     Calculate excess power with proper accounting for battery charge and consumption.
-    
+
     The logic ensures consistency between scenarios with and without consumption sensor:
     - With consumption sensor: excess = current_max_power - consumption - battery_charge_w
     - Without consumption sensor: excess = current_max_power - pv_power - battery_charge_w
-    
+
     The allocated_power is not subtracted from consumption to avoid double counting,
     as it represents power that will be allocated, not power already consumed.
     """

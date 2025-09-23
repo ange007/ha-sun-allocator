@@ -8,9 +8,9 @@ from .base import BaseSunAllocatorSensor
 from ...core.logger import log_debug, journal_event
 from ...core.solar_optimizer import calculate_current_max_power
 from ..utils import (
-    calculate_excess_power,
+    calculate_excess_power_mppt,
+    calculate_excess_power_parallel,
     calculate_usage_percentage,
-    get_sensor_state_safely,
 )
 
 from ...const import (
@@ -18,6 +18,8 @@ from ...const import (
     CONF_EFFICIENCY_CORRECTION_FACTOR,
     CONF_MIN_INVERTER_VOLTAGE,
     CONF_BATTERY_POWER_REVERSED,
+    CONF_PARALLEL_DISTRIBUTION_ENABLED,
+    CONF_RESERVE_BATTERY_POWER,
     KEY_PV_POWER,
     KEY_PV_VOLTAGE,
     KEY_CONSUMPTION,
@@ -29,11 +31,6 @@ from ...const import (
     KEY_PANEL_COUNT,
     KEY_PANEL_CONFIGURATION,
     KEY_PMAX,
-    KEY_ENERGY_HARVESTING_POSSIBLE,
-    KEY_RELATIVE_VOLTAGE,
-    KEY_CALCULATION_REASON,
-    SENSOR_ID_PREFIX,
-    SENSOR_POWER_DISTRIBUTION_SUFFIX,
 )
 
 
@@ -54,7 +51,6 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             unit_of_measurement=UnitOfPower.WATT,
         )
 
-    # pylint: disable=too-many-locals
     def _calculate_value(
         self,
         sensor_values: Dict[str, Any],
@@ -62,17 +58,43 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         mppt_config: Dict[str, float],
         temp_compensation: Optional[Dict[str, float]],
     ) -> float:
-        """Calculate excess power (untapped potential)."""
-        pv_power = sensor_values[KEY_PV_POWER]
-        pv_voltage = sensor_values[KEY_PV_VOLTAGE]
-        battery_power = sensor_values[KEY_BATTERY_POWER]
+        """Calculate excess power by dispatching to the correct calculation mode."""
 
-        # Get consumption value and success flag
-        consumption, consumption_success = get_sensor_state_safely(
-            self.hass, self._config.get(KEY_CONSUMPTION), "Consumption"
-        )
+        # Get common sensor values
+        pv_power = sensor_values.get(KEY_PV_POWER, 0)
+        consumption = sensor_values.get(KEY_CONSUMPTION, 0)
+        battery_power = sensor_values.get(KEY_BATTERY_POWER, 0)
+        battery_power_reversed = self._config.get(CONF_BATTERY_POWER_REVERSED, False)
 
-        # Calculate current maximum power using MPPT algorithm
+        if self._config.get(CONF_PARALLEL_DISTRIBUTION_ENABLED, False):
+            # --- Parallel Distribution Mode ---
+            configured_reserve = self._config.get(CONF_RESERVE_BATTERY_POWER, 0)
+
+            excess = calculate_excess_power_parallel(
+                pv_power=pv_power,
+                consumption=consumption,
+                battery_power=battery_power,
+                battery_power_reversed=battery_power_reversed,
+                configured_reserve=configured_reserve,
+            )
+
+            battery_discharging = battery_power > 0 if battery_power_reversed else battery_power < 0
+
+            self._update_attributes(
+                pv_power=pv_power,
+                consumption=consumption,
+                battery_power=battery_power,
+                battery_discharging=battery_discharging,
+                excess_possible=excess > 5.0,
+                usage_percent=None,  # Not applicable in this mode
+            )
+
+            journal_event("excess_power_calc", {"mode": "parallel", "excess": excess})
+            return excess
+
+        # --- Original MPPT Mode ---
+        pv_voltage = sensor_values.get(KEY_PV_VOLTAGE, 0)
+
         current_max_power, debug_info = calculate_current_max_power(
             pv_voltage=pv_voltage,
             pv_power=pv_power,
@@ -83,37 +105,22 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             panel_count=panel_params[KEY_PANEL_COUNT],
             panel_configuration=panel_params[KEY_PANEL_CONFIGURATION],
             curve_factor_k=mppt_config[CONF_CURVE_FACTOR_K],
-            efficiency_correction_factor=mppt_config[
-                CONF_EFFICIENCY_CORRECTION_FACTOR
-            ],
+            efficiency_correction_factor=mppt_config[CONF_EFFICIENCY_CORRECTION_FACTOR],
             min_inverter_voltage=mppt_config[CONF_MIN_INVERTER_VOLTAGE],
             temperature_compensation=temp_compensation,
         )
 
-        # Calculate excess power based on generation, consumption, and battery
-        # Note: allocated_power is no longer used in the calculation to avoid double counting
-        battery_power_reversed = self._config.get(CONF_BATTERY_POWER_REVERSED, False)
-        excess = calculate_excess_power(
+        excess = calculate_excess_power_mppt(
             current_max_power=current_max_power,
             pv_power=pv_power,
-            consumption=consumption if consumption_success else None,
+            consumption=consumption,
             battery_power=battery_power,
             battery_power_reversed=battery_power_reversed,
         )
 
-        # Determine if battery is discharging (for diagnostics/UI)
-        battery_discharging = (
-            battery_power > 0 if battery_power_reversed else (battery_power < 0)
-        )
-
-        # Calculate usage percentage
+        battery_discharging = battery_power > 0 if battery_power_reversed else battery_power < 0
         usage = calculate_usage_percentage(pv_power, debug_info[KEY_PMAX])
 
-        # Determine actionable excess flag
-        epsilon = 5.0  # small hysteresis to avoid flicker
-        excess_possible = excess > epsilon
-
-        # Update attributes with all relevant information
         common_attrs = self._get_common_attributes(
             debug_info=debug_info,
             panel_params=panel_params,
@@ -126,26 +133,15 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             consumption=consumption,
             battery_power=battery_power,
             battery_discharging=battery_discharging,
-            excess_possible=excess_possible,
+            excess_possible=excess > 5.0,
             usage_percent=usage,
         )
 
         log_debug(
-            f"Excess power calculation: PV Power={pv_power}W, "
+            f"Excess power calculation (MPPT): PV Power={pv_power}W, "
             f"Current Max Power={current_max_power}W, Excess={excess}W, "
-            f"Reason: {debug_info[KEY_CALCULATION_REASON]}"
+            f"Reason: {debug_info.get('calculation_reason')}"
         )
-        journal_event(
-            "excess_power_calc",
-            {
-                "pv_power": pv_power,
-                "current_max_power": current_max_power,
-                "excess": excess,
-                "reason": debug_info[KEY_CALCULATION_REASON],
-                "usage_percent": usage,
-                "battery_discharging": battery_discharging,
-                "excess_possible": excess_possible,
-            },
-        )
+        journal_event("excess_power_calc", {"mode": "mppt", "excess": excess, **debug_info})
 
         return excess
