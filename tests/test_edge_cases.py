@@ -20,7 +20,6 @@ async def test_unavailable_sensor_handling(hass):
         current_max_power=0.0,
         pv_power=0.0,
         consumption=0.0,
-        allocated_power=0.0,
         battery_power=0.0
     )
     assert excess_power == 0

@@ -80,7 +80,6 @@ CONF_MIN_INVERTER_VOLTAGE = "min_inverter_voltage"
 
 # Advanced settings constants
 CONF_ADVANCED_SETTINGS_ENABLED = "advanced_settings_enabled"
-CONF_PARALLEL_DISTRIBUTION_ENABLED = "parallel_distribution_enabled"
 CONF_RESERVE_BATTERY_POWER = "reserve_battery_power"
 PASSIVE_CHARGING_THRESHOLD_W = 50
 

@@ -14,7 +14,7 @@ from ..const import (
     CONF_HYSTERESIS_W,
     DEFAULT_MIN_START_W,
     DEFAULT_HYSTERESIS_W,
-    CONF_PARALLEL_DISTRIBUTION_ENABLED,
+    
     CONF_RESERVE_BATTERY_POWER,
 )
 
@@ -24,19 +24,12 @@ def build_advanced_config_schema(defaults=None):
     if defaults is None:
         defaults = {}
     return Schema({
-        Required(
-            CONF_PARALLEL_DISTRIBUTION_ENABLED,
-            default=defaults.get(CONF_PARALLEL_DISTRIBUTION_ENABLED, False),
-            description={
-                "suggested_value": defaults.get(CONF_PARALLEL_DISTRIBUTION_ENABLED, False),
-                "label": "config.step.advanced_settings.data.parallel_distribution_enabled"
-            }
-        ): BooleanSelectorBuilder().build(),
+        
         Required(
             CONF_RESERVE_BATTERY_POWER,
-            default=defaults.get(CONF_RESERVE_BATTERY_POWER, 500),
+            default=defaults.get(CONF_RESERVE_BATTERY_POWER, 0),
             description={
-                "suggested_value": defaults.get(CONF_RESERVE_BATTERY_POWER, 500),
+                "suggested_value": defaults.get(CONF_RESERVE_BATTERY_POWER, 0),
                 "label": "config.step.advanced_settings.data.reserve_battery_power"
             }
         ): NumberSelectorBuilder(0, 10000, 50).build(),

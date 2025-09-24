@@ -18,7 +18,7 @@ from ...const import (
     CONF_EFFICIENCY_CORRECTION_FACTOR,
     CONF_MIN_INVERTER_VOLTAGE,
     CONF_BATTERY_POWER_REVERSED,
-    CONF_PARALLEL_DISTRIBUTION_ENABLED,
+    CONF_CONSUMPTION,
     CONF_RESERVE_BATTERY_POWER,
     KEY_PV_POWER,
     KEY_PV_VOLTAGE,
@@ -65,11 +65,12 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         consumption = sensor_values.get(KEY_CONSUMPTION, 0)
         battery_power = sensor_values.get(KEY_BATTERY_POWER, 0)
         battery_power_reversed = self._config.get(CONF_BATTERY_POWER_REVERSED, False)
+        configured_reserve = self._config.get(CONF_RESERVE_BATTERY_POWER, 0)
 
-        if self._config.get(CONF_PARALLEL_DISTRIBUTION_ENABLED, False):
-            # --- Parallel Distribution Mode ---
-            configured_reserve = self._config.get(CONF_RESERVE_BATTERY_POWER, 0)
-
+        # --- Automatic Mode Selection ---
+        # Parallel mode if consumption sensor is configured, otherwise MPPT mode.
+        if self._config.get(CONF_CONSUMPTION):
+            # --- Parallel Distribution Mode (Consumption sensor is configured) ---
             excess = calculate_excess_power_parallel(
                 pv_power=pv_power,
                 consumption=consumption,
@@ -92,7 +93,7 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             journal_event("excess_power_calc", {"mode": "parallel", "excess": excess})
             return excess
 
-        # --- Original MPPT Mode ---
+        # --- Original MPPT Mode (No consumption sensor) ---
         pv_voltage = sensor_values.get(KEY_PV_VOLTAGE, 0)
 
         current_max_power, debug_info = calculate_current_max_power(
@@ -113,9 +114,10 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         excess = calculate_excess_power_mppt(
             current_max_power=current_max_power,
             pv_power=pv_power,
-            consumption=consumption,
+            consumption=None,  # Explicitly pass None as consumption sensor is absent
             battery_power=battery_power,
             battery_power_reversed=battery_power_reversed,
+            configured_reserve=configured_reserve,
         )
 
         battery_discharging = battery_power > 0 if battery_power_reversed else battery_power < 0

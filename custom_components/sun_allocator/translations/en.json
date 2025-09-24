@@ -144,6 +144,7 @@
       },
       "advanced_settings": {
         "data": {
+          "reserve_battery_power": "Battery Power Reserve (W)",
           "curve_factor_k": "I-V Curve Factor (k)",
           "efficiency_correction_factor": "Efficiency Correction Factor",
           "min_inverter_voltage": "Minimum Inverter Voltage (V)",

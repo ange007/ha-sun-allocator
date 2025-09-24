@@ -145,6 +145,7 @@
       },
       "advanced_settings": {
         "data": {
+          "reserve_battery_power": "Резерв потужності для батареї (Вт)",
           "curve_factor_k": "Фактор I-V Кривої (k)",
           "efficiency_correction_factor": "Фактор Корекції Ефективності",
           "min_inverter_voltage": "Мінімальна Напруга Інвертора (В)",

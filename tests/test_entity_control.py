@@ -92,8 +92,8 @@ async def test_simple_power_allocation(hass: HomeAssistant) -> None:
     config_entry.add_to_hass(hass)
 
     # Create mock entities for sensors
-    hass.states.async_set("sensor.test_pv_power", "100")  # Initial low power
-    hass.states.async_set("sensor.test_pv_voltage", "25")  # Initial low voltage
+    hass.states.async_set("sensor.test_pv_power", "100")  # Initial power
+    hass.states.async_set("sensor.test_pv_voltage", "25")  # Initial voltage < Vmp, so no excess
     hass.states.async_set("input_boolean.test_switch", "off")  # Ensure switch is off initially
     await hass.async_block_till_done()
 
@@ -101,8 +101,8 @@ async def test_simple_power_allocation(hass: HomeAssistant) -> None:
         await async_setup_entry(hass, config_entry)
         await hass.async_block_till_done()
 
-        # With the new logic, excess power is now 100W, so the switch should turn on immediately.
-        assert hass.states.get("switch.test_switch").state == "on"
+        # At this point, voltage is low, so switch should be off
+        assert hass.states.get("switch.test_switch").state == "off"
 
         # Now, simulate a state change that should generate excess power
         hass.states.async_set("sensor.test_pv_voltage", "35")  # Voltage > Vmp (30)
@@ -110,7 +110,8 @@ async def test_simple_power_allocation(hass: HomeAssistant) -> None:
         
         # Add additional wait for changes to be processed
         await hass.async_block_till_done()
-        await asyncio.sleep(0.5)
+        # A small sleep might be necessary for the update to propagate through the event loop
+        await asyncio.sleep(0.1) 
         await hass.async_block_till_done()
 
         # Assert that the device is turned on

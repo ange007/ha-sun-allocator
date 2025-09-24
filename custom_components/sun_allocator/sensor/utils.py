@@ -201,21 +201,31 @@ def calculate_excess_power_parallel(
     if battery_power_reversed:
         battery_power = -battery_power
 
-    effective_reserve = configured_reserve
-    # Check for passive charging
-    if 0 < battery_power < PASSIVE_CHARGING_THRESHOLD_W:
-        effective_reserve = min(configured_reserve, battery_power)
+    if configured_reserve > 0:
+        # --- Budgeting Mode ---
+        effective_reserve = configured_reserve
+        # Check for passive charging
+        if 0 < battery_power < PASSIVE_CHARGING_THRESHOLD_W:
+            effective_reserve = min(configured_reserve, battery_power)
+            log_debug(
+                f"Passive charging detected ({battery_power}W < {PASSIVE_CHARGING_THRESHOLD_W}W). "
+                f"Effective reserve adjusted from {configured_reserve}W to {effective_reserve}W."
+            )
+        
+        excess = float(pv_power) - float(consumption) - float(effective_reserve)
         log_debug(
-            f"Passive charging detected ({battery_power}W < {PASSIVE_CHARGING_THRESHOLD_W}W). "
-            f"Effective reserve adjusted from {configured_reserve}W to {effective_reserve}W."
+            f"Parallel Distribution (Budgeting): PV={pv_power}W, Consumption={consumption}W, "
+            f"Effective Reserve={effective_reserve}W -> Excess={excess}W"
         )
 
-    excess = float(pv_power) - float(effective_reserve) - float(consumption)
-
-    log_debug(
-        f"Parallel Distribution: PV={pv_power}W, Effective Reserve={effective_reserve}W, "
-        f"Consumption={consumption}W -> Excess={excess}W"
-    )
+    else:
+        # --- Battery Priority Mode (reserve = 0) ---
+        battery_charge_w = max(0, battery_power)
+        excess = float(pv_power) - float(consumption) - float(battery_charge_w)
+        log_debug(
+            f"Parallel Distribution (Priority): PV={pv_power}W, Consumption={consumption}W, "
+            f"Battery Charge={battery_charge_w}W -> Excess={excess}W"
+        )
 
     return excess
 
@@ -226,27 +236,18 @@ def calculate_excess_power_mppt(
     battery_power: float = 0.0,
     battery_power_reversed: bool = False,
     consumption: float | None = None,
-    allocated_power: float = 0.0,
-    *,
+    configured_reserve: float = 0.0,
+    *_, # Keep wildcard for future compatibility
     relative_voltage: float | None = None,
     energy_harvesting_possible: bool | None = None,
 ) -> float:
     """
     Calculate excess power with proper accounting for battery charge and consumption.
-
-    The logic ensures consistency between scenarios with and without consumption sensor:
-    - With consumption sensor: excess = current_max_power - consumption - battery_charge_w
-    - Without consumption sensor: excess = current_max_power - pv_power - battery_charge_w
-
-    The allocated_power is not subtracted from consumption to avoid double counting,
-    as it represents power that will be allocated, not power already consumed.
     """
     # 1) Discharge guard
     if battery_power_reversed:
-        # reversed polarity: positive means discharging
         is_discharging = battery_power > 0
     else:
-        # normal polarity: negative means discharging
         is_discharging = battery_power < 0
 
     if is_discharging:
@@ -260,23 +261,39 @@ def calculate_excess_power_mppt(
 
     # 3) Account battery charging as already used PV power
     if battery_power_reversed:
-        # reversed polarity: negative means charging
         battery_charge_w = max(-battery_power, 0.0)
     else:
-        # normal polarity: positive means charging
         battery_charge_w = max(battery_power, 0.0)
 
     # 4) Calculate excess power consistently
     if consumption is not None:
-        # With consumption sensor: subtract total consumption and battery charging
-        # Note: We don't subtract allocated_power here to avoid double counting
-        # since consumption should already include power used by controlled devices
-        return max(current_max_power - consumption - battery_charge_w, 0.0)
+        # This path should ideally not be taken if consumption is available,
+        # as parallel mode should be used. But as a fallback...
+        if configured_reserve > 0:
+            # Budgeting mode
+            return max(0, current_max_power - consumption - configured_reserve)
+        else:
+            # Battery priority mode
+            return max(0, current_max_power - consumption - battery_charge_w)
     else:
-        # Without consumption sensor: use actual PV power as baseline
-        # This represents the power currently being harvested
-        actual_harvested = pv_power + battery_charge_w
-        return max(current_max_power - actual_harvested, 0.0)
+        # Without consumption sensor: new unified MPPT logic
+        untapped_power = max(0, current_max_power - pv_power)
+        
+        if configured_reserve > 0:
+            # Budgeting mode
+            excess_from_battery = max(0, battery_charge_w - configured_reserve)
+            total_excess = untapped_power + excess_from_battery
+            log_debug(
+                f"MPPT Excess (Budgeting): Untapped={untapped_power}W, "
+                f"From Battery={excess_from_battery}W -> Total={total_excess}W"
+            )
+            return total_excess
+        else:
+            # Battery priority mode
+            log_debug(
+                f"MPPT Excess (Priority): Untapped={untapped_power}W"
+            )
+            return untapped_power
 
 
 def calculate_usage_percentage(actual_power: float, max_power: float) -> float:

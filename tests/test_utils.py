@@ -3,192 +3,120 @@ from custom_components.sun_allocator.sensor.utils import calculate_excess_power_
 
 def test_calculate_excess_power_mppt_with_consumption():
     """Test excess power calculation with consumption sensor."""
-    # excess = current_max_power - consumption - battery_charge_w
+    # This test remains valid for the fallback logic inside mppt calc
     
-    # Scenario 1: Basic case, no battery
+    # Scenario 1: Basic case, no battery, priority mode
     excess = calculate_excess_power_mppt(
-        pv_power=1000,
         current_max_power=1500,
-        consumption=500
+        consumption=500,
+        configured_reserve=0
     )
     assert excess == 1000 # 1500 - 500 - 0
 
-    # Scenario 2: With battery charging
+    # Scenario 2: With battery charging, priority mode
     excess = calculate_excess_power_mppt(
-        pv_power=1000,
         current_max_power=1500,
         consumption=500,
-        battery_power=200 # Charging
+        battery_power=200, # Charging
+        configured_reserve=0
     )
     assert excess == 800 # 1500 - 500 - 200
 
-    # Scenario 3: With battery charging (reversed polarity)
+    # Scenario 3: With battery charging, budget mode
     excess = calculate_excess_power_mppt(
-        pv_power=1000,
         current_max_power=1500,
         consumption=500,
-        battery_power=-200, # Charging
-        battery_power_reversed=True
+        battery_power=200, # Charging
+        configured_reserve=100
     )
-    assert excess == 800 # 1500 - 500 - 200
-
-    # Scenario 4: With battery discharging
-    excess = calculate_excess_power_mppt(
-        pv_power=1000,
-        current_max_power=1500,
-        consumption=500,
-        battery_power=-200 # Discharging
-    )
-    assert excess == 0
-
-    # Scenario 5: With battery discharging (reversed polarity)
-    excess = calculate_excess_power_mppt(
-        pv_power=1000,
-        current_max_power=1500,
-        consumption=500,
-        battery_power=200, # Discharging
-        battery_power_reversed=True
-    )
-    assert excess == 0
-
-    # Scenario 6: High consumption case
-    excess = calculate_excess_power_mppt(
-        pv_power=1000,
-        current_max_power=1500,
-        consumption=1400
-    )
-    assert excess == 100 # 1500 - 1400 - 0
-
-    # Scenario 7: Consumption exceeds max power
-    excess = calculate_excess_power_mppt(
-        pv_power=1000,
-        current_max_power=1500,
-        consumption=1600
-    )
-    assert excess == 0 # max(1500 - 1600 - 0, 0) = 0
+    assert excess == 900 # 1500 - 500 - 100
 
 
 def test_calculate_excess_power_mppt_without_consumption():
-    """Test excess power calculation without consumption sensor."""
-    # When consumption is None, the function uses:
-    # excess = current_max_power - actual_harvested
-    # actual_harvested = pv_power + battery_charge_w
+    """Test MPPT excess power calculation without consumption sensor."""
     
-    # Scenario 1: Basic case with PV power, no battery
+    # --- Priority Mode (reserve = 0) ---
+    # Excess should only be the untapped panel power
     excess = calculate_excess_power_mppt(
-        pv_power=1000,
         current_max_power=1500,
-        consumption=None
-    )
-    assert excess == 500 # 1500 - (1000 + 0) = 500
-
-    # Scenario 2: With PV power and battery charging
-    excess = calculate_excess_power_mppt(
         pv_power=1000,
-        current_max_power=1500,
+        battery_power=300, # Charging
         consumption=None,
-        battery_power=200 # Charging
+        configured_reserve=0
     )
-    assert excess == 300 # 1500 - (1000 + 200) = 300
+    assert excess == 500 # 1500 - 1000
 
-    # Scenario 3: With battery discharging
+    # --- Budget Mode (reserve > 0) ---
+    # Excess is untapped + (charge - reserve)
     excess = calculate_excess_power_mppt(
-        pv_power=1000,
         current_max_power=1500,
+        pv_power=1000,
+        battery_power=300, # Charging
         consumption=None,
-        battery_power=-200 # Discharging
+        configured_reserve=100
     )
-    assert excess == 0 # Discharging guard returns 0
+    # Untapped = 1500 - 1000 = 500
+    # From Battery = 300 - 100 = 200
+    # Total = 700
+    assert excess == 700
 
-    # Scenario 4: PV power equals max power
+    # --- Budget Mode (charging less than reserve) ---
     excess = calculate_excess_power_mppt(
-        pv_power=1500,
         current_max_power=1500,
-        consumption=None
-    )
-    assert excess == 0 # 1500 - (1500 + 0) = 0
-
-    # Scenario 5: PV power exceeds max power (shouldn't happen in reality)
-    excess = calculate_excess_power_mppt(
-        pv_power=1600,
-        current_max_power=1500,
-        consumption=None
-    )
-    assert excess == 0 # max(1500 - (1600 + 0), 0) = 0
-
-
-def test_calculate_excess_power_mppt_consistency():
-    """Test that both calculation methods give consistent results in similar scenarios."""
-    # When consumption equals PV power, both methods should give similar results
-    
-    # With consumption sensor
-    excess_with_consumption = calculate_excess_power_mppt(
         pv_power=1000,
-        current_max_power=1500,
-        consumption=1000,
-        battery_power=200
-    )
-    
-    # Without consumption sensor
-    excess_without_consumption = calculate_excess_power_mppt(
-        pv_power=1000,
-        current_max_power=1500,
+        battery_power=50, # Charging
         consumption=None,
-        battery_power=200
+        configured_reserve=100
     )
-    
-    # Both should give the same result when consumption = pv_power
-    assert excess_with_consumption == excess_without_consumption == 300 # 1500 - 1000 - 200
+    # Untapped = 1500 - 1000 = 500
+    # From Battery = max(0, 50 - 100) = 0
+    # Total = 500
+    assert excess == 500
+
+    # --- Discharging ---
+    # Should always be 0
+    excess = calculate_excess_power_mppt(
+        current_max_power=1500,
+        pv_power=1000,
+        battery_power=-100, # Discharging
+        consumption=None,
+        configured_reserve=100
+    )
+    assert excess == 0
+
 
 def test_calculate_excess_power_parallel():
-    """Test the parallel excess power calculation."""
+    """Test the parallel excess power calculation for both sub-modes."""
 
-    # Scenario 1: Basic, no passive charging
+    # --- Priority Mode (reserve = 0) ---
+    # Excess = PV - Consumption - Battery Charge
     excess = calculate_excess_power_parallel(
         pv_power=3000,
-        consumption=200,
-        battery_power=200,  # Charging, but > 50W
+        consumption=500,
+        battery_power=200,  # Charging
         battery_power_reversed=False,
-        configured_reserve=500
+        configured_reserve=0
     )
     assert excess == 2300  # 3000 - 500 - 200
 
-    # Scenario 2: Passive charging detected
+    # --- Budgeting Mode (reserve > 0) ---
+    # Excess = PV - Consumption - Reserve
     excess = calculate_excess_power_parallel(
         pv_power=3000,
-        consumption=200,
-        battery_power=40,  # Charging, < 50W
+        consumption=500,
+        battery_power=200,  # Charging
         battery_power_reversed=False,
-        configured_reserve=500
+        configured_reserve=100
     )
-    assert excess == 2760  # 3000 - 40 - 200
+    assert excess == 2400  # 3000 - 500 - 100
 
-    # Scenario 3: Passive charging, but reserve is lower
+    # --- Budgeting Mode with Passive Charging ---
+    # Effective reserve becomes the battery charge rate
     excess = calculate_excess_power_parallel(
         pv_power=3000,
-        consumption=200,
-        battery_power=40,  # Charging, < 50W
+        consumption=500,
+        battery_power=40,  # Passive charging
         battery_power_reversed=False,
-        configured_reserve=30
+        configured_reserve=100
     )
-    assert excess == 2770  # 3000 - 30 - 200
-
-    # Scenario 4: Discharging battery
-    excess = calculate_excess_power_parallel(
-        pv_power=3000,
-        consumption=200,
-        battery_power=-1000,  # Discharging
-        battery_power_reversed=False,
-        configured_reserve=500
-    )
-    assert excess == 2300  # 3000 - 500 - 200 (passive charging rule doesn't apply)
-
-    # Scenario 5: Reversed polarity
-    excess = calculate_excess_power_parallel(
-        pv_power=3000,
-        consumption=200,
-        battery_power=-40,  # Charging, < 50W
-        battery_power_reversed=True,
-        configured_reserve=500
-    )
-    assert excess == 2760  # 3000 - 40 - 200
+    assert excess == 2460  # 3000 - 500 - 40

@@ -13,22 +13,26 @@ if sys.platform == "win32":
 def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
-def create_test_config_entry():
+def create_test_config_entry(extra_data=None):
     """Create a test config entry for Sun Allocator."""
+    data = {
+        CONF_NAME: "Test Sun Allocator",
+        "pv_power": "sensor.pv_power",
+        "pv_voltage": "sensor.pv_voltage",
+        "vmp": 30.0,
+        "imp": 8.0,
+        "panel_count": 1,
+        "panel_configuration": "series",
+        "devices": []
+    }
+    if extra_data:
+        data.update(extra_data)
+    
     return ConfigEntry(
         version=1,
         domain="sun_allocator",
         title="Test Sun Allocator",
-        data={
-            CONF_NAME: "Test Sun Allocator",
-            "pv_power": "sensor.pv_power",
-            "pv_voltage": "sensor.pv_voltage",
-            "vmp": 30.0,
-            "imp": 8.0,
-            "panel_count": 1,
-            "panel_configuration": "series",
-            "devices": []
-        },
+        data=data,
         options={},
         source="user",
         entry_id="test_entry_id",

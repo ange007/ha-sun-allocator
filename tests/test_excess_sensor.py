@@ -7,8 +7,14 @@ from homeassistant.core import HomeAssistant
 from custom_components.sun_allocator.const import (
     CONF_PV_POWER,
     CONF_CONSUMPTION,
-    CONF_PARALLEL_DISTRIBUTION_ENABLED,
     CONF_RESERVE_BATTERY_POWER,
+    KEY_ENERGY_HARVESTING_POSSIBLE,
+    KEY_MIN_SYSTEM_VOLTAGE,
+    KEY_LIGHT_FACTOR,
+    KEY_RELATIVE_VOLTAGE,
+    KEY_VOC_RATIO,
+    KEY_CALCULATION_REASON,
+    KEY_PMAX
 )
 from custom_components.sun_allocator.sensor.sensors.excess import SunAllocatorExcessSensor
 
@@ -18,8 +24,7 @@ def mock_config():
     """Fixture for mock config data."""
     return {
         CONF_PV_POWER: "sensor.pv_power",
-        CONF_CONSUMPTION: "sensor.consumption_power",
-        # Add other necessary default config values
+        # Basic config for MPPT mode
         "vmp": 36.0,
         "imp": 8.0,
         "voc": 44.0,
@@ -33,130 +38,97 @@ def mock_config():
         "battery_power_reversed": False,
     }
 
+# A complete mock for the debug_info dictionary
+complete_mock_debug_info = {
+    KEY_PMAX: 3000.0,
+    KEY_ENERGY_HARVESTING_POSSIBLE: True,
+    KEY_MIN_SYSTEM_VOLTAGE: 100.0,
+    KEY_LIGHT_FACTOR: 1.0,
+    KEY_RELATIVE_VOLTAGE: 1.1,
+    KEY_VOC_RATIO: 1.1,
+    KEY_CALCULATION_REASON: "Test"
+}
+
+# --- PARALLEL MODE TESTS (with consumption sensor) ---
 
 @pytest.mark.asyncio
-async def test_parallel_distribution_with_consumption(hass: HomeAssistant, mock_config):
-    """Test parallel distribution mode with a consumption sensor."""
-    # Arrange
+async def test_parallel_budget_mode(hass: HomeAssistant, mock_config):
+    """Test parallel 'Budget' mode (reserve > 0)."""
     config = {
         **mock_config,
-        CONF_PARALLEL_DISTRIBUTION_ENABLED: True,
+        CONF_CONSUMPTION: "sensor.consumption_power",
         CONF_RESERVE_BATTERY_POWER: 500,
     }
-    
-    # Mock sensor states
     hass.states.async_set("sensor.pv_power", "3000")
     hass.states.async_set("sensor.consumption_power", "200")
-    hass.states.async_set("sensor.battery_power", "0") # Not used in this mode, but required by sensor
-    hass.states.async_set("sensor.pv_voltage", "40") # Not used in this mode, but required
-
+    hass.states.async_set("sensor.battery_power", "100") # Charging
+    hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
-
-    # Act & Assert
-    assert sensor.native_value == 2300  # 3000 (PV) - 500 (Reserve) - 200 (Consumption)
-
+    # Excess = 3000 (PV) - 200 (Consumption) - 500 (Reserve) = 2300
+    assert sensor.native_value == 2300
 
 @pytest.mark.asyncio
-async def test_parallel_distribution_no_consumption(hass: HomeAssistant, mock_config):
-    """Test parallel distribution mode without a consumption sensor."""
-    # Arrange
+async def test_parallel_priority_mode(hass: HomeAssistant, mock_config):
+    """Test parallel 'Priority' mode (reserve = 0)."""
     config = {
         **mock_config,
-        CONF_CONSUMPTION: None, # Simulate no consumption sensor configured
-        CONF_PARALLEL_DISTRIBUTION_ENABLED: True,
-        CONF_RESERVE_BATTERY_POWER: 500,
+        CONF_CONSUMPTION: "sensor.consumption_power",
+        CONF_RESERVE_BATTERY_POWER: 0,
     }
-    
     hass.states.async_set("sensor.pv_power", "3000")
-    hass.states.async_set("sensor.battery_power", "0")
+    hass.states.async_set("sensor.consumption_power", "200")
+    hass.states.async_set("sensor.battery_power", "400") # Charging
     hass.states.async_set("sensor.pv_voltage", "40")
-
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
+    # Excess = 3000 (PV) - 200 (Consumption) - 400 (Battery Charge) = 2400
+    assert sensor.native_value == 2400
 
-    # Act & Assert
-    assert sensor.native_value == 2500  # 3000 (PV) - 500 (Reserve)
-
+# --- MPPT MODE TESTS (without consumption sensor) ---
 
 @pytest.mark.asyncio
-async def test_parallel_distribution_negative_result(hass: HomeAssistant, mock_config):
-    """Test parallel distribution mode resulting in a negative excess value."""
-    # Arrange
-    config = {
-        **mock_config,
-        CONF_PARALLEL_DISTRIBUTION_ENABLED: True,
-        CONF_RESERVE_BATTERY_POWER: 500,
-    }
-    
-    hass.states.async_set("sensor.pv_power", "1000")
-    hass.states.async_set("sensor.consumption_power", "600")
-    hass.states.async_set("sensor.battery_power", "0")
-    hass.states.async_set("sensor.pv_voltage", "40")
-
-    sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
-
-    # Act & Assert
-    assert sensor.native_value == -100  # 1000 - 500 - 600
-
-
-@pytest.mark.asyncio
-async def test_original_logic_regression(hass: HomeAssistant, mock_config):
-    """Test that the original logic still works when parallel mode is disabled."""
-    # Arrange
-    config = {
-        **mock_config,
-        CONF_PARALLEL_DISTRIBUTION_ENABLED: False,
-    }
-    
-    hass.states.async_set("sensor.pv_power", "2000")
-    hass.states.async_set("sensor.consumption_power", "300")
+async def test_mppt_budget_mode(hass: HomeAssistant, mock_config):
+    """Test MPPT 'Budget' mode (reserve > 0)."""
+    config = {**mock_config, CONF_RESERVE_BATTERY_POWER: 100}
+    hass.states.async_set("sensor.pv_power", "2500")
     hass.states.async_set("sensor.battery_power", "500") # Charging
     hass.states.async_set("sensor.pv_voltage", "40")
-
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
-
-    # Mock the complex calculation functions to isolate the sensor's logic flow
-    mock_debug_info = {
-        "pmax": 3000,
-        "calculation_reason": "test",
-        "energy_harvesting_possible": True,
-        "min_system_voltage": 100.0,
-        "light_factor": 0.8,
-        "relative_voltage": 0.9,
-        "voc_ratio": 1.2
-    }
-
-    with patch("custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power", return_value=(3000.0, mock_debug_info)) as mock_max_power, \
-         patch("custom_components.sun_allocator.sensor.sensors.excess.calculate_excess_power_mppt", return_value=1234.5) as mock_excess:
-        
-        # Act
-        result = sensor.native_value
-
-        # Assert
-        # We assert that the original logic path was taken by checking that our mock was called.
-        mock_excess.assert_called_once()
-        # And the sensor's value is the one returned by the mocked function.
-        assert result == 1234.5
-
+    
+    with patch("custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power", return_value=(3000.0, complete_mock_debug_info)):
+        # Untapped = 3000 - 2500 = 500
+        # From Battery = 500 - 100 = 400
+        # Total = 900
+        assert sensor.native_value == 900
 
 @pytest.mark.asyncio
-async def test_parallel_distribution_passive_charging(hass: HomeAssistant, mock_config):
-    """Test parallel distribution mode when battery is in passive charging state."""
-    # Arrange
-    config = {
-        **mock_config,
-        CONF_PARALLEL_DISTRIBUTION_ENABLED: True,
-        CONF_RESERVE_BATTERY_POWER: 500,  # High reserve
-    }
-
-    # Mock sensor states
-    hass.states.async_set("sensor.pv_power", "3000")
-    hass.states.async_set("sensor.consumption_power", "200")
-    hass.states.async_set("sensor.battery_power", "40")  # Passive charging (less than 50W)
+async def test_mppt_priority_mode(hass: HomeAssistant, mock_config):
+    """Test MPPT 'Priority' mode (reserve = 0)."""
+    config = {**mock_config, CONF_RESERVE_BATTERY_POWER: 0}
+    hass.states.async_set("sensor.pv_power", "2500")
+    hass.states.async_set("sensor.battery_power", "500") # Charging
     hass.states.async_set("sensor.pv_voltage", "40")
-
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
 
-    # Act & Assert
-    # Effective reserve should be 40W (the actual charge rate), not 500W
-    # Excess = 3000 (PV) - 40 (Effective Reserve) - 200 (Consumption) = 2760
-    assert sensor.native_value == 2760
+    with patch("custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power", return_value=(3000.0, complete_mock_debug_info)):
+        # Untapped = 3000 - 2500 = 500
+        # From Battery = 0 (because reserve is 0)
+        # Total = 500
+        assert sensor.native_value == 500
+
+@pytest.mark.asyncio
+async def test_mppt_mode_is_called_correctly(hass: HomeAssistant, mock_config):
+    """Test MPPT calculation function is called correctly when no consumption sensor is configured."""
+    config = {**mock_config, CONF_RESERVE_BATTERY_POWER: 200}
+    hass.states.async_set("sensor.pv_power", "2000")
+    hass.states.async_set("sensor.battery_power", "500")
+    hass.states.async_set("sensor.pv_voltage", "40")
+    sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
+
+    with patch("custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power", return_value=(3000.0, complete_mock_debug_info)), \
+         patch("custom_components.sun_allocator.sensor.sensors.excess.calculate_excess_power_mppt", return_value=1234.5) as mock_mppt_calc:
+        
+        result = sensor.native_value
+        mock_mppt_calc.assert_called_once()
+        assert mock_mppt_calc.call_args.kwargs['consumption'] is None
+        assert mock_mppt_calc.call_args.kwargs['configured_reserve'] == 200
+        assert result == 1234.5
