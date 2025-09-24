@@ -53,11 +53,15 @@ class BooleanSelectorBuilder:
 
 class SelectSelectorBuilder:
     """Builds select selectors."""
-    def __init__(self, options, mode="dropdown"):
+    def __init__(self, options, mode="dropdown", translation_key=None):
         """Initialize the SelectSelectorBuilder."""
         self.options = options
         self.mode = mode
+        self.translation_key = translation_key
 
     def build(self):
         """Builds the select selector."""
-        return selector({"select": {"options": self.options, "mode": self.mode}})
+        select_info = {"options": self.options, "mode": self.mode}
+        if self.translation_key:
+            select_info["translation_key"] = self.translation_key
+        return selector({"select": select_info})

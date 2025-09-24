@@ -86,7 +86,7 @@
       },
       "device_name_type": {
         "data": {
-          "name": "Device Name",
+          "device_name": "Device Name",
           "device_type": {
             "name": "Device Type",
             "options": {

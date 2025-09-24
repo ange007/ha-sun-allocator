@@ -47,29 +47,13 @@ def build_device_name_type_schema(defaults=None):
             Required(
                 CONF_DEVICE_NAME,
                 default=defaults.get(CONF_DEVICE_NAME, ""),
-                description={
-                    "suggested_value": defaults.get(CONF_DEVICE_NAME, ""),
-                    "label": "config.step.device_name_type.data.name",
-                },
             ): str,
             Required(
                 CONF_DEVICE_TYPE,
                 default=default_type,
-                description={
-                    "suggested_value": default_type,
-                    "label": "config.step.device_name_type.data.device_type.name",
-                },
             ): SelectSelectorBuilder(
-                [
-                    {
-                        "label": "config.step.device_name_type.data.device_type.options.standard",
-                        "value": DEVICE_TYPE_STANDARD,
-                    },
-                    {
-                        "label": "config.step.device_name_type.data.device_type.options.custom",
-                        "value": DEVICE_TYPE_CUSTOM,
-                    },
-                ]
+                options=[DEVICE_TYPE_STANDARD, DEVICE_TYPE_CUSTOM],
+                translation_key="config.step.device_name_type.data.device_type.options"
             ).build(),
         }
     )

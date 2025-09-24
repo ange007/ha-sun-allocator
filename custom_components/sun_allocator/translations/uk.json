@@ -86,7 +86,7 @@
       },
       "device_name_type": {
         "data": {
-          "name": "Назва Пристрою",
+          "device_name": "Назва Пристрою",
           "device_type": {
             "name": "Тип Пристрою",
             "options": {
