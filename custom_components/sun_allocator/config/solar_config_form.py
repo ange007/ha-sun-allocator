@@ -91,7 +91,7 @@ def build_solar_config_schema(sensors, defaults=None):
                 default=defaults.get(CONF_PANEL_CONFIGURATION, PANEL_CONFIG_SERIES),
             ): SelectSelectorBuilder(
                 options=[PANEL_CONFIG_SERIES, PANEL_CONFIG_PARALLEL, PANEL_CONFIG_PARALLEL_SERIES],
-                translation_key="options.panel_configuration_options"
+                translation_key="panel_configuration"
             ).build(),
         }
     )
