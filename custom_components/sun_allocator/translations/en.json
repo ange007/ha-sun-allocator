@@ -111,11 +111,11 @@
           "priority": {
             "name": "Device Priority",
             "options": {
-              "very_high": "Very High",
-              "high": "High",
-              "medium": "Medium",
-              "low": "Low",
-              "very_low": "Very Low"
+              "100": "Very High",
+              "75": "High",
+              "50": "Medium",
+              "25": "Low",
+              "1": "Very Low"
             }
           },
           "debounce_time": "Debounce Time (s)",

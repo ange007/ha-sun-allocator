@@ -31,34 +31,18 @@ def build_temperature_config_schema(defaults=None):
             Required(
                 CONF_TEMPERATURE_SENSOR,
                 default=default_temp_sensor,
-                description={
-                    "suggested_value": default_temp_sensor,
-                    "label": "config.step.temperature_compensation.data.temperature_sensor",
-                },
             ): selector({"entity": {}}),
             Required(
                 CONF_TEMP_COEFFICIENT_VOC,
                 default=defaults.get(
                     CONF_TEMP_COEFFICIENT_VOC, DEFAULT_VOC_COEFFICIENT
                 ),
-                description={
-                    "suggested_value": defaults.get(
-                        CONF_TEMP_COEFFICIENT_VOC, DEFAULT_VOC_COEFFICIENT
-                    ),
-                    "label": "config.step.temperature_compensation.data.temp_coefficient_voc",
-                },
             ): NumberSelectorBuilder(-1.0, 0.0, 0.01).build(),
             Required(
                 CONF_TEMP_COEFFICIENT_PMAX,
                 default=defaults.get(
                     CONF_TEMP_COEFFICIENT_PMAX, DEFAULT_PMAX_COEFFICIENT
                 ),
-                description={
-                    "suggested_value": defaults.get(
-                        CONF_TEMP_COEFFICIENT_PMAX, DEFAULT_PMAX_COEFFICIENT
-                    ),
-                    "label": "config.step.temperature_compensation.data.temp_coefficient_pmax",
-                },
             ): NumberSelectorBuilder(-1.0, 0.0, 0.01).build(),
         }
     )

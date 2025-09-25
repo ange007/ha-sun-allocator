@@ -8,6 +8,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.selector import selector
 
 from . import solar_config
 from . import device_config
@@ -127,31 +128,24 @@ class SunAllocatorConfigFlow(
                 vol.Optional(
                     CONF_DEVICE_ID,
                     default=default_device_id,
-                    description={"suggested_value": default_device_id},
                 )
             ] = SelectSelectorBuilder(device_options).build()
 
-            action_options = [
-                {"label": "Add another device", "value": ACTION_ADD},
-                {"label": "Edit selected device", "value": ACTION_EDIT},
-                {"label": "Remove selected device", "value": ACTION_REMOVE},
-                {"label": "Finish", "value": ACTION_FINISH},
-            ]
+            action_options = [ACTION_ADD, ACTION_EDIT, ACTION_REMOVE, ACTION_FINISH]
             default_action = ACTION_ADD
         else:
-            action_options = [
-                {"label": "Add a device", "value": ACTION_ADD},
-                {"label": "Finish (no devices)", "value": ACTION_FINISH},
-            ]
+            action_options = [ACTION_ADD, ACTION_FINISH]
             default_action = ACTION_ADD
 
         schema_dict[
             vol.Required(
                 CONF_ACTION,
                 default=default_action,
-                description={"suggested_value": default_action},
             )
-        ] = SelectSelectorBuilder(action_options).build()
+        ] = SelectSelectorBuilder(
+            options=action_options,
+            translation_key="config.step.devices.data.action.options"
+        ).build()
 
         devices_list_str = ", ".join(
             [d.get(CONF_DEVICE_NAME, "Unnamed") for d in self._devices]
@@ -209,11 +203,6 @@ class SunAllocatorOptionsFlowHandler(
             if action == ACTION_MANAGE_DEVICES:
                 return await self.async_step_manage_devices()
 
-        options = {
-            ACTION_SETTINGS: "settings",
-            ACTION_MANAGE_DEVICES: "manage_devices",
-        }
-
         return self.async_show_form(
             step_id=STEP_MAIN_MENU,
             data_schema=vol.Schema(
@@ -221,8 +210,12 @@ class SunAllocatorOptionsFlowHandler(
                     vol.Required(
                         CONF_ACTION,
                         default=ACTION_SETTINGS,
-                        description={"suggested_value": ACTION_SETTINGS},
-                    ): vol.In(options),
+                    ): selector({
+                        "select": {
+                            "options": [ACTION_SETTINGS, ACTION_MANAGE_DEVICES],
+                            "translation_key": "config.step.main_menu.data.action.options"
+                        }
+                    }),
                 }
             ),
             description_placeholders={"devices_count": len(self._devices)},
@@ -257,22 +250,12 @@ class SunAllocatorOptionsFlowHandler(
                     default=self._solar_config.get(
                         CONF_TEMPERATURE_COMPENSATION_ENABLED, False
                     ),
-                    description={
-                        "suggested_value": self._solar_config.get(
-                            CONF_TEMPERATURE_COMPENSATION_ENABLED, False
-                        )
-                    },
                 ): bool,
                 vol.Required(
                     CONF_ADVANCED_SETTINGS_ENABLED,
                     default=self._solar_config.get(
                         CONF_ADVANCED_SETTINGS_ENABLED, False
                     ),
-                    description={
-                        "suggested_value": self._solar_config.get(
-                            CONF_ADVANCED_SETTINGS_ENABLED, False
-                        )
-                    },
                 ): bool,
             }
         )
@@ -325,12 +308,7 @@ class SunAllocatorOptionsFlowHandler(
             d[CONF_DEVICE_ID]: d[CONF_DEVICE_NAME] for d in self._devices
         }
 
-        action_options = {
-            ACTION_ADD_DEVICE: "add_device",
-            ACTION_EDIT: "edit",
-            ACTION_REMOVE: "remove",
-            ACTION_BACK: "back",
-        }
+        action_options = [ACTION_ADD_DEVICE, ACTION_EDIT, ACTION_REMOVE, ACTION_BACK]
 
         schema_dict = {}
 
@@ -340,7 +318,6 @@ class SunAllocatorOptionsFlowHandler(
                 vol.Required(
                     CONF_DEVICE_ID,
                     default=default_device_id,
-                    description={"suggested_value": default_device_id},
                 )
             ] = vol.In(device_options)
 
@@ -348,9 +325,13 @@ class SunAllocatorOptionsFlowHandler(
             vol.Required(
                 CONF_ACTION,
                 default=ACTION_EDIT,
-                description={"suggested_value": ACTION_EDIT},
             )
-        ] = vol.In(action_options)
+        ] = selector({
+            "select": {
+                "options": action_options,
+                "translation_key": "config.step.manage_devices.data.action.options"
+            }
+        })
 
         devices_list_str = ", ".join([d[CONF_DEVICE_NAME] for d in self._devices])
         return self.async_show_form(

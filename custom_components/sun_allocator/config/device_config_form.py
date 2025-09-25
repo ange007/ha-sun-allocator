@@ -34,7 +34,7 @@ from ..const import (
 
 
 def build_device_name_type_schema(defaults=None):
-    """Builds the schema for device name and type configuration."""
+    """Builds the schema for device name and type configuration.""" 
     if defaults is None:
         defaults = {}
 
@@ -88,10 +88,6 @@ def build_device_selection_schema(entities, defaults=None):
             Optional(
                 CONF_DEVICE_ENTITY,
                 default=default_entity,
-                description={
-                    "suggested_value": default_entity,
-                    "label": "config.step.device_selection.data.device_entity",
-                },
             ): SelectSelectorBuilder(options).build()
         }
     )
@@ -108,60 +104,25 @@ def build_device_basic_settings_schema(defaults=None):
         Optional(
             CONF_MIN_EXPECTED_W,
             default=defaults.get(CONF_MIN_EXPECTED_W, 0.0),
-            description={"suggested_value": defaults.get(CONF_MIN_EXPECTED_W, 0.0)},
         ): NumberSelectorBuilder(0, 10000, 1, unit="W").build(),
         Required(
             CONF_DEVICE_PRIORITY,
             default=str(defaults.get(CONF_DEVICE_PRIORITY, 50)),
-            description={
-                "suggested_value": str(defaults.get(CONF_DEVICE_PRIORITY, 50)),
-                "label": "config.step.device_basic_settings.data.priority.name",
-            },
         ): SelectSelectorBuilder(
-            [
-                {
-                    "label": "config.step.device_basic_settings.data.priority.options.very_high",
-                    "value": "100",
-                },
-                {
-                    "label": "config.step.device_basic_settings.data.priority.options.high",
-                    "value": "75",
-                },
-                {
-                    "label": "config.step.device_basic_settings.data.priority.options.medium",
-                    "value": "50",
-                },
-                {
-                    "label": "config.step.device_basic_settings.data.priority.options.low",
-                    "value": "25",
-                },
-                {
-                    "label": "config.step.device_basic_settings.data.priority.options.very_low",
-                    "value": "1",
-                },
-            ]
+            options=["100", "75", "50", "25", "1"],
+            translation_key="config.step.device_basic_settings.data.priority.options"
         ).build(),
         Optional(
             CONF_DEBOUNCE_TIME,
             default=defaults.get(CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME),
-            description={
-                "suggested_value": defaults.get(
-                    CONF_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME
-                )
-            },
         ): NumberSelectorBuilder(15, 600, 1, unit="s").build(),
         Required(
             CONF_AUTO_CONTROL_ENABLED,
             default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
-            description={
-                "suggested_value": defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
-                "label": "config.step.device_basic_settings.data.auto_control_enabled",
-            },
         ): selector({"boolean": {}}),
         Required(
             CONF_SCHEDULE_ENABLED,
             default=defaults.get(CONF_SCHEDULE_ENABLED, False),
-            description={"suggested_value": defaults.get(CONF_SCHEDULE_ENABLED, False)},
         ): selector({"boolean": {}}),
     }
 
@@ -170,9 +131,6 @@ def build_device_basic_settings_schema(defaults=None):
             Optional(
                 CONF_MAX_EXPECTED_W,
                 default=defaults.get(CONF_MAX_EXPECTED_W, 0.0),
-                description={
-                    "suggested_value": defaults.get(CONF_MAX_EXPECTED_W, 0.0)
-                },
             )
         ] = NumberSelectorBuilder(0, 10000, 1, unit="W").build()
 
@@ -192,7 +150,6 @@ def build_device_schedule_schema(defaults=None):
             Required(
                 day,
                 default=day in default_days,
-                description={"suggested_value": day in default_days},
             )
         ] = selector({"boolean": {}})
 
@@ -201,12 +158,10 @@ def build_device_schedule_schema(defaults=None):
             Required(
                 CONF_START_TIME,
                 default=defaults.get(CONF_START_TIME, "08:00"),
-                description={"suggested_value": defaults.get(CONF_START_TIME, "08:00")},
             ): selector({"time": {}}),
             Required(
                 CONF_END_TIME,
                 default=defaults.get(CONF_END_TIME, "20:00"),
-                description={"suggested_value": defaults.get(CONF_END_TIME, "20:00")},
             ): selector({"time": {}}),
             **days_schema,
         }

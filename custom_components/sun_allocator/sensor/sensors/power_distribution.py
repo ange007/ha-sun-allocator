@@ -28,6 +28,7 @@ from ...const import (
 class SunAllocatorPowerDistributionSensor(SensorEntity):
     """Representation of a SunAllocator power distribution sensor."""
 
+    _attr_translation_key = "power_distribution"
     _attr_icon = "mdi:flash"
     _attr_should_poll = False
     _attr_native_unit_of_measurement = UnitOfPower.WATT
