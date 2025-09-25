@@ -171,15 +171,26 @@
     "sensor": {
       "power_distribution": {
         "name": "Power Distribution",
-        "state": {
-        },
-        "attributes": {
-          "total_power": "Total Available Power",
-          "remaining_power": "Remaining Power",
-          "allocated_power": "Allocated Power",
-          "allocation_w": "Allocation (W)",
-          "allocation_percent": "Allocation (%)",
-          "device_meta": "Device metadata"
+        "state": {},
+        "state_attributes": {
+          "total_power": {
+            "name": "Total Available Power"
+          },
+          "remaining_power": {
+            "name": "Remaining Power"
+          },
+          "allocated_power": {
+            "name": "Allocated Power"
+          },
+          "allocation_w": {
+            "name": "Allocation (W)"
+          },
+          "allocation_percent": {
+            "name": "Allocation (%)"
+          },
+          "device_meta": {
+            "name": "Device metadata"
+          }
         }
       }
     }
