@@ -121,40 +121,38 @@
     }
   },
   "options": {
-    "step": {
-      "main_menu_action_options": {
-        "settings": "Settings",
-        "add_device": "Add Device",
-        "manage_devices": "Manage Devices"
-      },
-      "devices_action_options": {
-        "add": "Add Device",
-        "edit": "Edit",
-        "remove": "Remove",
-        "finish": "Finish Configuration"
-      },
-      "manage_devices_action_options": {
-        "add_device": "Add Device",
-        "edit": "Edit",
-        "remove": "Remove",
-        "back": "Back to Main Menu"
-      },
-      "device_type_options": {
-        "standard": "Standard Switch/Light (On/Off only)",
-        "custom": "Custom ESPHome Relay (On/Off/Proportional)"
-      },
-      "priority_options": {
-        "100": "Very High",
-        "75": "High",
-        "50": "Medium",
-        "25": "Low",
-        "1": "Very Low"
-      },
-      "panel_configuration_options": {
-        "series": "Series",
-        "parallel": "Parallel",
-        "parallel-series": "Parallel-Series"
-      }
+    "main_menu_action_options": {
+      "settings": "Settings",
+      "add_device": "Add Device",
+      "manage_devices": "Manage Devices"
+    },
+    "devices_action_options": {
+      "add": "Add Device",
+      "edit": "Edit",
+      "remove": "Remove",
+      "finish": "Finish Configuration"
+    },
+    "manage_devices_action_options": {
+      "add_device": "Add Device",
+      "edit": "Edit",
+      "remove": "Remove",
+      "back": "Back to Main Menu"
+    },
+    "device_type_options": {
+      "standard": "Standard Switch/Light (On/Off only)",
+      "custom": "Custom ESPHome Relay (On/Off/Proportional)"
+    },
+    "priority_options": {
+      "100": "Very High",
+      "75": "High",
+      "50": "Medium",
+      "25": "Low",
+      "1": "Very Low"
+    },
+    "panel_configuration_options": {
+      "series": "Series",
+      "parallel": "Parallel",
+      "parallel-series": "Parallel-Series"
     }
   },
   "entity": {

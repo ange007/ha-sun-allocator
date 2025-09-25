@@ -53,7 +53,7 @@ def build_device_name_type_schema(defaults=None):
                 default=default_type,
             ): SelectSelectorBuilder(
                 options=[DEVICE_TYPE_STANDARD, DEVICE_TYPE_CUSTOM],
-                translation_key="options.step.device_type_options"
+                translation_key="options.device_type_options"
             ).build(),
         }
     )
@@ -110,7 +110,7 @@ def build_device_basic_settings_schema(defaults=None):
             default=str(defaults.get(CONF_DEVICE_PRIORITY, 50)),
         ): SelectSelectorBuilder(
             options=["100", "75", "50", "25", "1"],
-            translation_key="options.step.priority_options"
+            translation_key="options.priority_options"
         ).build(),
         Optional(
             CONF_DEBOUNCE_TIME,
