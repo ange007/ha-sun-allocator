@@ -17,36 +17,19 @@
     "step": {
       "main_menu": {
         "data": {
-          "action": "Action",
-          "action_options": {
-            "settings": "Settings",
-            "add_device": "Add Device",
-            "manage_devices": "Manage Devices"
-          }
+          "action": "Action"
         }
       },
       "devices": {
         "data": {
           "id": "Device",
-          "action": "Action",
-          "action_options": {
-            "add": "Add Device",
-            "edit": "Edit",
-            "remove": "Remove",
-            "finish": "Finish Configuration"
-          }
+          "action": "Action"
         }
       },
       "manage_devices": {
         "data": {
           "id": "Device",
-          "action": "Action",
-          "action_options": {
-            "add_device": "Add Device",
-            "edit": "Edit",
-            "remove": "Remove",
-            "back": "Back to Main Menu"
-          }
+          "action": "Action"
         }
       },
       "settings": {
@@ -69,22 +52,13 @@
           "voc": "Open Circuit Voltage (Voc)",
           "isc": "Short Circuit Current (Isc)",
           "panel_count": "Panel Count",
-          "panel_configuration": "Panel Configuration",
-          "panel_configuration_options": {
-            "series": "Series",
-            "parallel": "Parallel",
-            "parallel-series": "Parallel-Series"
-          }
+          "panel_configuration": "Panel Configuration"
         }
       },
       "device_name_type": {
         "data": {
           "device_name": "Device Name",
-          "device_type": "Device Type",
-          "device_type_options": {
-            "standard": "Standard Switch/Light (On/Off only)",
-            "custom": "Custom ESPHome Relay (On/Off/Proportional)"
-          }
+          "device_type": "Device Type"
         }
       },
       "device_selection": {
@@ -100,13 +74,6 @@
           "min_expected_w": "Minimum Expected Load (W)",
           "max_expected_w": "Maximum Expected Load (W)",
           "priority": "Device Priority",
-          "priority_options": {
-            "100": "Very High",
-            "75": "High",
-            "50": "Medium",
-            "25": "Low",
-            "1": "Very Low"
-          },
           "debounce_time": "Debounce Time (s)",
           "schedule_enabled": "Enable Schedule"
         }
@@ -151,6 +118,41 @@
           "confirm": "Yes, remove the device"
         }
       }
+    }
+  },
+  "options_translations": {
+    "main_menu_action": {
+      "settings": "Settings",
+      "add_device": "Add Device",
+      "manage_devices": "Manage Devices"
+    },
+    "devices_action": {
+      "add": "Add Device",
+      "edit": "Edit",
+      "remove": "Remove",
+      "finish": "Finish Configuration"
+    },
+    "manage_devices_action": {
+      "add_device": "Add Device",
+      "edit": "Edit",
+      "remove": "Remove",
+      "back": "Back to Main Menu"
+    },
+    "device_type": {
+      "standard": "Standard Switch/Light (On/Off only)",
+      "custom": "Custom ESPHome Relay (On/Off/Proportional)"
+    },
+    "priority": {
+      "100": "Very High",
+      "75": "High",
+      "50": "Medium",
+      "25": "Low",
+      "1": "Very Low"
+    },
+    "panel_configuration": {
+      "series": "Series",
+      "parallel": "Parallel",
+      "parallel-series": "Parallel-Series"
     }
   },
   "entity": {

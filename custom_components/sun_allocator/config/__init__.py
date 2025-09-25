@@ -144,7 +144,7 @@ class SunAllocatorConfigFlow(
             )
         ] = SelectSelectorBuilder(
             options=action_options,
-            translation_key="config.step.devices.data.action_options"
+            translation_key="options_translations.devices_action"
         ).build()
 
         devices_list_str = ", ".join(
@@ -213,7 +213,7 @@ class SunAllocatorOptionsFlowHandler(
                     ): selector({
                         "select": {
                             "options": [ACTION_SETTINGS, ACTION_ADD_DEVICE, ACTION_MANAGE_DEVICES],
-                            "translation_key": "config.step.main_menu.data.action_options"
+                            "translation_key": "options_translations.main_menu_action"
                         }
                     }),
                 }
@@ -329,7 +329,7 @@ class SunAllocatorOptionsFlowHandler(
         ] = selector({
             "select": {
                 "options": action_options,
-                "translation_key": "config.step.manage_devices.data.action_options"
+                "translation_key": "options_translations.manage_devices_action"
             }
         })
 
