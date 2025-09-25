@@ -39,7 +39,6 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
         """Initialize the sensor."""
         self._hass = hass
         self._entry_id = entry_id
-        self._attr_name = f"{SENSOR_NAME_PREFIX} Power Distribution {entry_index}"
         self._attr_unique_id = f"{entry_id}_power_distribution"
         self._state = 0.0
 
