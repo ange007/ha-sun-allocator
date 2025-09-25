@@ -41,6 +41,16 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
         self._entry_id = entry_id
         self._attr_unique_id = f"{entry_id}_power_distribution"
         self._state = 0.0
+        self._attr_extra_state_attributes = {
+            "total_power": None,
+            "remaining_power": None,
+            "allocated_power": None,
+            "allocation_w": None,
+            "allocation_percent": None,
+            "device_meta": None,
+            "reasons": None,
+            "diagnostics": None,
+        }
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -167,7 +177,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             })
 
             # Compose extra state attributes, including diagnostics
-            self._attr_extra_state_attributes = {
+            self._attr_extra_state_attributes.update({
                 "total_power": total,
                 "remaining_power": remaining,
                 "allocated_power": allocated,
@@ -183,7 +193,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                     "visible_count": len(device_status),
                     "raw_data_keys": list(data.keys()),
                 },
-            }
+            })
 
             self._state = allocated
             return self._state
