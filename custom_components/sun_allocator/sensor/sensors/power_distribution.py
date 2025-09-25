@@ -47,7 +47,6 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
-            name=f"{SENSOR_NAME_PREFIX}",
             manufacturer="Sun Allocator",
         )
 
