@@ -17,40 +17,35 @@
     "step": {
       "main_menu": {
         "data": {
-          "action": {
-            "name": "Action",
-            "options": {
-              "settings": "Settings",
-              "add_device": "Add Device",
-              "manage_devices": "Manage Devices"
-            }
+          "action": "Action",
+          "action_options": {
+            "settings": "Settings",
+            "add_device": "Add Device",
+            "manage_devices": "Manage Devices"
           }
         }
       },
       "devices": {
         "data": {
           "id": "Device",
-          "action": {
-            "name": "Action",
-            "options": {
-              "add": "Add Device",
-              "edit": "Edit",
-              "remove": "Remove",
-              "finish": "Finish Configuration"
-            }
+          "action": "Action",
+          "action_options": {
+            "add": "Add Device",
+            "edit": "Edit",
+            "remove": "Remove",
+            "finish": "Finish Configuration"
           }
         }
       },
       "manage_devices": {
         "data": {
           "id": "Device",
-          "action": {
-            "name": "Action",
-            "options": {
-              "edit": "Edit",
-              "remove": "Remove",
-              "back": "Back to Main Menu"
-            }
+          "action": "Action",
+          "action_options": {
+            "add_device": "Add Device",
+            "edit": "Edit",
+            "remove": "Remove",
+            "back": "Back to Main Menu"
           }
         }
       },
@@ -74,25 +69,21 @@
           "voc": "Open Circuit Voltage (Voc)",
           "isc": "Short Circuit Current (Isc)",
           "panel_count": "Panel Count",
-          "panel_configuration": {
-            "name": "Panel Configuration",
-            "options": {
-              "series": "Series",
-              "parallel": "Parallel",
-              "parallel-series": "Parallel-Series"
-            }
+          "panel_configuration": "Panel Configuration",
+          "panel_configuration_options": {
+            "series": "Series",
+            "parallel": "Parallel",
+            "parallel-series": "Parallel-Series"
           }
         }
       },
       "device_name_type": {
         "data": {
           "device_name": "Device Name",
-          "device_type": {
-            "name": "Device Type",
-            "options": {
-              "standard": "Standard Switch/Light (On/Off only)",
-              "custom": "Custom ESPHome Relay (On/Off/Proportional)"
-            }
+          "device_type": "Device Type",
+          "device_type_options": {
+            "standard": "Standard Switch/Light (On/Off only)",
+            "custom": "Custom ESPHome Relay (On/Off/Proportional)"
           }
         }
       },
@@ -108,15 +99,13 @@
           "auto_control_enabled": "Enable Auto Control",
           "min_expected_w": "Minimum Expected Load (W)",
           "max_expected_w": "Maximum Expected Load (W)",
-          "priority": {
-            "name": "Device Priority",
-            "options": {
-              "100": "Very High",
-              "75": "High",
-              "50": "Medium",
-              "25": "Low",
-              "1": "Very Low"
-            }
+          "priority": "Device Priority",
+          "priority_options": {
+            "100": "Very High",
+            "75": "High",
+            "50": "Medium",
+            "25": "Low",
+            "1": "Very Low"
           },
           "debounce_time": "Debounce Time (s)",
           "schedule_enabled": "Enable Schedule"
