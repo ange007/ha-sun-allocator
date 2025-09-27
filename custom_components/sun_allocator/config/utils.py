@@ -196,44 +196,44 @@ def merge_config_data(
 
 def validate_solar_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Validate solar panel configuration parameters.
-    
+
     Args:
         config: Dictionary containing solar panel configuration
-        
+
     Returns:
         Dictionary with 'valid' boolean and optional 'errors' list
     """
     errors = []
-    
+
     # Validate required parameters
     vmp = config.get("vmp", 0)
     imp = config.get("imp", 0)
     voc = config.get("voc")
     isc = config.get("isc")
     panel_count = config.get("panel_count", 1)
-    
+
     # Validate Vmp (Voltage at Maximum Power)
     if not isinstance(vmp, (int, float)) or vmp <= 0:
         errors.append("vmp_invalid")
-    
+
     # Validate Imp (Current at Maximum Power)
     if not isinstance(imp, (int, float)) or imp <= 0:
         errors.append("imp_invalid")
-    
+
     # Validate panel count
     if not isinstance(panel_count, int) or panel_count <= 0:
         errors.append("panel_count_invalid")
-    
+
     # Validate Voc if provided (should be greater than Vmp)
     if voc is not None:
         if not isinstance(voc, (int, float)) or voc <= vmp:
             errors.append("voc_invalid")
-    
+
     # Validate Isc if provided (should be greater than Imp)
     if isc is not None:
         if not isinstance(isc, (int, float)) or isc <= imp:
             errors.append("isc_invalid")
-    
+
     return {
         "valid": len(errors) == 0,
         "errors": errors
@@ -242,21 +242,21 @@ def validate_solar_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
 def validate_device_entity(entity_id: str) -> bool:
     """Validate that an entity ID is in a supported domain.
-    
+
     Args:
         entity_id: The entity ID to validate
-        
+
     Returns:
         True if entity is valid, False otherwise
     """
     if not entity_id or not isinstance(entity_id, str):
         return False
-    
+
     # Check if entity ID has proper format (domain.entity_name)
     if "." not in entity_id:
         return False
-    
+
     domain = entity_id.split(".")[0]
     supported_domains = [DOMAIN_SWITCH, DOMAIN_LIGHT, DOMAIN_INPUT_BOOLEAN]
-    
+
     return domain in supported_domains

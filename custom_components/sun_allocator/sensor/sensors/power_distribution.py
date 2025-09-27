@@ -17,7 +17,6 @@ from ...const import (
     CONF_DEVICES,
     CONF_POWER_DISTRIBUTION,
     SIGNAL_POWER_DISTRIBUTION_UPDATED,
-    SENSOR_NAME_PREFIX,
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
     CONF_DEVICE_TYPE,
@@ -35,13 +34,9 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
     _attr_extra_state_attributes: dict[str, Any] | None = None
     _unsub: Any = None
 
-    def __init__(self, hass: HomeAssistant, entry_id: str, entry_index: int):
-        """Initialize the sensor."""
-        self._hass = hass
-        self._entry_id = entry_id
-        self._attr_unique_id = f"{entry_id}_power_distribution"
-        self._state = 0.0
-        self._attr_extra_state_attributes = {
+    def _get_default_attributes(self) -> Dict[str, Any]:
+        """Return the default attributes for the sensor."""
+        return {
             "total_power": None,
             "remaining_power": None,
             "allocated_power": None,
@@ -51,6 +46,14 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             "reasons": None,
             "diagnostics": None,
         }
+
+    def __init__(self, hass: HomeAssistant, entry_id: str, entry_index: int):
+        """Initialize the sensor."""
+        self._hass = hass
+        self._entry_id = entry_id
+        self._attr_unique_id = f"{entry_id}_power_distribution"
+        self._state = 0.0
+        self._attr_extra_state_attributes = self._get_default_attributes()
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -113,7 +116,9 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                         "reason": None,
                     })
                     all_device_ids.append(device_status[dev_id].get(CONF_DEVICE_ENTITY))
-            not_found_entities = [entity_id for entity_id in all_device_ids if entity_id not in ha_entity_ids]
+            not_found_entities = [
+                entity_id for entity_id in all_device_ids if entity_id not in ha_entity_ids
+            ]
 
             total = float(pd_data.get("total_power", 0.0) or 0.0)
             remaining = float(pd_data.get("remaining_power", 0.0) or 0.0)

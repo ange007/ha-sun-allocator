@@ -46,7 +46,7 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             config=config,
             entry_id=entry_id,
             entry_index=entry_index,
-            name="Excess",
+            name="excess",
             unique_id_suffix="excess",
             unit_of_measurement=UnitOfPower.WATT,
         )

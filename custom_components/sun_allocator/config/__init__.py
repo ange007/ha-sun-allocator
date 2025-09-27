@@ -364,8 +364,8 @@ class SunAllocatorOptionsFlowHandler(
                 data = dict(self.config_entry.data)
                 data.update(self._solar_config)
                 data[CONF_DEVICES] = self._devices
+                
                 data["devices_str"] = json.dumps(self._devices)
-                data.pop("test_array", None)
                 log_warning(
                     "--- CONFIG FLOW REMOVE ---: Saving %d devices. Data: %s",
                     len(self._devices),
@@ -420,7 +420,7 @@ class SunAllocatorOptionsFlowHandler(
             ) or str(uuid.uuid4())
             if self._device_index is not None:
                 self._devices[self._device_index] = self._device_config
-        
+
         data = dict(self.config_entry.data)
         data.update(self._solar_config)
         data[CONF_DEVICES] = self._devices

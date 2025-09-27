@@ -1,7 +1,7 @@
 """Advanced config form builders for Sun Allocator."""
 from voluptuous import Schema, Required
 
-from ..config.ui_helpers import NumberSelectorBuilder, BooleanSelectorBuilder
+from ..config.ui_helpers import NumberSelectorBuilder
 
 from ..const import (
     CONF_CURVE_FACTOR_K,
@@ -14,7 +14,6 @@ from ..const import (
     CONF_HYSTERESIS_W,
     DEFAULT_MIN_START_W,
     DEFAULT_HYSTERESIS_W,
-    
     CONF_RESERVE_BATTERY_POWER,
 )
 

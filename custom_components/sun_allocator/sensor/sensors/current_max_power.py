@@ -12,18 +12,14 @@ from ...const import (
     CONF_CURVE_FACTOR_K,
     CONF_EFFICIENCY_CORRECTION_FACTOR,
     CONF_MIN_INVERTER_VOLTAGE,
-    CONF_BATTERY_POWER_REVERSED,
     KEY_PV_POWER,
     KEY_PV_VOLTAGE,
-    KEY_CONSUMPTION,
-    KEY_BATTERY_POWER,
     KEY_VMP,
     KEY_IMP,
     KEY_VOC,
     KEY_ISC,
     KEY_PANEL_COUNT,
     KEY_PANEL_CONFIGURATION,
-    KEY_PMAX,
     KEY_ENERGY_HARVESTING_POSSIBLE,
     KEY_RELATIVE_VOLTAGE,
     KEY_CALCULATION_REASON,
@@ -36,13 +32,13 @@ class SunAllocatorCurrentMaxPowerSensor(BaseSunAllocatorSensor):
     def __init__(
         self, hass: HomeAssistant, config: Dict[str, Any], entry_id: str, entry_index: int
     ):
-        """Initialize the current maximum power sensor."""
+        """Initialize the current max power sensor."""
         super().__init__(
             hass=hass,
             config=config,
             entry_id=entry_id,
             entry_index=entry_index,
-            name="Current Max Power",
+            name="current_max_power",
             unique_id_suffix="current_max_power",
             unit_of_measurement=UnitOfPower.WATT,
         )

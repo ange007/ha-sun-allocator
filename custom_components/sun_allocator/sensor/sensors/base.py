@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.typing import StateType
 
 from ...core.logger import log_error, journal_event
@@ -18,13 +19,13 @@ from ..utils import (
 )
 
 from ...const import (
+    DOMAIN,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_CONSUMPTION,
     CONF_BATTERY_POWER,
     CONF_VMP,
     CONF_IMP,
-    SENSOR_NAME_PREFIX,
     CONF_VOC,
     CONF_ISC,
     CONF_PANEL_COUNT,
@@ -32,8 +33,6 @@ from ...const import (
     PANEL_CONFIG_SERIES,
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
-    KEY_PV_POWER,
-    KEY_PV_VOLTAGE,
     KEY_VMP,
     KEY_IMP,
     KEY_VOC,
@@ -71,7 +70,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         self._entry_index = entry_index
 
         # Sensor identification
-        self._attr_name = f"{SENSOR_NAME_PREFIX} {name} {entry_index}"
+        self._attr_translation_key = name
         self._attr_unique_id = f"{entry_id}_{unique_id_suffix}"
         self._attr_native_unit_of_measurement = unit_of_measurement
 
@@ -115,6 +114,14 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             pmax=0.0,
             current_max_power=0.0,
             usage_percent=0.0,
+        )
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry_id)},
+            manufacturer="Sun Allocator",
         )
 
     @property
@@ -229,7 +236,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
 
     def _update_attributes(self, **kwargs) -> None:
         """Update sensor attributes."""
-        self._attr_extra_state_attributes = create_sensor_attributes(**kwargs)
+        self._attr_extra_state_attributes.update(kwargs)
 
     def _get_common_attributes(
         self,
@@ -288,10 +295,10 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
 
             return value
 
-        except (ValueError, TypeError, ZeroDivisionError) as exc:
-            log_error(f"Error calculating {self._attr_name}: {exc}")
+        except (ValueError, TypeError, ZeroDivisionError, KeyError, AttributeError) as exc:
+            log_error(f"Error calculating {self.entity_id}: {exc}")
             journal_event(
-                "sensor_calc_error", {"sensor": self._attr_name, "error": str(exc)}
+                "sensor_calc_error", {"sensor": self.entity_id, "error": str(exc)}
             )
 
             return self._state or 0.0
@@ -318,4 +325,3 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         Returns:
             Calculated sensor value
         """
-

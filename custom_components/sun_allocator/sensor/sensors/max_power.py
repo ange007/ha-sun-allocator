@@ -30,7 +30,7 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             config=config,
             entry_id=entry_id,
             entry_index=entry_index,
-            name="Max Power",
+            name="max_power",
             unique_id_suffix="max_power",
             unit_of_measurement=UnitOfPower.WATT
         )

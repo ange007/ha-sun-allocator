@@ -1,5 +1,6 @@
 """Integration tests for full system functionality."""
 import pytest
+import asyncio
 from unittest.mock import patch
 from datetime import timedelta
 
@@ -40,7 +41,7 @@ async def test_full_system_integration_and_device_control(hass):
             await hass.async_block_till_done()
 
             # Verify sensors are updated
-            excess_sensor = hass.states.get("sensor.sunallocator_excess_1")
+            excess_sensor = hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_excess")
             assert excess_sensor is not None
             # PV(200) - Consumption(50) - Reserve(0) = 150
             assert float(excess_sensor.state) == 150
@@ -79,7 +80,7 @@ async def test_device_turn_on_with_debounce(hass, freezer):
             await hass.async_block_till_done()
 
             # At t=0, device should be off and debouncing
-            dist_sensor = hass.states.get("sensor.sunallocator_power_distribution_1")
+            dist_sensor = hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_power_distribution")
             assert dist_sensor is not None
             # assert dist_sensor.attributes["reasons"][device["device_id"]] == "Debouncing"
             mock_async_call.assert_not_called()

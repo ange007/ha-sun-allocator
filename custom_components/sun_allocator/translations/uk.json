@@ -17,41 +17,19 @@
     "step": {
       "main_menu": {
         "data": {
-          "action": {
-            "name": "Дія",
-            "options": {
-              "settings": "Налаштування",
-              "add_device": "Додати Пристрій",
-              "manage_devices": "Керувати Пристроями"
-            }
-          }
+          "action": "Дія"
         }
       },
       "devices": {
         "data": {
           "id": "Пристрій",
-          "action": {
-            "name": "Дія",
-            "options": {
-              "add": "Додати Пристрій",
-              "edit": "Редагувати",
-              "remove": "Видалити",
-              "finish": "Завершити Налаштування"
-            }
-          }
+          "action": "Дія"
         }
       },
       "manage_devices": {
         "data": {
           "id": "Пристрій",
-          "action": {
-            "name": "Дія",
-            "options": {
-              "edit": "Редагувати",
-              "remove": "Видалити",
-              "back": "Повернутися до Головного Меню"
-            }
-          }
+          "action": "Дія"
         }
       },
       "settings": {
@@ -74,26 +52,13 @@
           "voc": "Напруга Холостого Ходу (Voc)",
           "isc": "Струм Короткого Замикання (Isc)",
           "panel_count": "Кількість Панелей",
-          "panel_configuration": {
-            "name": "Конфігурація Панелей",
-            "options": {
-              "series": "Послідовно",
-              "parallel": "Паралельно",
-              "parallel-series": "Паралельно-Послідовно"
-            }
-          }
+          "panel_configuration": "Конфігурація Панелей"
         }
       },
       "device_name_type": {
         "data": {
           "device_name": "Назва Пристрою",
-          "device_type": {
-            "name": "Тип Пристрою",
-            "options": {
-              "standard": "Стандартний Перемикач/Світло (Тільки Вкл/Викл)",
-              "custom": "Користувацьке ESPHome Реле (Вкл/Викл/Пропорційно)"
-            }
-          }
+          "device_type": "Тип Пристрою"
         }
       },
       "device_selection": {
@@ -109,16 +74,7 @@
           "min_excess_power": "Мінімальна Надлишкова Потужність",
           "min_expected_w": "Мінімальне Очікуване Навантаження (Вт)",
           "max_expected_w": "Максимальне Очікуване Навантаження (Вт)",
-          "priority": {
-            "name": "Пріоритет Пристрою",
-            "options": {
-              "100": "Дуже високий",
-              "75": "Високий",
-              "50": "Середній",
-              "25": "Низький",
-              "1": "Дуже низький"
-            }
-          },
+          "priority": "Пріоритет Пристрою",
           "debounce_time": "Час згладжування (с)",
           "schedule_enabled": "Увімкнути Розклад"
         }
@@ -169,16 +125,62 @@
     "sensor": {
       "power_distribution": {
         "name": "Розподіл потужності",
-        "state": {
-        },
-        "attributes": {
-          "total_power": "Доступна потужність",
-          "remaining_power": "Залишок потужності",
-          "allocated_power": "Виділена потужність",
-          "allocation_w": "Розподіл (Вт)",
-          "allocation_percent": "Розподіл (%)",
-          "device_meta": "Мета-дані пристроїв"
+        "state_attributes": {
+          "total_power": {
+            "name": "Доступна потужність"
+          },
+          "remaining_power": {
+            "name": "Залишок потужності"
+          },
+          "allocated_power": {
+            "name": "Виділена потужність"
+          },
+          "allocation_w": {
+            "name": "Розподіл (Вт)"
+          },
+          "allocation_percent": {
+            "name": "Розподіл (%)"
+          },
+          "device_meta": {
+            "name": "Мета-дані пристроїв"
+          }
         }
+      }
+    }
+  },
+  "selector": {
+    "action": {
+      "options": {
+        "settings": "Налаштування",
+        "add_device": "Додати Пристрій",
+        "manage_devices": "Керувати Пристроями",
+        "add": "Додати Пристрій",
+        "edit": "Редагувати",
+        "remove": "Видалити",
+        "finish": "Завершити Налаштування",
+        "back": "Повернутися до Головного Меню"
+      }
+    },
+    "device_type": {
+      "options": {
+        "standard": "Стандартний Перемикач/Світло (Тільки Вкл/Викл)",
+        "custom": "Користувацьке ESPHome Реле (Вкл/Викл/Пропорційно)"
+      }
+    },
+    "priority": {
+      "options": {
+        "100": "Дуже високий",
+        "75": "Високий",
+        "50": "Середній",
+        "25": "Низький",
+        "1": "Дуже низький"
+      }
+    },
+    "panel_configuration": {
+      "options": {
+        "series": "Послідовно",
+        "parallel": "Паралельно",
+        "parallel-series": "Паралельно-Послідовно"
       }
     }
   }

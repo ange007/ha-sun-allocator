@@ -280,10 +280,11 @@ def _finalize_run(entry_data, excess_power, remaining_power):
 
 async def process_excess_power(hass: HomeAssistant, config_entry: ConfigType, excess_power: float):
     """Process excess power value and control devices accordingly."""
-    log_debug(f"Excess power: {excess_power}W")
+    log_warning(f"--- process_excess_power START, excess_power={excess_power} ---")
     now = dt_util.now()
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
     cfg = config_entry.data
+    log_warning(f"entry_data keys: {list(entry_data.keys())}")
 
     # Ensure state dictionaries exist and get a reference to them
     device_on_state = entry_data.setdefault("device_on_state", {})
@@ -291,15 +292,18 @@ async def process_excess_power(hass: HomeAssistant, config_entry: ConfigType, ex
 
     # 1. Initialize states for the run
     auto_control_devices = _initialize_run(entry_data, cfg.get(CONF_DEVICES, []))
+    log_warning(f"auto_control_devices: {auto_control_devices}")
 
     remaining_power = excess_power
 
     # 2. Main processing loop
     for device in auto_control_devices:
         device_id = device.get(CONF_DEVICE_ID)
+        log_warning(f"Looping for device: {device_id}")
 
         # 2a. Filter out invalid or out-of-schedule devices
         filter_reason = await _filter_device(hass, device, now)
+        log_warning(f"Filter reason for {device_id}: {filter_reason}")
         if filter_reason:
             if device_id:
                 entry_data["device_filter_reasons"][device_id] = filter_reason
@@ -307,16 +311,19 @@ async def process_excess_power(hass: HomeAssistant, config_entry: ConfigType, ex
 
         # 2b. Initialize status entry for this device
         status_entry = _initialize_status_entry(device)
+        log_warning(f"Initialized status_entry for {device_id}: {status_entry}")
 
         # 2c. Calculate desired state (on/off) based on power and debounce
         is_active, is_active_candidate = _calculate_device_state(
             device, remaining_power, device_on_state, device_debounce_state, cfg, now
         )
+        log_warning(f"Calculated state for {device_id}: is_active={is_active}, is_active_candidate={is_active_candidate}")
         status_entry['is_active_candidate'] = is_active_candidate
         
         # 2d. Execute control logic based on device type
         power_used = 0.0
         prev_on = bool(device_on_state.get(device_id, False))
+        log_warning(f"Control logic for {device_id}: prev_on={prev_on}")
 
         if device.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_STANDARD:
             power_used, status_entry = await _control_standard_device(
@@ -328,9 +335,11 @@ async def process_excess_power(hass: HomeAssistant, config_entry: ConfigType, ex
             )
 
         remaining_power -= power_used
+        log_warning(f"Power used by {device_id}: {power_used}, remaining_power: {remaining_power}")
 
         # 2e. Finalize status for the device
         if device_id:
+            log_warning(f"Adding to device_status for {device_id}")
             entry_data["device_status"][device_id] = status_entry
             entry_data[CONF_POWER_ALLOCATION][device_id] = power_used
             device_on_state[device_id] = is_active
@@ -338,3 +347,4 @@ async def process_excess_power(hass: HomeAssistant, config_entry: ConfigType, ex
     # 3. Finalize global state and notify
     _finalize_run(entry_data, excess_power, remaining_power)
     async_dispatcher_send(hass, f"{SIGNAL_POWER_DISTRIBUTION_UPDATED}_{config_entry.entry_id}")
+    log_warning(f"--- process_excess_power END ---")

@@ -104,45 +104,9 @@ SET_RELAY_POWER_SCHEMA = vol.Schema(
 )
 
 
-async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
-    """Set up SunAllocator from a config entry."""
-    log_warning(
-        "--- COMPONENT SETUP ---: Loading entry. Data: %s",
-        config_entry.data,
-    )
-    # Store config entry data EARLY so it's available for all listeners
-    hass.data.setdefault(DOMAIN, {})
-    entry_data = {
-        "config": config_entry.data,
-        "unsub_update_listener": None,
-        "unsub_auto_control": None,
-    }
-    hass.data[DOMAIN][config_entry.entry_id] = entry_data
+async def _setup_entity_state_listeners(hass, config_entry, entry_data):
+    """Setup listeners for entity state changes to persist and restore state."""
 
-    # --- Log all loaded devices for diagnostics ---
-    devices = config_entry.data.get(CONF_DEVICES, [])
-    if LOG_STARTUP_DEVICES:
-        if devices:
-            log_info("[Startup] Loaded %d devices from config:", len(devices))
-            for dev in devices:
-                log_info(
-                    "[Startup] Device: id=%s, name=%s, type=%s, entity=%s",
-                    dev.get(CONF_DEVICE_ID),
-                    dev.get(CONF_DEVICE_NAME),
-                    dev.get(CONF_DEVICE_TYPE),
-                    dev.get(CONF_DEVICE_ENTITY),
-                )
-        else:
-            log_info("[Startup] No devices loaded from config.")
-
-    # --- Restore device state after Home Assistant restart ---
-    async def _on_ha_started(_):
-        """Restore device state after Home Assistant restart."""
-        await restore_all_devices(hass, config_entry)
-
-    hass.bus.async_listen_once("homeassistant_started", _on_ha_started)
-
-    # Listen for entity state changes to persist and restore state
     @callback
     async def _entity_state_listener(event):
         """Handle entity state changes to persist and restore state."""
@@ -203,37 +167,9 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
             hass, all_entities, _entity_state_listener
         )
 
-    # Set up sensors
-    await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
 
-    # Register the services once (global) and track entry count
-    root = hass.data[DOMAIN]
-    root.setdefault("_entry_count", 0)
-    root.setdefault("_services_registered", False)
-    if not root["_services_registered"]:
-        async def _handle_set_relay_mode(call):
-            await handle_set_relay_mode(hass, call)
-        
-        async def _handle_set_relay_power(call):
-            await handle_set_relay_power(hass, call)
-        
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_SET_RELAY_MODE,
-            _handle_set_relay_mode,
-            schema=SET_RELAY_MODE_SCHEMA,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_SET_RELAY_POWER,
-            _handle_set_relay_power,
-            schema=SET_RELAY_POWER_SCHEMA,
-        )
-        root["_services_registered"] = True
-    # Increment active entry count
-    root["_entry_count"] = int(root.get("_entry_count", 0)) + 1
-
-    # Track and resync desired modes for ESPHome select entities
+async def _setup_esphome_mode_tracking(hass, config_entry, entry_data):
+    """Setup tracking and resyncing of ESPHome modes."""
     valid_modes = {RELAY_MODE_OFF, RELAY_MODE_ON, RELAY_MODE_PROPORTIONAL}
     desired_modes = {}
     select_entity_ids = []
@@ -276,6 +212,121 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
                 log_debug("Re-applying desired mode %s to %s", _desired, _entity_id)
                 await set_mode_for_entity(hass, _entity_id, _desired)
 
+
+async def _initial_pass_with_retry(
+    hass, config_entry, entry_data, excess_sensor_id, legacy_excess_sensor_id
+):
+    """Perform an initial pass to set the state of the devices."""
+    for i in range(3):  # Try 3 times
+        initial_state = hass.states.get(excess_sensor_id) or hass.states.get(
+            legacy_excess_sensor_id
+        )
+        log_warning(
+            "--- INITIAL PASS (attempt %d) ---: id=%s, state=%s",
+            i + 1,
+            excess_sensor_id,
+            initial_state,
+        )
+        if initial_state and initial_state.state not in (
+            STATE_UNKNOWN,
+            STATE_UNAVAILABLE,
+        ):
+            try:
+                excess_power = float(initial_state.state)
+                entry_data["watchdog_last_seen"] = dt_util.utcnow()
+                entry_data["watchdog_alerted"] = False
+                await process_excess_power(hass, config_entry, excess_power)
+                log_info(
+                    "Initial pass successful for %s: %sW",
+                    initial_state.entity_id,
+                    excess_power,
+                )
+                return  # Success
+            except (ValueError, TypeError):
+                log_debug(
+                    "Excess sensor state not numeric yet for initial pass: %s",
+                    initial_state.state,
+                )
+
+        await asyncio.sleep(0.1 * (i + 1))
+
+    log_warning(
+        "Failed to perform initial pass after multiple retries."
+    )
+
+
+async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
+    """Set up SunAllocator from a config entry."""
+    log_warning(
+        "--- COMPONENT SETUP ---: Loading entry. Data: %s",
+        config_entry.data,
+    )
+    # Store config entry data EARLY so it's available for all listeners
+    hass.data.setdefault(DOMAIN, {})
+    entry_data = {
+        "config": config_entry.data,
+        "unsub_update_listener": None,
+        "unsub_auto_control": None,
+    }
+    hass.data[DOMAIN][config_entry.entry_id] = entry_data
+
+    # --- Log all loaded devices for diagnostics ---
+    devices = config_entry.data.get(CONF_DEVICES, [])
+    if LOG_STARTUP_DEVICES:
+        if devices:
+            log_info("[Startup] Loaded %d devices from config:", len(devices))
+            for dev in devices:
+                log_info(
+                    "[Startup] Device: id=%s, name=%s, type=%s, entity=%s",
+                    dev.get(CONF_DEVICE_ID),
+                    dev.get(CONF_DEVICE_NAME),
+                    dev.get(CONF_DEVICE_TYPE),
+                    dev.get(CONF_DEVICE_ENTITY),
+                )
+        else:
+            log_info("[Startup] No devices loaded from config.")
+
+    # --- Restore device state after Home Assistant restart ---
+    async def _on_ha_started(_):
+        """Restore device state after Home Assistant restart."""
+        await restore_all_devices(hass, config_entry)
+
+    hass.bus.async_listen_once("homeassistant_started", _on_ha_started)
+
+    await _setup_entity_state_listeners(hass, config_entry, entry_data)
+
+    # Set up sensors
+    await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
+
+    # Register the services once (global) and track entry count
+    root = hass.data[DOMAIN]
+    root.setdefault("_entry_count", 0)
+    root.setdefault("_services_registered", False)
+    if not root["_services_registered"]:
+        async def _handle_set_relay_mode(call):
+            await handle_set_relay_mode(hass, call)
+
+        async def _handle_set_relay_power(call):
+            await handle_set_relay_power(hass, call)
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_RELAY_MODE,
+            _handle_set_relay_mode,
+            schema=SET_RELAY_MODE_SCHEMA,
+        )
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_RELAY_POWER,
+            _handle_set_relay_power,
+            schema=SET_RELAY_POWER_SCHEMA,
+        )
+        root["_services_registered"] = True
+    # Increment active entry count
+    root["_entry_count"] = int(root.get("_entry_count", 0)) + 1
+
+    await _setup_esphome_mode_tracking(hass, config_entry, entry_data)
+
     # Set up auto-control
     await setup_auto_control(hass, config_entry)
 
@@ -315,10 +366,12 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     if not auto_control_devices:
         log_debug("No devices with auto-control enabled")
         return
-    
-    auto_control_devices.sort(key=lambda dev: int(dev.get(CONF_DEVICE_PRIORITY, 50)), reverse=True)
+
+    auto_control_devices.sort(
+        key=lambda dev: int(dev.get(CONF_DEVICE_PRIORITY, 50)), reverse=True
+    )
     log_debug(f"Setting up auto-control for {len(auto_control_devices)} devices")
-    
+
     power_allocation = {}
     for device in auto_control_devices:
         device_id = device.get(CONF_DEVICE_ID)
@@ -353,54 +406,17 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         except (ValueError, TypeError) as exc:
             log_error(f"Error processing excess power value: {exc}")
 
-    excess_sensor_id = (
-        f"sensor.{SENSOR_ID_PREFIX}_{SENSOR_EXCESS_SUFFIX}_{config_entry.entry_id}"
-    )
-    legacy_excess_sensor_id = f"sensor.{SENSOR_ID_PREFIX}_{SENSOR_EXCESS_SUFFIX}_1"
+    excess_sensor_id = f"sensor.sun_allocator_{config_entry.entry_id}_excess"
+    legacy_excess_sensor_id = f"sensor.sunallocator_excess_1"
     entry_data["unsub_auto_control"] = async_track_state_change_event(
         hass, [excess_sensor_id, legacy_excess_sensor_id], handle_state_change
     )
 
-    async def initial_pass_with_retry():
-        """Perform an initial pass to set the state of the devices."""
-        for i in range(3):  # Try 3 times
-            initial_state = hass.states.get(excess_sensor_id) or hass.states.get(
-                legacy_excess_sensor_id
-            )
-            log_warning(
-                "--- INITIAL PASS (attempt %d) ---: id=%s, state=%s",
-                i + 1,
-                excess_sensor_id,
-                initial_state,
-            )
-            if initial_state and initial_state.state not in (
-                STATE_UNKNOWN,
-                STATE_UNAVAILABLE,
-            ):
-                try:
-                    excess_power = float(initial_state.state)
-                    entry_data["watchdog_last_seen"] = dt_util.utcnow()
-                    entry_data["watchdog_alerted"] = False
-                    await process_excess_power(hass, config_entry, excess_power)
-                    log_info(
-                        "Initial pass successful for %s: %sW",
-                        initial_state.entity_id,
-                        excess_power,
-                    )
-                    return  # Success
-                except (ValueError, TypeError):
-                    log_debug(
-                        "Excess sensor state not numeric yet for initial pass: %s",
-                        initial_state.state,
-                    )
-
-            await asyncio.sleep(5 * (i + 1))
-
-        log_warning(
-            "Failed to perform initial pass after multiple retries."
+    entry_data["initial_pass_task"] = hass.async_create_task(
+        _initial_pass_with_retry(
+            hass, config_entry, entry_data, excess_sensor_id, legacy_excess_sensor_id
         )
-
-    entry_data["initial_pass_task"] = hass.async_create_task(initial_pass_with_retry())
+    )
 
     log_info(f"Auto-control set up for {len(auto_control_devices)} devices")
 
@@ -443,7 +459,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigType):
 
     try:
         root["_entry_count"] = max(0, int(root.get("_entry_count", 1)) - 1)
-    except Exception:
+    except (TypeError, ValueError):
         root["_entry_count"] = 0
 
     if root.get("_entry_count", 0) == 0 and root.get("_services_registered"):

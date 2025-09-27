@@ -1,3 +1,4 @@
+"""Utility functions for the Sun Allocator integration."""
 import re
 from typing import Tuple
 

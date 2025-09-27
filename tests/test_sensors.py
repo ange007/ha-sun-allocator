@@ -28,7 +28,7 @@ async def test_sensors_are_created(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     # Check that the sensors have been created
-    assert hass.states.get(f"sensor.{SENSOR_ID_PREFIX}_{SENSOR_EXCESS_SUFFIX}_1") is not None
-    assert hass.states.get(f"sensor.{SENSOR_ID_PREFIX}_{SENSOR_MAX_POWER_SUFFIX}_1") is not None
-    assert hass.states.get(f"sensor.{SENSOR_ID_PREFIX}_{SENSOR_CURRENT_MAX_POWER_SUFFIX}_1") is not None
-    assert hass.states.get(f"sensor.{SENSOR_ID_PREFIX}_{SENSOR_USAGE_PERCENT_SUFFIX}_1") is not None
+    assert hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_excess") is not None
+    assert hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_max_power") is not None
+    assert hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_current_max_power") is not None
+    assert hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_usage_percent") is not None

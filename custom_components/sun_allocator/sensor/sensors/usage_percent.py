@@ -30,7 +30,7 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             config=config,
             entry_id=entry_id,
             entry_index=entry_index,
-            name="Usage Percent",
+            name="usage_percent",
             unique_id_suffix="usage_percent",
             unit_of_measurement=PERCENTAGE
         )
@@ -60,8 +60,8 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             imp = imp * (1 + pmax_coef * temp_diff + voc_coef * temp_diff)
 
             log_debug(
-                f"Temperature compensation applied for usage calculation: "
-                f"temp_diff={temp_diff}°C, adjusted Vmp={vmp:.2f}V, adjusted Imp={imp:.2f}A"
+                f"Temp comp applied for usage: temp_diff={temp_diff}°C, "
+                f"adj Vmp={vmp:.2f}V, adj Imp={imp:.2f}A"
             )
 
         # Calculate maximum theoretical power

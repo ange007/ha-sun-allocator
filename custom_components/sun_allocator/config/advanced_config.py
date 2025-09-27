@@ -123,18 +123,16 @@ class AdvancedConfigMixin:
             log_exception("advanced_config_hysteresis_w", e)
         return errors
 
-    def _process_advanced_config_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
+    def process_advanced_config_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process and clean advanced settings configuration input."""
         # No special processing needed for now
         return user_input
 
-    def _get_advanced_config_schema(self, defaults: Optional[Dict[str, Any]] = None) -> vol.Schema:
-        """Get the schema for advanced settings configuration using advanced_config_form.py."""
-        return build_advanced_config_schema(defaults)
-
-    async def async_step_advanced_settings(self, user_input=None):
-        """Handle advanced settings."""
-        errors = {}
+    async def async_step_advanced_settings(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Handle the advanced settings step."""
+        errors: Dict[str, str] = {}
 
         if user_input is not None:
             # Validate input
@@ -142,22 +140,10 @@ class AdvancedConfigMixin:
 
             if not errors:
                 # Process input
-                user_input = self._process_advanced_config_input(user_input)
-
-                # Update solar panel configuration with advanced settings
-                self._solar_config.update(user_input)
-                audit_action("advanced_config_saved", {"config": user_input})
-                # Save configuration and return to main menu or complete setup
-                return await self._save_and_return()
-
-        # Create schema with current values as defaults
-        schema = self._get_advanced_config_schema(self._solar_config)
-
-        return self.async_show_form(
-            step_id=STEP_ADVANCED_SETTINGS,
-            data_schema=schema,
-            errors=errors,
-        )
+                self._advanced_config = self.process_advanced_config_input(user_input)
+                audit_action("advanced_settings_update", self._advanced_config)
+                # Save and proceed
+                return self._save_and_return()
 
     async def _save_and_return(self):
         """Save configuration and return to appropriate step."""

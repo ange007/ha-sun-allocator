@@ -109,7 +109,7 @@ def build_device_basic_settings_schema(defaults=None):
             CONF_DEVICE_PRIORITY,
             default=str(defaults.get(CONF_DEVICE_PRIORITY, 50)),
         ): SelectSelectorBuilder(
-            options=["very_high", "high", "medium", "low", "very_low"],
+            options=["100", "75", "50", "25", "1"],
             translation_key="priority"
         ).build(),
         Optional(

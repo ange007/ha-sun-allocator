@@ -120,27 +120,279 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "power_distribution": {
+        "name": "Power Distribution",
+        "state_attributes": {
+          "total_power": {
+            "name": "Total Available Power"
+          },
+          "remaining_power": {
+            "name": "Remaining Power"
+          },
+          "allocated_power": {
+            "name": "Allocated Power"
+          },
+          "allocation_w": {
+            "name": "Allocation (W)"
+          },
+          "allocation_percent": {
+            "name": "Allocation (%)"
+          },
+          "device_meta": {
+            "name": "Device metadata"
+          }
+        }
+      },
+      "excess": {
+        "name": "Excess Power",
+        "state_attributes": {
+          "pv_power": {
+            "name": "PV Power"
+          },
+          "consumption": {
+            "name": "Consumption"
+          },
+          "battery_power": {
+            "name": "Battery Power"
+          },
+          "battery_discharging": {
+            "name": "Battery Discharging"
+          },
+          "excess_possible": {
+            "name": "Excess Possible"
+          },
+          "usage_percent": {
+            "name": "Usage Percent"
+          },
+          "pv_voltage": {
+            "name": "PV Voltage"
+          },
+          "energy_harvesting_possible": {
+            "name": "Energy Harvesting Possible"
+          },
+          "min_system_voltage": {
+            "name": "Min System Voltage"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Panel Count"
+          },
+          "panel_configuration": {
+            "name": "Panel Configuration"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Current Max Power"
+          },
+          "light_factor": {
+            "name": "Light Factor"
+          },
+          "relative_voltage": {
+            "name": "Relative Voltage"
+          },
+          "voc_ratio": {
+            "name": "Voc Ratio"
+          },
+          "calculation_reason": {
+            "name": "Calculation Reason"
+          }
+        }
+      },
+      "max_power": {
+        "name": "Max Power",
+        "state_attributes": {
+          "pv_power": {
+            "name": "PV Power"
+          },
+          "pv_voltage": {
+            "name": "PV Voltage"
+          },
+          "consumption": {
+            "name": "Consumption"
+          },
+          "excess_possible": {
+            "name": "Excess Possible"
+          },
+          "energy_harvesting_possible": {
+            "name": "Energy Harvesting Possible"
+          },
+          "min_system_voltage": {
+            "name": "Min System Voltage"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Panel Count"
+          },
+          "panel_configuration": {
+            "name": "Panel Configuration"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Current Max Power"
+          },
+          "usage_percent": {
+            "name": "Usage Percent"
+          },
+          "temperature_compensated": {
+            "name": "Temperature Compensated"
+          }
+        }
+      },
+      "current_max_power": {
+        "name": "Current Max Power",
+        "state_attributes": {
+          "pv_power": {
+            "name": "PV Power"
+          },
+          "pv_voltage": {
+            "name": "PV Voltage"
+          },
+          "energy_harvesting_possible": {
+            "name": "Energy Harvesting Possible"
+          },
+          "min_system_voltage": {
+            "name": "Min System Voltage"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Panel Count"
+          },
+          "panel_configuration": {
+            "name": "Panel Configuration"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Current Max Power"
+          },
+          "light_factor": {
+            "name": "Light Factor"
+          },
+          "relative_voltage": {
+            "name": "Relative Voltage"
+          },
+          "voc_ratio": {
+            "name": "Voc Ratio"
+          },
+          "calculation_reason": {
+            "name": "Calculation Reason"
+          },
+          "consumption": {
+            "name": "Consumption"
+          },
+          "excess_possible": {
+            "name": "Excess Possible"
+          },
+          "usage_percent": {
+            "name": "Usage Percent"
+          }
+        }
+      },
+      "usage_percent": {
+        "name": "Usage Percent",
+        "state_attributes": {
+          "pv_power": {
+            "name": "PV Power"
+          },
+          "pv_voltage": {
+            "name": "PV Voltage"
+          },
+          "consumption": {
+            "name": "Consumption"
+          },
+          "excess_possible": {
+            "name": "Excess Possible"
+          },
+          "energy_harvesting_possible": {
+            "name": "Energy Harvesting Possible"
+          },
+          "min_system_voltage": {
+            "name": "Min System Voltage"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Panel Count"
+          },
+          "panel_configuration": {
+            "name": "Panel Configuration"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Current Max Power"
+          },
+          "usage_percent": {
+            "name": "Usage Percent"
+          },
+          "temperature_compensated": {
+            "name": "Temperature Compensated"
+          }
+        }
+      }
+    }
+  },
   "selector": {
-    "main_menu_action": {
+    "action": {
       "options": {
         "settings": "Settings",
         "add_device": "Add Device",
-        "manage_devices": "Manage Devices"
-      }
-    },
-    "devices_action": {
-      "options": {
+        "manage_devices": "Manage Devices",
         "add": "Add Device",
         "edit": "Edit",
         "remove": "Remove",
-        "finish": "Finish Configuration"
-      }
-    },
-    "manage_devices_action": {
-      "options": {
-        "add_device": "Add Device",
-        "edit": "Edit",
-        "remove": "Remove",
+        "finish": "Finish Configuration",
         "back": "Back to Main Menu"
       }
     },
@@ -164,34 +416,6 @@
         "series": "Series",
         "parallel": "Parallel",
         "parallel-series": "Parallel-Series"
-      }
-    }
-  },
-  "entity": {
-    "sensor": {
-      "power_distribution": {
-        "name": "Power Distribution",
-        "state": {},
-        "state_attributes": {
-          "total_power": {
-            "name": "Total Available Power"
-          },
-          "remaining_power": {
-            "name": "Remaining Power"
-          },
-          "allocated_power": {
-            "name": "Allocated Power"
-          },
-          "allocation_w": {
-            "name": "Allocation (W)"
-          },
-          "allocation_percent": {
-            "name": "Allocation (%)"
-          },
-          "device_meta": {
-            "name": "Device metadata"
-          }
-        }
       }
     }
   }

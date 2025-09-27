@@ -1,5 +1,4 @@
 """Sensor utilities for Sun Allocator integration."""
-import re
 from typing import Optional, Dict, Any, Tuple
 
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
@@ -211,7 +210,7 @@ def calculate_excess_power_parallel(
                 f"Passive charging detected ({battery_power}W < {PASSIVE_CHARGING_THRESHOLD_W}W). "
                 f"Effective reserve adjusted from {configured_reserve}W to {effective_reserve}W."
             )
-        
+
         excess = float(pv_power) - float(consumption) - float(effective_reserve)
         log_debug(
             f"Parallel Distribution (Budgeting): PV={pv_power}W, Consumption={consumption}W, "
@@ -275,25 +274,25 @@ def calculate_excess_power_mppt(
         else:
             # Battery priority mode
             return max(0, current_max_power - consumption - battery_charge_w)
-    else:
-        # Without consumption sensor: new unified MPPT logic
-        untapped_power = max(0, current_max_power - pv_power)
-        
-        if configured_reserve > 0:
-            # Budgeting mode
-            excess_from_battery = max(0, battery_charge_w - configured_reserve)
-            total_excess = untapped_power + excess_from_battery
-            log_debug(
-                f"MPPT Excess (Budgeting): Untapped={untapped_power}W, "
-                f"From Battery={excess_from_battery}W -> Total={total_excess}W"
-            )
-            return total_excess
-        else:
-            # Battery priority mode
-            log_debug(
-                f"MPPT Excess (Priority): Untapped={untapped_power}W"
-            )
-            return untapped_power
+
+    # Without consumption sensor: new unified MPPT logic
+    untapped_power = max(0, current_max_power - pv_power)
+
+    if configured_reserve > 0:
+        # Budgeting mode
+        excess_from_battery = max(0, battery_charge_w - configured_reserve)
+        total_excess = untapped_power + excess_from_battery
+        log_debug(
+            f"MPPT Excess (Budgeting): Untapped={untapped_power}W, "
+            f"From Battery={excess_from_battery}W -> Total={total_excess}W"
+        )
+        return total_excess
+
+    # Battery priority mode
+    log_debug(
+        f"MPPT Excess (Priority): Untapped={untapped_power}W"
+    )
+    return untapped_power
 
 
 def calculate_usage_percentage(actual_power: float, max_power: float) -> float:
