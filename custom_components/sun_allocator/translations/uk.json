@@ -1,0 +1,486 @@
+{
+  "title": "SunAllocator - Датчик надлишкової енергії",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Налаштування сонячних панелей",
+        "description": "Налаштуйте параметри ваших сонячних панелей",
+        "data": {
+          "advanced_settings_enabled": "Увімкнути розширені налаштування",
+          "battery_power_reversed": "Інвертувати значення потужності батареї",
+          "temperature_compensation_enabled": "Увімкнути температурну компенсацію",
+          "pv_power": "Датчик потужності панелей",
+          "pv_voltage": "Датчик напруги панелей",
+          "consumption": "Датчик споживання",
+          "battery_power": "Датчик потужності батареї",
+          "vmp": "Напруга максимальної потужності (Vmp)",
+          "imp": "Струм максимальної потужності (Imp)",
+          "voc": "Напруга холостого ходу (Voc)",
+          "isc": "Струм короткого замикання (Isc)",
+          "panel_count": "Кількість панелей",
+          "panel_configuration": "Конфігурація панелей"
+        }
+      },
+      "main_menu": {
+        "title": "Налаштування SunAllocator",
+        "description": "Налаштуйте сонячні панелі та керуйте пристроями. Наразі налаштовано пристроїв: {devices_count}",
+        "data": {
+          "action": "Оберіть дію"
+        }
+      },
+      "settings": {
+        "title": "Налаштування сонячних панелей",
+        "description": "Налаштуйте параметри сонячних панелей та розширені налаштування",
+        "data": {
+          "advanced_settings_enabled": "Увімкнути розширені налаштування",
+          "battery_power_reversed": "Інвертувати значення потужності батареї",
+          "temperature_compensation_enabled": "Увімкнути температурну компенсацію",
+          "pv_power": "Датчик потужності панелей",
+          "pv_voltage": "Датчик напруги панелей",
+          "consumption": "Датчик споживання",
+          "battery_power": "Датчик потужності батареї",
+          "vmp": "Напруга максимальної потужності (Vmp)",
+          "imp": "Струм максимальної потужності (Imp)",
+          "voc": "Напруга холостого ходу (Voc)",
+          "isc": "Струм короткого замикання (Isc)",
+          "panel_count": "Кількість панелей",
+          "panel_configuration": "Конфігурація панелей"
+        }
+      },
+      "manage_devices": {
+        "title": "Керування пристроями",
+        "description": "Всього пристроїв: {devices_count}\nПристрої: {devices_list}",
+        "data": {
+          "action": "Оберіть дію",
+          "device_id": "Оберіть пристрій"
+        }
+      },
+      "temperature_compensation": {
+        "title": "Температурна компенсація",
+        "description": "Налаштуйте параметри температурної компенсації",
+        "data": {
+          "temperature_sensor": "Датчик температури",
+          "temp_coefficient_voc": "Температурний коефіцієнт Voc (%/°C)",
+          "temp_coefficient_pmax": "Температурний коефіцієнт Pmax (%/°C)"
+        }
+      },
+      "advanced_settings": {
+        "title": "Розширені налаштування",
+        "description": "Налаштуйте розширені параметри MPPT та керування",
+        "data": {
+          "reserve_battery_power": "Резерв потужності батареї (Вт)",
+          "curve_factor_k": "Коефіцієнт кривої I-V (k)",
+          "efficiency_correction_factor": "Коефіцієнт корекції ефективності",
+          "min_inverter_voltage": "Мінімальна напруга інвертора (В)",
+          "ramp_up_step": "Крок наростання (% за такт)",
+          "ramp_down_step": "Крок спадання (% за такт)",
+          "ramp_deadband": "Зона нечутливості (%)",
+          "default_min_start_w": "Мінімальна потужність за замовчуванням (Вт)",
+          "hysteresis_w": "Гістерезис (Вт)"
+        }
+      },
+      "device_name_type": {
+        "title": "Налаштування пристрою",
+        "description": "Налаштуйте назву та тип пристрою",
+        "data": {
+          "device_name": "Назва пристрою",
+          "device_type": "Тип пристрою"
+        }
+      },
+      "device_selection": {
+        "title": "Вибір пристрою",
+        "description": "Оберіть пристрій для керування",
+        "data": {
+          "device_entity": "Сутність пристрою",
+          "esphome_mode_select_entity": "Сутність вибору режиму ESPHome",
+          "no_devices_found": "Сумісних пристроїв не знайдено"
+        }
+      },
+      "device_basic_settings": {
+        "title": "Базові налаштування пристрою",
+        "description": "Налаштуйте базові параметри пристрою",
+        "data": {
+          "auto_control_enabled": "Увімкнути автоматичне керування",
+          "min_excess_power": "Мінімальна надлишкова потужність",
+          "min_expected_w": "Мінімальне очікуване навантаження (Вт)",
+          "max_expected_w": "Максимальне очікуване навантаження (Вт)",
+          "priority": "Пріоритет пристрою",
+          "debounce_time": "Час затримки (с)",
+          "schedule_enabled": "Увімкнути розклад"
+        }
+      },
+      "device_schedule": {
+        "title": "Розклад пристрою",
+        "description": "Налаштуйте розклад роботи пристрою",
+        "data": {
+          "start_time": "Час початку",
+          "end_time": "Час завершення",
+          "monday": "Понеділок",
+          "tuesday": "Вівторок",
+          "wednesday": "Середа",
+          "thursday": "Четвер",
+          "friday": "П'ятниця",
+          "saturday": "Субота",
+          "sunday": "Неділя"
+        }
+      },
+      "confirm_remove": {
+        "title": "Підтвердження видалення пристрою",
+        "description": "Ви впевнені, що хочете видалити {device_name}?",
+        "data": {
+          "confirm": "Так, видалити пристрій"
+        }
+      }
+    },
+    "error": {
+      "invalid_debounce_time": "Час затримки має бути від 15 до 600 секунд",
+      "device_name_required": "Назва пристрою обов'язкова",
+      "invalid_priority": "Пріоритет має бути числом від 1 до 100",
+      "invalid_min_expected_w": "Мінімальне очікуване навантаження має бути невід'ємним числом",
+      "invalid_max_expected_w": "Максимальне очікуване навантаження має бути невід'ємним числом",
+      "duplicate_entity_id": "Ця сутність вже використовується іншим пристроєм",
+      "invalid_time_format": "Неправильний формат часу. Використовуйте ГГ:ХХ",
+      "voc_equal_to_vmp": "Voc не може дорівнювати Vmp",
+      "invalid_values": "Надано неправильні значення",
+      "invalid_panel_count": "Кількість панелей має бути додатнім числом",
+      "invalid_vmp": "Vmp має бути додатнім числом",
+      "invalid_imp": "Imp має бути додатнім числом",
+      "invalid_curve_factor": "Коефіцієнт кривої має бути між 0 та 1",
+      "invalid_efficiency_factor": "Коефіцієнт ефективності має бути між 1.0 та 1.5",
+      "invalid_min_voltage": "Мінімальна напруга має бути невід'ємною",
+      "invalid_ramp_up_step": "Крок наростання має бути між 0 та 100",
+      "invalid_ramp_down_step": "Крок спадання має бути між 0 та 100",
+      "invalid_ramp_deadband": "Зона нечутливості має бути між 0 та 10",
+      "invalid_default_min_start_w": "Мінімальна потужність за замовчуванням має бути між 0 та 5000",
+      "invalid_hysteresis_w": "Гістерезис має бути між 0 та 5000",
+      "temperature_sensor_required": "Датчик температури обов'язковий, коли увімкнена температурна компенсація"
+    }
+  },
+  "selector": {
+    "action": {
+      "options": {
+        "settings": "Налаштування",
+        "add_device": "Додати пристрій",
+        "manage_devices": "Керувати пристроями",
+        "add": "Додати пристрій",
+        "edit": "Редагувати",
+        "remove": "Видалити",
+        "finish": "Завершити налаштування",
+        "back": "Повернутися до головного меню"
+      }
+    },
+    "main_menu_action": {
+      "options": {
+        "settings": "Налаштування",
+        "manage_devices": "Керувати пристроями"
+      }
+    },
+    "manage_devices_action": {
+      "options": {
+        "add_device": "Додати пристрій",
+        "edit": "Редагувати пристрій",
+        "remove": "Видалити пристрій",
+        "back": "Повернутися до головного меню"
+      }
+    },
+    "device_type": {
+      "options": {
+        "standard": "Стандартний перемикач/світло (тільки Увімк/Вимк)",
+        "custom": "Користувацьке реле ESPHome (Увімк/Вимк/Пропорційно)"
+      }
+    },
+    "priority": {
+      "options": {
+        "100": "Дуже високий",
+        "75": "Високий",
+        "50": "Середній",
+        "25": "Низький",
+        "1": "Дуже низький"
+      }
+    },
+    "panel_configuration": {
+      "options": {
+        "series": "Послідовно",
+        "parallel": "Паралельно",
+        "parallel-series": "Паралельно-послідовно"
+      }
+    },
+    "device_types": {
+      "options": {
+        "standard": "Стандартний перемикач/світло",
+        "custom": "Користувацьке реле ESPHome",
+        "climate": "Кліматичний пристрій"
+      }
+    },
+    "states": {
+      "options": {
+        "on": "Увімкнено",
+        "off": "Вимкнено",
+        "proportional": "Пропорційно"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power_distribution": {
+        "name": "Розподіл потужності",
+        "state_attributes": {
+          "total_power": {
+            "name": "Загальна доступна потужність"
+          },
+          "remaining_power": {
+            "name": "Залишкова потужність"
+          },
+          "allocated_power": {
+            "name": "Розподілена потужність"
+          },
+          "allocation_w": {
+            "name": "Розподіл (Вт)"
+          },
+          "allocation_percent": {
+            "name": "Розподіл (%)"
+          },
+          "device_meta": {
+            "name": "Метадані пристрою"
+          }
+        }
+      },
+      "excess": {
+        "name": "Надлишкова потужність",
+        "state_attributes": {
+          "pv_power": {
+            "name": "Потужність панелей"
+          },
+          "consumption": {
+            "name": "Споживання"
+          },
+          "battery_power": {
+            "name": "Потужність батареї"
+          },
+          "battery_discharging": {
+            "name": "Розряд батареї"
+          },
+          "excess_possible": {
+            "name": "Можливий надлишок"
+          },
+          "usage_percent": {
+            "name": "Відсоток використання"
+          },
+          "pv_voltage": {
+            "name": "Напруга панелей"
+          },
+          "energy_harvesting_possible": {
+            "name": "Можливий збір енергії"
+          },
+          "min_system_voltage": {
+            "name": "Мін. напруга системи"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Кількість панелей"
+          },
+          "panel_configuration": {
+            "name": "Конфігурація панелей"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Поточна макс. потужність"
+          },
+          "light_factor": {
+            "name": "Коефіцієнт освітленості"
+          },
+          "relative_voltage": {
+            "name": "Відносна напруга"
+          },
+          "voc_ratio": {
+            "name": "Співвідношення Voc"
+          },
+          "calculation_reason": {
+            "name": "Причина розрахунку"
+          }
+        }
+      },
+      "max_power": {
+        "name": "Максимальна потужність",
+        "state_attributes": {
+          "pv_power": {
+            "name": "Потужність панелей"
+          },
+          "pv_voltage": {
+            "name": "Напруга панелей"
+          },
+          "consumption": {
+            "name": "Споживання"
+          },
+          "excess_possible": {
+            "name": "Можливий надлишок"
+          },
+          "energy_harvesting_possible": {
+            "name": "Можливий збір енергії"
+          },
+          "min_system_voltage": {
+            "name": "Мін. напруга системи"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Кількість панелей"
+          },
+          "panel_configuration": {
+            "name": "Конфігурація панелей"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Поточна макс. потужність"
+          },
+          "usage_percent": {
+            "name": "Відсоток використання"
+          },
+          "temperature_compensated": {
+            "name": "З температурною компенсацією"
+          }
+        }
+      },
+      "current_max_power": {
+        "name": "Поточна макс. потужність",
+        "state_attributes": {
+          "pv_power": {
+            "name": "Потужність панелей"
+          },
+          "pv_voltage": {
+            "name": "Напруга панелей"
+          },
+          "energy_harvesting_possible": {
+            "name": "Можливий збір енергії"
+          },
+          "min_system_voltage": {
+            "name": "Мін. напруга системи"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Кількість панелей"
+          },
+          "panel_configuration": {
+            "name": "Конфігурація панелей"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Поточна макс. потужність"
+          },
+          "light_factor": {
+            "name": "Коефіцієнт освітленості"
+          },
+          "relative_voltage": {
+            "name": "Відносна напруга"
+          },
+          "voc_ratio": {
+            "name": "Співвідношення Voc"
+          },
+          "calculation_reason": {
+            "name": "Причина розрахунку"
+          },
+          "consumption": {
+            "name": "Споживання"
+          },
+          "excess_possible": {
+            "name": "Можливий надлишок"
+          },
+          "usage_percent": {
+            "name": "Відсоток використання"
+          }
+        }
+      },
+      "usage_percent": {
+        "name": "Відсоток використання",
+        "state_attributes": {
+          "pv_power": {
+            "name": "Потужність панелей"
+          },
+          "pv_voltage": {
+            "name": "Напруга панелей"
+          },
+          "consumption": {
+            "name": "Споживання"
+          },
+          "excess_possible": {
+            "name": "Можливий надлишок"
+          },
+          "energy_harvesting_possible": {
+            "name": "Можливий збір енергії"
+          },
+          "min_system_voltage": {
+            "name": "Мін. напруга системи"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Кількість панелей"
+          },
+          "panel_configuration": {
+            "name": "Конфігурація панелей"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Поточна макс. потужність"
+          },
+          "usage_percent": {
+            "name": "Відсоток використання"
+          },
+          "temperature_compensated": {
+            "name": "З температурною компенсацією"
+          }
+        }
+      }
+    }
+  }
+}

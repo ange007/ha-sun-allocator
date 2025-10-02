@@ -1,0 +1,486 @@
+{
+  "title": "SunAllocator Energy Excess Sensor",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Solar Panel Configuration",
+        "description": "Configure your solar panel parameters",
+        "data": {
+          "advanced_settings_enabled": "Enable Advanced Settings",
+          "battery_power_reversed": "Reverse Battery Power Values",
+          "temperature_compensation_enabled": "Enable Temperature Compensation",
+          "pv_power": "PV Power Sensor",
+          "pv_voltage": "PV Voltage Sensor",
+          "consumption": "Consumption Sensor",
+          "battery_power": "Battery Power Sensor",
+          "vmp": "Maximum Power Voltage (Vmp)",
+          "imp": "Maximum Power Current (Imp)",
+          "voc": "Open Circuit Voltage (Voc)",
+          "isc": "Short Circuit Current (Isc)",
+          "panel_count": "Panel Count",
+          "panel_configuration": "Panel Configuration"
+        }
+      },
+      "main_menu": {
+        "title": "SunAllocator Configuration",
+        "description": "Configure solar panels and manage devices. Currently configured devices: {devices_count}",
+        "data": {
+          "action": "Select action"
+        }
+      },
+      "settings": {
+        "title": "Solar Panel Settings",
+        "description": "Configure solar panel parameters and advanced settings",
+        "data": {
+          "advanced_settings_enabled": "Enable Advanced Settings",
+          "battery_power_reversed": "Reverse Battery Power Values",
+          "temperature_compensation_enabled": "Enable Temperature Compensation",
+          "pv_power": "PV Power Sensor",
+          "pv_voltage": "PV Voltage Sensor",
+          "consumption": "Consumption Sensor",
+          "battery_power": "Battery Power Sensor",
+          "vmp": "Maximum Power Voltage (Vmp)",
+          "imp": "Maximum Power Current (Imp)",
+          "voc": "Open Circuit Voltage (Voc)",
+          "isc": "Short Circuit Current (Isc)",
+          "panel_count": "Panel Count",
+          "panel_configuration": "Panel Configuration"
+        }
+      },
+      "manage_devices": {
+        "title": "Manage Devices",
+        "description": "Total devices: {devices_count}\nDevices: {devices_list}",
+        "data": {
+          "action": "Select action",
+          "device_id": "Select device"
+        }
+      },
+      "temperature_compensation": {
+        "title": "Temperature Compensation",
+        "description": "Configure temperature compensation parameters",
+        "data": {
+          "temperature_sensor": "Temperature Sensor",
+          "temp_coefficient_voc": "Voc Temperature Coefficient (%/°C)",
+          "temp_coefficient_pmax": "Pmax Temperature Coefficient (%/°C)"
+        }
+      },
+      "advanced_settings": {
+        "title": "Advanced Settings",
+        "description": "Configure advanced MPPT and control parameters",
+        "data": {
+          "reserve_battery_power": "Battery Power Reserve (W)",
+          "curve_factor_k": "I-V Curve Factor (k)",
+          "efficiency_correction_factor": "Efficiency Correction Factor",
+          "min_inverter_voltage": "Minimum Inverter Voltage (V)",
+          "ramp_up_step": "Ramp Up Step (% per tick)",
+          "ramp_down_step": "Ramp Down Step (% per tick)",
+          "ramp_deadband": "Ramp Deadband (%)",
+          "default_min_start_w": "Default Min Start (W)",
+          "hysteresis_w": "Hysteresis (W)"
+        }
+      },
+      "device_name_type": {
+        "title": "Device Configuration",
+        "description": "Configure device name and type",
+        "data": {
+          "device_name": "Device Name",
+          "device_type": "Device Type"
+        }
+      },
+      "device_selection": {
+        "title": "Device Selection",
+        "description": "Select the device to control",
+        "data": {
+          "device_entity": "Device Entity",
+          "esphome_mode_select_entity": "ESPHome Mode Select Entity",
+          "no_devices_found": "No compatible devices found"
+        }
+      },
+      "device_basic_settings": {
+        "title": "Basic Device Settings",
+        "description": "Configure basic device parameters",
+        "data": {
+          "auto_control_enabled": "Enable Auto Control",
+          "min_excess_power": "Minimum Excess Power",
+          "min_expected_w": "Minimum Expected Load (W)",
+          "max_expected_w": "Maximum Expected Load (W)",
+          "priority": "Device Priority",
+          "debounce_time": "Debounce Time (s)",
+          "schedule_enabled": "Enable Schedule"
+        }
+      },
+      "device_schedule": {
+        "title": "Device Schedule",
+        "description": "Configure device operating schedule",
+        "data": {
+          "start_time": "Start Time",
+          "end_time": "End Time",
+          "monday": "Monday",
+          "tuesday": "Tuesday",
+          "wednesday": "Wednesday",
+          "thursday": "Thursday",
+          "friday": "Friday",
+          "saturday": "Saturday",
+          "sunday": "Sunday"
+        }
+      },
+      "confirm_remove": {
+        "title": "Confirm Device Removal",
+        "description": "Are you sure you want to remove {device_name}?",
+        "data": {
+          "confirm": "Yes, remove device"
+        }
+      }
+    },
+    "error": {
+      "invalid_debounce_time": "Debounce time must be between 15 and 600 seconds",
+      "device_name_required": "Device name is required",
+      "invalid_priority": "Priority must be a number between 1 and 100",
+      "invalid_min_expected_w": "Minimum expected load must be a non-negative number",
+      "invalid_max_expected_w": "Maximum expected load must be a non-negative number",
+      "duplicate_entity_id": "This entity is already used by another device",
+      "invalid_time_format": "Invalid time format. Please use HH:MM",
+      "voc_equal_to_vmp": "Voc cannot be equal to Vmp",
+      "invalid_values": "Invalid values provided",
+      "invalid_panel_count": "Panel count must be a positive number",
+      "invalid_vmp": "Vmp must be a positive number",
+      "invalid_imp": "Imp must be a positive number",
+      "invalid_curve_factor": "Curve factor must be between 0 and 1",
+      "invalid_efficiency_factor": "Efficiency factor must be between 1.0 and 1.5",
+      "invalid_min_voltage": "Minimum voltage must be non-negative",
+      "invalid_ramp_up_step": "Ramp up step must be between 0 and 100",
+      "invalid_ramp_down_step": "Ramp down step must be between 0 and 100",
+      "invalid_ramp_deadband": "Ramp deadband must be between 0 and 10",
+      "invalid_default_min_start_w": "Default min start must be between 0 and 5000",
+      "invalid_hysteresis_w": "Hysteresis must be between 0 and 5000",
+      "temperature_sensor_required": "Temperature sensor is required when compensation is enabled"
+    }
+  },
+  "selector": {
+    "action": {
+      "options": {
+        "settings": "Settings",
+        "add_device": "Add Device",
+        "manage_devices": "Manage Devices",
+        "add": "Add Device",
+        "edit": "Edit",
+        "remove": "Remove",
+        "finish": "Finish Configuration",
+        "back": "Back to Main Menu"
+      }
+    },
+    "main_menu_action": {
+      "options": {
+        "settings": "Settings",
+        "manage_devices": "Manage Devices"
+      }
+    },
+    "manage_devices_action": {
+      "options": {
+        "add_device": "Add Device",
+        "edit": "Edit Device",
+        "remove": "Remove Device",
+        "back": "Back to Main Menu"
+      }
+    },
+    "device_type": {
+      "options": {
+        "standard": "Standard Switch/Light (On/Off only)",
+        "custom": "Custom ESPHome Relay (On/Off/Proportional)"
+      }
+    },
+    "priority": {
+      "options": {
+        "100": "Very High",
+        "75": "High",
+        "50": "Medium",
+        "25": "Low",
+        "1": "Very Low"
+      }
+    },
+    "panel_configuration": {
+      "options": {
+        "series": "Series",
+        "parallel": "Parallel",
+        "parallel-series": "Parallel-Series"
+      }
+    },
+    "device_types": {
+      "options": {
+        "standard": "Standard Switch/Light",
+        "custom": "Custom ESPHome Relay",
+        "climate": "Climate Device"
+      }
+    },
+    "states": {
+      "options": {
+        "on": "On",
+        "off": "Off",
+        "proportional": "Proportional"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power_distribution": {
+        "name": "Power Distribution",
+        "state_attributes": {
+          "total_power": {
+            "name": "Total Available Power"
+          },
+          "remaining_power": {
+            "name": "Remaining Power"
+          },
+          "allocated_power": {
+            "name": "Allocated Power"
+          },
+          "allocation_w": {
+            "name": "Allocation (W)"
+          },
+          "allocation_percent": {
+            "name": "Allocation (%)"
+          },
+          "device_meta": {
+            "name": "Device metadata"
+          }
+        }
+      },
+      "excess": {
+        "name": "Excess Power",
+        "state_attributes": {
+          "pv_power": {
+            "name": "PV Power"
+          },
+          "consumption": {
+            "name": "Consumption"
+          },
+          "battery_power": {
+            "name": "Battery Power"
+          },
+          "battery_discharging": {
+            "name": "Battery Discharging"
+          },
+          "excess_possible": {
+            "name": "Excess Possible"
+          },
+          "usage_percent": {
+            "name": "Usage Percent"
+          },
+          "pv_voltage": {
+            "name": "PV Voltage"
+          },
+          "energy_harvesting_possible": {
+            "name": "Energy Harvesting Possible"
+          },
+          "min_system_voltage": {
+            "name": "Min System Voltage"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Panel Count"
+          },
+          "panel_configuration": {
+            "name": "Panel Configuration"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Current Max Power"
+          },
+          "light_factor": {
+            "name": "Light Factor"
+          },
+          "relative_voltage": {
+            "name": "Relative Voltage"
+          },
+          "voc_ratio": {
+            "name": "Voc Ratio"
+          },
+          "calculation_reason": {
+            "name": "Calculation Reason"
+          }
+        }
+      },
+      "max_power": {
+        "name": "Max Power",
+        "state_attributes": {
+          "pv_power": {
+            "name": "PV Power"
+          },
+          "pv_voltage": {
+            "name": "PV Voltage"
+          },
+          "consumption": {
+            "name": "Consumption"
+          },
+          "excess_possible": {
+            "name": "Excess Possible"
+          },
+          "energy_harvesting_possible": {
+            "name": "Energy Harvesting Possible"
+          },
+          "min_system_voltage": {
+            "name": "Min System Voltage"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Panel Count"
+          },
+          "panel_configuration": {
+            "name": "Panel Configuration"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Current Max Power"
+          },
+          "usage_percent": {
+            "name": "Usage Percent"
+          },
+          "temperature_compensated": {
+            "name": "Temperature Compensated"
+          }
+        }
+      },
+      "current_max_power": {
+        "name": "Current Max Power",
+        "state_attributes": {
+          "pv_power": {
+            "name": "PV Power"
+          },
+          "pv_voltage": {
+            "name": "PV Voltage"
+          },
+          "energy_harvesting_possible": {
+            "name": "Energy Harvesting Possible"
+          },
+          "min_system_voltage": {
+            "name": "Min System Voltage"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Panel Count"
+          },
+          "panel_configuration": {
+            "name": "Panel Configuration"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Current Max Power"
+          },
+          "light_factor": {
+            "name": "Light Factor"
+          },
+          "relative_voltage": {
+            "name": "Relative Voltage"
+          },
+          "voc_ratio": {
+            "name": "Voc Ratio"
+          },
+          "calculation_reason": {
+            "name": "Calculation Reason"
+          },
+          "consumption": {
+            "name": "Consumption"
+          },
+          "excess_possible": {
+            "name": "Excess Possible"
+          },
+          "usage_percent": {
+            "name": "Usage Percent"
+          }
+        }
+      },
+      "usage_percent": {
+        "name": "Usage Percent",
+        "state_attributes": {
+          "pv_power": {
+            "name": "PV Power"
+          },
+          "pv_voltage": {
+            "name": "PV Voltage"
+          },
+          "consumption": {
+            "name": "Consumption"
+          },
+          "excess_possible": {
+            "name": "Excess Possible"
+          },
+          "energy_harvesting_possible": {
+            "name": "Energy Harvesting Possible"
+          },
+          "min_system_voltage": {
+            "name": "Min System Voltage"
+          },
+          "vmp": {
+            "name": "Vmp"
+          },
+          "imp": {
+            "name": "Imp"
+          },
+          "voc": {
+            "name": "Voc"
+          },
+          "isc": {
+            "name": "Isc"
+          },
+          "panel_count": {
+            "name": "Panel Count"
+          },
+          "panel_configuration": {
+            "name": "Panel Configuration"
+          },
+          "pmax": {
+            "name": "Pmax"
+          },
+          "current_max_power": {
+            "name": "Current Max Power"
+          },
+          "usage_percent": {
+            "name": "Usage Percent"
+          },
+          "temperature_compensated": {
+            "name": "Temperature Compensated"
+          }
+        }
+      }
+    }
+  }
+}

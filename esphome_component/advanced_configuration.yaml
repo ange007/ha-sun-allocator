@@ -1,0 +1,319 @@
+# Advanced Sun Allocator Relay Configuration
+# This configuration adds more features and customization options
+
+# Basic ESPHome configuration
+esphome:
+  name: sun_allocator_relay_advanced
+  platform: ESP8266
+  board: d1_mini
+  includes:
+    - sun_allocator_relay.h
+  libraries:
+    - ESP8266WiFi
+    - ESPAsyncTCP
+    - ESPAsyncWebServer
+
+# WiFi connection
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  
+  # Enable fallback hotspot in case WiFi connection fails
+  ap:
+    ssid: "SunAllocatorRelay Fallback"
+    password: !secret fallback_password
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_encryption_key
+  on_client_disconnected:
+    then:
+      - logger.log: "API disconnected → turning relay OFF (fail-safe)"
+      - light.turn_off: relay_light
+      - select.set_option:
+          id: relay_mode
+          option: "Off"
+
+# Enable OTA updates
+ota:
+  password: !secret ota_password
+
+# Enable logging
+logger:
+  level: DEBUG
+
+# Web server for status and control
+web_server:
+  port: 80
+
+# Define the solid-state relay output
+output:
+  - platform: custom
+    type: float
+    lambda: |-
+      auto relay = new sunallocator_relay::SunAllocatorRelay(new GPIOOutputPin(D1));
+      relay->set_frequency(1000);  # 1kHz PWM frequency
+      return {relay};
+    outputs:
+      - id: relay_output
+
+# Define a custom PWM light to control the relay
+light:
+  - platform: monochromatic
+    name: "SunAllocator Relay"
+    output: relay_output
+    id: relay_light
+    restore_mode: ALWAYS_OFF  # Start with relay off
+
+# Sensors to monitor
+sensor:
+  # Sensor to receive untapped potential from Home Assistant
+  - platform: homeassistant
+    id: untapped_potential
+    entity_id: sensor.sunallocator_excess_1
+    name: "Untapped Potential"
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+    
+  # Sensor to receive maximum power from Home Assistant
+  - platform: homeassistant
+    id: max_power
+    entity_id: sensor.sunallocator_max_power_1
+    name: "Max Power"
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+    
+  # Sensor to receive current max power from Home Assistant
+  - platform: homeassistant
+    id: current_max_power
+    entity_id: sensor.sunallocator_current_max_power_1
+    name: "Current Max Power"
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+    
+  # Sensor to receive usage percentage from Home Assistant
+  - platform: homeassistant
+    id: usage_percent
+    entity_id: sensor.sunallocator_usage_percent_1
+    name: "Usage Percent"
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    
+  # Calculate percentage of untapped potential
+  - platform: template
+    id: untapped_percentage
+    name: "Untapped Percentage"
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 5s
+    lambda: |-
+      if (id(max_power).state > 0) {
+        return (id(untapped_potential).state / id(max_power).state) * 100.0;
+      } else {
+        return 0.0;
+      }
+      
+  # Monitor relay power level
+  - platform: template
+    id: relay_power
+    name: "Relay Power"
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 5s
+    lambda: |-
+      if (id(relay_light).current_values.get_brightness() > 0) {
+        return id(relay_light).current_values.get_brightness() * 100.0;
+      } else {
+        return 0.0;
+      }
+
+# Number components for configuration
+number:
+  # Minimum threshold for activation
+  - platform: template
+    name: "Minimum Activation Threshold"
+    id: min_threshold
+    min_value: 0
+    max_value: 50
+    step: 1
+    initial_value: 5
+    unit_of_measurement: "%"
+    optimistic: true
+    
+  # Maximum power limit
+  - platform: template
+    name: "Maximum Power Limit"
+    id: max_power_limit
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 100
+    unit_of_measurement: "%"
+    optimistic: true
+    
+  # Response speed (lower = faster)
+  - platform: template
+    name: "Response Speed"
+    id: response_speed
+    min_value: 1
+    max_value: 60
+    step: 1
+    initial_value: 10
+    unit_of_measurement: "s"
+    optimistic: true
+
+# Switch for mode selection
+select:
+  - platform: template
+    name: "SunAllocator Mode"
+    id: relay_mode
+    options:
+      - "Off"
+      - "On"
+      - "Proportional"
+      - "Adaptive"
+    initial_option: "Off"
+    optimistic: true
+    on_value:
+      then:
+        - script.execute: update_relay
+
+# Switches for additional features
+switch:
+  # Switch to enable/disable automatic mode switching based on time
+  - platform: template
+    name: "Auto Mode Schedule"
+    id: auto_mode_schedule
+    optimistic: true
+    
+  # Switch to enable/disable safety features
+  - platform: template
+    name: "Safety Features"
+    id: safety_features
+    optimistic: true
+    initial_value: true
+
+# Script to update relay based on mode and untapped potential
+script:
+  - id: update_relay
+    then:
+      - lambda: |-
+          std::string mode = id(relay_mode).state;
+          if (mode == "Off") {
+            // Turn off relay
+            id(relay_light).turn_off();
+          } else if (mode == "On") {
+            // Turn on relay at full power (limited by max_power_limit)
+            float max_limit = id(max_power_limit).state / 100.0;
+            id(relay_light).turn_on();
+            id(relay_light).set_brightness(max_limit);
+          } else if (mode == "Proportional") {
+            // Set relay power proportional to untapped percentage
+            float percentage = id(untapped_percentage).state;
+            float min_threshold = id(min_threshold).state;
+            float max_limit = id(max_power_limit).state / 100.0;
+            
+            if (percentage > min_threshold) {
+              float brightness = constrain(percentage / 100.0, 0.0, max_limit);
+              id(relay_light).turn_on();
+              id(relay_light).set_brightness(brightness);
+            } else {
+              id(relay_light).turn_off();
+            }
+          } else if (mode == "Adaptive") {
+            // Adaptive mode - adjust power based on both untapped potential and usage percent
+            float untapped = id(untapped_potential).state;
+            float usage = id(usage_percent).state;
+            float min_threshold = id(min_threshold).state;
+            float max_limit = id(max_power_limit).state / 100.0;
+            
+            // Calculate adaptive power level
+            // Higher untapped potential and lower usage percent = higher power
+            float adaptive_factor = 0.0;
+            if (untapped > 0) {
+              adaptive_factor = (1.0 - (usage / 100.0)) * (untapped / id(max_power).state);
+              adaptive_factor = constrain(adaptive_factor, 0.0, max_limit);
+            }
+            
+            if (adaptive_factor * 100.0 > min_threshold) {
+              id(relay_light).turn_on();
+              id(relay_light).set_brightness(adaptive_factor);
+            } else {
+              id(relay_light).turn_off();
+            }
+          }
+
+# Automation to update relay based on response speed setting
+interval:
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(relay_mode).state != "Off";'
+          then:
+            - lambda: |-
+                static int counter = 0;
+                int speed = id(response_speed).state;
+                counter++;
+                if (counter >= speed) {
+                  counter = 0;
+                  id(update_relay).execute();
+                }
+
+# Time-based automations
+time:
+  - platform: sntp
+    id: time_sntp
+    timezone: Europe/Kiev
+    on_time:
+      # Morning - switch to proportional mode
+      - seconds: 0
+        minutes: 0
+        hours: 10
+        then:
+          - if:
+              condition:
+                lambda: 'return id(auto_mode_schedule).state;'
+              then:
+                - select.set_option:
+                    id: relay_mode
+                    option: Proportional
+      
+      # Evening - switch to off mode
+      - seconds: 0
+        minutes: 0
+        hours: 18
+        then:
+          - if:
+              condition:
+                lambda: 'return id(auto_mode_schedule).state;'
+              then:
+                - select.set_option:
+                    id: relay_mode
+                    option: Off
+
+# Text sensor to display current status
+text_sensor:
+  - platform: template
+    name: "Relay Status"
+    lambda: |-
+      std::string mode = id(relay_mode).state;
+      char buffer[64];
+      
+      if (mode == "Off") {
+        return "Off";
+      } else if (mode == "On") {
+        sprintf(buffer, "On (%.1f%%)", id(relay_power).state);
+        return buffer;
+      } else if (mode == "Proportional") {
+        sprintf(buffer, "Proportional (%.1f%% of %.1f%% untapped)", 
+                id(relay_power).state, id(untapped_percentage).state);
+        return buffer;
+      } else if (mode == "Adaptive") {
+        sprintf(buffer, "Adaptive (%.1f%%, U:%.1f%%, P:%.1f%%)", 
+                id(relay_power).state, id(usage_percent).state, id(untapped_percentage).state);
+        return buffer;
+      }
+      return "Unknown";
+    update_interval: 5s

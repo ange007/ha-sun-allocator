@@ -1,0 +1,83 @@
+title: SunAllocator Power Distribution
+type: vertical-stack
+cards:
+  - type: entities
+    title: Power Distribution Overview
+    entities:
+      - entity: sensor.sunallocator_power_distribution_1
+        name: Total Allocated Power
+        secondary_info: last-changed
+      - type: attribute
+        entity: sensor.sunallocator_power_distribution_1
+        attribute: total_power
+        name: Total Available Power
+      - type: attribute
+        entity: sensor.sunallocator_power_distribution_1
+        attribute: remaining_power
+        name: Remaining Power
+      - type: attribute
+        entity: sensor.sunallocator_power_distribution_1
+        attribute: allocated_power
+        name: Allocated Power
+  - type: markdown
+    content: >-
+      {% set SENSOR = 'sensor.sunallocator_power_distribution_1' %} {% set meta
+      = state_attr(SENSOR, 'device_meta') or {} %} 
+      {% set alloc = state_attr(SENSOR, 'allocation_w') or {} %} 
+      {% set percent = state_attr(SENSOR, 'allocation_percent') or {} %} 
+      {% set reasons = state_attr(SENSOR, 'reasons') or {} %}
+
+      {% if meta and meta.items() %}
+        {% for id, st in meta.items() %}
+        <div>
+          <div>
+            <b style>{% if percent.get(id, 0) > 0 %}🟢{% else %}⚪{% endif %} {{ st.name or id }}</b>
+            <br>
+            <small>Priority: {{ st.priority }}</small>
+          </div>
+          <div>
+            <b>{{ alloc.get(id, 0)|round(1) }} W</b> ({{ percent[id]|default(0)|round(1) }}%)
+            <br>
+            <small>{{ reasons.get(id) or '-' }}</small>
+          </div>
+          <hr />
+        </div>
+        {% endfor %}
+      {% else %}
+        Device not found
+      {% endif %}
+    title: Devices
+  - type: custom:mini-graph-card
+    title: Power Allocation
+    entities:
+      - entity: sensor.sunallocator_power_distribution_1
+        name: Allocated Power
+        attribute: allocated_power
+      - entity: sensor.sunallocator_power_distribution_1
+        name: Remaining Power
+        attribute: remaining_power
+    hours_to_show: 1
+    points_per_hour: 12
+    show:
+      fill: true
+      legend: true
+    color_thresholds:
+      - value: 0
+        color: "#00ba47"
+      - value: 50
+        color: "#f39c12"
+      - value: 80
+        color: "#d35400"
+  - type: custom:mini-graph-card
+    title: Power Distribution History
+    entities:
+      - entity: sensor.sunallocator_power_distribution_1
+        name: Allocated Power
+      - entity: sensor.sunallocator_excess_1
+        name: Available Power
+    hours_to_show: 24
+    points_per_hour: 4
+    line_width: 2
+    show:
+      fill: true
+      legend: true

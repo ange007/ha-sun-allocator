@@ -1,0 +1,16 @@
+{
+  "domain": "sun_allocator",
+  "name": "SunAllocator Energy Excess Sensor",
+  "codeowners": [
+    "@ange007"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/ange007/ha-sun-allocator",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "requirements": [
+    "voluptuous"
+  ],
+  "version": "1.0.0"
+}

@@ -1,0 +1,2 @@
+[IMPORTS]
+ignored-modules=homeassistant,voluptuous,pytest_homeassistant_custom_component

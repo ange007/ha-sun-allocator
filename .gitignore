@@ -1,0 +1,39 @@
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.build/
+.dist/
+
+# Test/coverage caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environments
+.venv/
+venv/
+.env
+
+# Build/distribution artifacts
+build/
+dist/
+*.zip
+
+# Home Assistant
+storage/
+.homeassistant/
