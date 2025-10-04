@@ -3,9 +3,9 @@ import logging
 
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-)
+
+from conftest import create_test_config_entry
+from tests.const import MOCK_CONFIG
 
 from custom_components.sun_allocator.const import (
     DOMAIN,
@@ -24,8 +24,10 @@ _LOGGER = logging.getLogger(__name__)
 
 @pytest.mark.asyncio
 async def test_esphome_set_mode(hass: HomeAssistant, caplog) -> None:
-    caplog.set_level(logging.DEBUG)
     """Test that the set_relay_mode service calls the select.select_option service for ESPHome devices."""
+    
+    caplog.set_level(logging.DEBUG)
+    
     # Create a mock select entity
     await async_setup_component(
         hass, "input_boolean", {"input_boolean": {"test_esphome_mode": None}}
@@ -49,23 +51,20 @@ async def test_esphome_set_mode(hass: HomeAssistant, caplog) -> None:
     await hass.async_block_till_done()
 
     # Create a mock config entry
-    config_entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_DEVICES: [
-                {
-                    CONF_DEVICE_ID: "test_esphome_device",
-                    CONF_DEVICE_ENTITY: "switch.test_esphome_switch",
-                    CONF_DEVICE_TYPE: DEVICE_TYPE_CUSTOM,
-                    CONF_ESPHOME_MODE_SELECT_ENTITY: "select.test_esphome_mode",
-                }
-            ]
-        },
-        entry_id="test_entry_id",
-    )
-    config_entry.add_to_hass(hass)
-
-    await hass.config_entries.async_setup(config_entry.entry_id)
+    config_data = {
+        **MOCK_CONFIG,
+        CONF_DEVICES: [
+            {
+                CONF_DEVICE_ID: "test_esphome_device",
+                CONF_DEVICE_ENTITY: "switch.test_esphome_switch",
+                CONF_DEVICE_TYPE: DEVICE_TYPE_CUSTOM,
+                CONF_ESPHOME_MODE_SELECT_ENTITY: "select.test_esphome_mode",
+            }
+        ]
+    }
+    config_entry = create_test_config_entry(config_data)
+    await hass.config_entries.async_add(config_entry)
+    # await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
     _LOGGER.debug(

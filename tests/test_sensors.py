@@ -3,10 +3,11 @@
 import pytest
 
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from conftest import create_test_config_entry
+from tests.const import MOCK_CONFIG
 
 from custom_components.sun_allocator.const import (
-    DOMAIN,
     CONF_DEVICES,
     CONF_DEVICE_ID,
     CONF_DEVICE_ENTITY,
@@ -17,21 +18,19 @@ from custom_components.sun_allocator.const import (
 @pytest.mark.asyncio
 async def test_sensors_are_created(hass: HomeAssistant) -> None:
     """Test that the sensors are created."""
-    # Setup the component with a mock entry
-    config_entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_DEVICES: [
-                {
-                    CONF_DEVICE_ID: "test_device",
-                    CONF_DEVICE_ENTITY: f"{DOMAIN_SWITCH}.test_switch",
-                }
-            ]
-        },
-        entry_id="test_entry_id",
-    )
-    config_entry.add_to_hass(hass)
-    await hass.config_entries.async_setup(config_entry.entry_id)
+    # Combine mock config with specific device data for this test
+    config_data = {
+        **MOCK_CONFIG, 
+        CONF_DEVICES: [
+            {
+                CONF_DEVICE_ID: "test_device",
+                CONF_DEVICE_ENTITY: f"{DOMAIN_SWITCH}.test_switch",
+            }
+        ]
+    }
+
+    config_entry = create_test_config_entry(config_data)
+    await hass.config_entries.async_add(config_entry)
     await hass.async_block_till_done()
 
     # Check that the sensors have been created

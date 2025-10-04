@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import patch
+
 from homeassistant.exceptions import ServiceNotFound
 
 # Import the correct functions from the actual codebase

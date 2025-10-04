@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import device_registry as dr
 
 from custom_components.sun_allocator import async_setup_entry, async_unload_entry
@@ -15,20 +14,18 @@ from custom_components.sun_allocator.const import (
     CONF_CONFIRM,
 )
 
-from tests.const import MOCK_CONFIG_WITH_DEVICES
+from conftest import create_test_config_entry
+from tests.const import MOCK_DEVICES
 
 
 @pytest.mark.asyncio
 async def test_device_removal(hass: HomeAssistant):
     """Test that removing a device also removes it from the device registry."""
     # Setup the component with a mock config entry
-    config_entry = ConfigEntry(
-        version=1,
-        domain=DOMAIN,
-        title="Sun Allocator",
-        data=MOCK_CONFIG_WITH_DEVICES,
-        source="user",
-        entry_id="test_entry_id",
+    config_entry = create_test_config_entry(
+        {
+            CONF_DEVICES: MOCK_DEVICES,
+        }
     )
 
     hass.config_entries._entries[config_entry.entry_id] = config_entry
@@ -40,7 +37,7 @@ async def test_device_removal(hass: HomeAssistant):
     device_registry = dr.async_get(hass)
 
     # Get the device we want to remove
-    device_id_to_remove = MOCK_CONFIG_WITH_DEVICES[CONF_DEVICES][0][CONF_DEVICE_ID]
+    device_id_to_remove = MOCK_DEVICES[0][CONF_DEVICE_ID]
     device_entry = device_registry.async_get_device(
         identifiers={(DOMAIN, device_id_to_remove)}
     )

@@ -148,7 +148,7 @@ def _calculate_device_state(
     hysteresis_w = float(cfg.get(CONF_HYSTERESIS_W, DEFAULT_HYSTERESIS_W))
 
     # Hysteresis and threshold calculation
-    effective_min_power = max(min_expected_w, default_min_start_w)
+    effective_min_power = min_expected_w if min_expected_w > 0 else default_min_start_w
     on_threshold = effective_min_power
     off_threshold = max(0.0, effective_min_power - hysteresis_w)
 

@@ -1,26 +1,34 @@
 type: entities
+title: SunAllocator Overview
 entities:
-  - type: attribute
-    entity: sensor.sunallocator_excess_1
-    name: Excess Possible
-    attribute: excess_possible
   - entity: sensor.sunallocator_excess_1
-    name: Untapped Potential (W)
-  - entity: sensor.sunallocator_max_power_1
-    name: Max Power (W)
+    name: Excess Power (W)
+  - entity: sensor.sunallocator_power_distribution_1
+    name: Power Distribution (W)
   - entity: sensor.sunallocator_current_max_power_1
     name: Current Max Power (W)
+  - entity: sensor.sunallocator_max_power_1
+    name: Theoretical Max Power (W)
   - entity: sensor.sunallocator_usage_percent_1
     name: PV Usage (%)
   - type: attribute
     entity: sensor.sunallocator_excess_1
-    name: PV Power (W)
+    name: Excess Possible
+    attribute: excess_possible
+  - type: divider
+  - type: attribute
+    entity: sensor.sunallocator_excess_1
+    name: PV Power
     attribute: pv_power
   - type: attribute
     entity: sensor.sunallocator_excess_1
-    name: PV Voltage (V)
-    attribute: pv_voltage
+    name: Consumption
+    attribute: consumption
   - type: attribute
     entity: sensor.sunallocator_excess_1
-    name: Consumption (W)
-    attribute: consumption
+    name: Battery Power
+    attribute: battery_power
+  - type: attribute
+    entity: sensor.sunallocator_excess_1
+    name: Battery Discharging
+    attribute: battery_discharging

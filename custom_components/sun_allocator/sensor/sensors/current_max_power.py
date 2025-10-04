@@ -85,12 +85,10 @@ class SunAllocatorCurrentMaxPowerSensor(BaseSunAllocatorSensor):
         )
         self._update_attributes(
             **common_attrs,
-            consumption=0.0,  # Not used for current max power calculation
             excess_possible=(
                 debug_info[KEY_RELATIVE_VOLTAGE] > 1.0
                 and debug_info[KEY_ENERGY_HARVESTING_POSSIBLE]
             ),
-            usage_percent=0.0,  # Not calculated here
         )
 
         log_debug(

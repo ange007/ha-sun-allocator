@@ -3,7 +3,6 @@
 import pytest
 import time
 
-# Import the required functions
 from conftest import create_test_device
 
 

@@ -2,7 +2,9 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
+
 from homeassistant.core import HomeAssistant
+
 from custom_components.sun_allocator.core.power_processor import process_excess_power
 from custom_components.sun_allocator.const import (
     DEVICE_TYPE_STANDARD,

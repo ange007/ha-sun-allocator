@@ -1,6 +1,7 @@
 """Tests for configuration validation."""
 
 import pytest
+
 from custom_components.sun_allocator.config.utils import validate_solar_config
 from custom_components.sun_allocator.const import (
     CONF_VMP,

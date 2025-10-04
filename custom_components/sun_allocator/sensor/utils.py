@@ -123,34 +123,12 @@ def get_temperature_compensation_data(
     }
 
 
-def create_sensor_attributes(
-    pv_power: float = 0.0,
-    pv_voltage: float = 0.0,
-    consumption: float = 0.0,
-    battery_power: float = 0.0,
-    excess_possible: bool = False,
-    energy_harvesting_possible: bool = False,
-    current_max_power: float = 0.0,
-    usage_percent: float = 0.0,
-    **kwargs,
-) -> Dict[str, Any]:
-    """Create standardized sensor attributes dictionary."""
-    # pylint: disable=too-many-arguments,too-many-locals
-    attributes = {
-        "pv_power": pv_power,
-        "pv_voltage": pv_voltage,
-        "consumption": consumption,
-        "battery_power": battery_power,
-        "excess_possible": excess_possible,
-        "energy_harvesting_possible": energy_harvesting_possible,
-        "current_max_power": current_max_power,
-        "usage_percent": usage_percent,
-    }
-
-    # Add any additional attributes
-    attributes.update(kwargs)
-
-    return attributes
+def create_sensor_attributes(**kwargs) -> Dict[str, Any]:
+    """
+    Create a dictionary of sensor attributes from provided keyword arguments.
+    Only non-None values are included.
+    """
+    return {key: value for key, value in kwargs.items() if value is not None}
 
 
 def setup_sensor_listeners(
@@ -214,7 +192,7 @@ def calculate_excess_power_parallel(
             f"Battery Charge={battery_charge_w}W, Inverter Self-Consumption={inverter_self_consumption}W -> Excess={excess}W"
         )
 
-    return excess
+    return max(0, excess)
 
 
 def calculate_excess_power_mppt(
@@ -231,55 +209,51 @@ def calculate_excess_power_mppt(
 ) -> float:
     """
     Calculate excess power with proper accounting for battery charge and consumption.
+    This function uses a unified MPPT approach, leveraging consumption data if available
+    to provide a more accurate calculation of available excess power.
     """
-    # 1) Discharge guard
-    if battery_power_reversed:
-        is_discharging = battery_power > 0
-    else:
-        is_discharging = battery_power < 0
-
+    # 1. Discharge Guard: If the battery is discharging, there's no excess power.
+    is_discharging = (battery_power > 0) if battery_power_reversed else (battery_power < 0)
     if is_discharging:
         return 0.0
 
-    # 2) Topology guard (if provided)
+    # 2. Topology Guard: No excess if voltage is below MPP or harvesting isn't possible.
     if relative_voltage is not None and relative_voltage <= 1.0:
         return 0.0
     if energy_harvesting_possible is not None and not energy_harvesting_possible:
         return 0.0
 
-    # 3) Account battery charging as already used PV power
-    if battery_power_reversed:
-        battery_charge_w = max(-battery_power, 0.0)
-    else:
-        battery_charge_w = max(battery_power, 0.0)
+    # 3. Normalize battery power (positive for charging, 0 otherwise).
+    battery_charge_w = max(-battery_power if battery_power_reversed else battery_power, 0.0)
 
-    # 4) Calculate excess power consistently
-    if consumption is not None:
-        # This path should ideally not be taken if consumption is available,
-        # as parallel mode should be used. But as a fallback...
-        if configured_reserve > 0:
-            # Budgeting mode
-            return max(0, current_max_power - consumption - configured_reserve - inverter_self_consumption)
-        else:
-            # Battery priority mode
-            return max(0, current_max_power - consumption - battery_charge_w - inverter_self_consumption)
-
-    # Without consumption sensor: new unified MPPT logic
+    # 4. Unified MPPT Calculation
+    # Start with the theoretical untapped power from the panels.
     untapped_power = max(0, current_max_power - pv_power)
 
-    if configured_reserve > 0:
-        # Budgeting mode
-        excess_from_battery = max(0, battery_charge_w - configured_reserve)
-        total_excess = untapped_power + excess_from_battery
-        log_debug(
-            f"MPPT Excess (Budgeting): Untapped={untapped_power}W, "
-            f"From Battery={excess_from_battery}W -> Total={total_excess}W"
-        )
-        return max(0, total_excess - inverter_self_consumption)
+    # If consumption is known, we can refine the calculation.
+    # We calculate the "real" excess based on total potential power minus known loads.
+    # This allows us to account for home consumption that isn't met by current pv_power.
+    if consumption is not None:
+        # In priority mode, battery charging is a load. In budget mode, it's a source (up to the reserve).
+        battery_load = battery_charge_w if configured_reserve == 0 else 0
+        real_excess = current_max_power - consumption - battery_load
+        # We take the minimum of untapped potential and real excess to be safe.
+        excess = min(untapped_power, real_excess)
+        print(f"MPPT (with consumption): CurrentMax={current_max_power}W, PV={pv_power}W, Consumption={consumption}W, Battery={battery_charge_w}W")
+        print(f"MPPT (with consumption): Untapped={untapped_power}W, RealExcess={real_excess}W -> Using {excess}W")
+    else:
+        # Without consumption, we can only rely on untapped power.
+        excess = untapped_power
+        print(f"MPPT (no consumption): CurrentMax={current_max_power}W, Untapped={untapped_power}W")
 
-    # Battery priority mode
-    log_debug(f"MPPT Excess (Priority): Untapped={untapped_power}W")
-    return max(0, untapped_power - inverter_self_consumption)
+    # 5. Adjust for battery reserve in "Budgeting" mode.
+    if configured_reserve > 0:
+        excess_from_battery = max(0, battery_charge_w - configured_reserve)
+        excess += excess_from_battery
+        log_debug(f"Budgeting adjustment: Added {excess_from_battery}W from battery -> Total Excess={excess}W")
+
+    # 6. Subtract inverter self-consumption and ensure result is not negative.
+    return max(0, excess - inverter_self_consumption)
 
 
 def calculate_usage_percentage(actual_power: float, max_power: float) -> float:

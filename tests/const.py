@@ -1,26 +1,70 @@
+from custom_components.sun_allocator.const import (
+    CONF_PV_POWER,
+    CONF_PV_VOLTAGE,
+    CONF_VMP,
+    CONF_IMP,
+    CONF_VOC,
+    CONF_ISC,
+    CONF_PANEL_COUNT,
+    CONF_PANEL_CONFIGURATION,
+    CONF_BATTERY_POWER,
+    CONF_BATTERY_POWER_REVERSED,
+    CONF_MIN_INVERTER_VOLTAGE,
+    CONF_DEFAULT_MIN_START_W,
+    CONF_HYSTERESIS_W,
+    
+    CONF_DEVICE_ID,
+    CONF_DEVICE_NAME,
+    CONF_DEVICE_ENTITY,
+    CONF_DEVICE_PRIORITY,
+    CONF_DEVICE_TYPE,
+    CONF_AUTO_CONTROL_ENABLED,
+    CONF_MIN_EXPECTED_W,
+    CONF_MAX_EXPECTED_W,
+    CONF_DEBOUNCE_TIME,
+    CONF_SCHEDULE_ENABLED,
+    
+    PANEL_CONFIG_SERIES,
+)
+
+MOCK_CONFIG = {
+    CONF_PV_POWER: "sensor.test_pv_power",
+    CONF_PV_VOLTAGE: "sensor.test_pv_voltage",
+    CONF_BATTERY_POWER: "sensor.test_battery_power",
+    # CONF_CONSUMPTION: "sensor.test_consumption",
+    CONF_VMP: 30.0,
+    CONF_IMP: 8.0,
+    CONF_VOC: 36.0,
+    CONF_ISC: 8.5,
+    CONF_PANEL_COUNT: 1,
+    CONF_PANEL_CONFIGURATION: PANEL_CONFIG_SERIES,
+    CONF_BATTERY_POWER_REVERSED: False,
+    CONF_MIN_INVERTER_VOLTAGE: 10.0,
+    CONF_DEFAULT_MIN_START_W: 0,
+    CONF_HYSTERESIS_W: 5.0,
+}
+
+MOCK_DEVICE = {
+    CONF_DEVICE_ID: "test_device_1",
+    CONF_DEVICE_NAME: "Test Device 1",
+    CONF_DEVICE_ENTITY: "switch.switch_1",
+    CONF_DEVICE_TYPE: "standard",
+    CONF_DEVICE_PRIORITY: 50,
+    CONF_MIN_EXPECTED_W: 10,
+    CONF_MAX_EXPECTED_W: 100,
+    CONF_DEBOUNCE_TIME: 30,
+    CONF_AUTO_CONTROL_ENABLED: True,
+    CONF_SCHEDULE_ENABLED: False,
+}
+
+MOCK_DEVICES = [
+    {
+        **MOCK_DEVICE
+    }
+]
+
+
 MOCK_CONFIG_WITH_DEVICES = {
-    "pv_power": "sensor.pv_power",
-    "pv_voltage": "sensor.pv_voltage",
-    "consumption": "sensor.consumption",
-    "battery_power": "sensor.battery_power",
-    "battery_power_reversed": False,
-    "vmp": 30.0,
-    "imp": 8.0,
-    "voc": 36.0,
-    "isc": 9.0,
-    "panel_count": 1,
-    "panel_configuration": "series",
-    "devices": [
-        {
-            "device_id": "test_device_1",
-            "device_name": "Test Device 1",
-            "device_entity": "switch.test_switch_1",
-            "priority": 50,
-            "min_expected_w": 10,
-            "max_expected_w": 100,
-            "debounce_time": 30,
-            "auto_control_enabled": True,
-            "schedule_enabled": False,
-        }
-    ],
+    **MOCK_CONFIG,
+    "devices": MOCK_DEVICES,
 }

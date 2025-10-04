@@ -3,9 +3,9 @@ import logging
 
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-)
+
+from conftest import create_test_config_entry
+from tests.const import MOCK_CONFIG
 
 from custom_components.sun_allocator.const import (
     DOMAIN,
@@ -85,23 +85,21 @@ async def test_climate_device_turn_on(hass: HomeAssistant, caplog) -> None:
     await hass.async_block_till_done()
 
     # Create a mock config entry
-    config_entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_DEVICES: [
-                {
-                    CONF_DEVICE_ID: "test_climate_device",
-                    CONF_DEVICE_ENTITY: "climate.test_climate",
-                    CONF_DEVICE_TYPE: DEVICE_TYPE_CLIMATE,
-                    CONF_AUTO_CONTROL_ENABLED: True,
-                    CONF_MIN_EXPECTED_W: 100,
-                    CONF_MAX_EXPECTED_W: 1000,
-                    CONF_DEBOUNCE_TIME: 0,
-                }
-            ]
-        },
-        entry_id="test_entry_id",
-    )
+    config_data = {
+        **MOCK_CONFIG,
+        CONF_DEVICES: [
+            {
+                CONF_DEVICE_ID: "test_climate_device",
+                CONF_DEVICE_ENTITY: "climate.test_climate",
+                CONF_DEVICE_TYPE: DEVICE_TYPE_CLIMATE,
+                CONF_AUTO_CONTROL_ENABLED: True,
+                CONF_MIN_EXPECTED_W: 100,
+                CONF_MAX_EXPECTED_W: 1000,
+                CONF_DEBOUNCE_TIME: 0,
+            }
+        ],
+    }
+    config_entry = create_test_config_entry(config_data, entry_id="test_entry_id")
     config_entry.add_to_hass(hass)
 
     # Initialize hass.data structure

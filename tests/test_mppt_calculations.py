@@ -6,6 +6,7 @@ from custom_components.sun_allocator.core.solar_optimizer import (
     calculate_current_max_power,
     calculate_pmax,
 )
+from custom_components.sun_allocator.sensor.utils import calculate_excess_power_mppt
 from custom_components.sun_allocator.const import (
     PANEL_CONFIG_SERIES,
     PANEL_CONFIG_PARALLEL,
@@ -55,3 +56,92 @@ async def test_panel_configuration_calculations(
     pmax = calculate_pmax(vmp, imp, panel_count, panel_config)
     expected_pmax = vmp * imp * expected_multiplier
     assert abs(pmax - expected_pmax) < 0.1
+
+@pytest.mark.parametrize(
+    "scenario, inputs, expected_excess",
+    [
+        (
+            "Scenario 1: Standard operation, no reserve",
+            {
+                "current_max_power": 2500,
+                "pv_power": 1500,
+                "consumption": 900,
+                "battery_power": 500,
+                "configured_reserve": 0,
+            },
+            1000,
+        ),
+        (
+            "Scenario 2: Battery charging exceeds reserve",
+            {
+                "current_max_power": 2500,
+                "pv_power": 1500,
+                "consumption": 900,
+                "battery_power": 700,
+                "configured_reserve": 500,
+            },
+            1200,
+        ),
+        (
+            "Scenario 3a: Battery charging equals reserve",
+            {
+                "current_max_power": 2500,
+                "pv_power": 1500,
+                "consumption": 900,
+                "battery_power": 500,
+                "configured_reserve": 500,
+            },
+            1000,
+        ),
+        (
+            "Scenario 3b: Battery is full (not charging)",
+            {
+                "current_max_power": 2500,
+                "pv_power": 1500,
+                "consumption": 900,
+                "battery_power": 0,
+                "configured_reserve": 500,
+            },
+            1000,
+        ),
+        (
+            "No Consumption Sensor: Excess is just untapped power",
+            {
+                "current_max_power": 2500,
+                "pv_power": 1500,
+                "consumption": None,  # No sensor
+                "battery_power": 500,
+                "configured_reserve": 0,
+            },
+            1000,
+        ),
+        (
+            "Battery Discharging: No excess power available",
+            {
+                "current_max_power": 2500,
+                "pv_power": 500,
+                "consumption": 1000,
+                "battery_power": -500,  # Discharging
+                "configured_reserve": 0,
+            },
+            0,
+        ),
+        (
+            "High PV, Low Consumption: Untapped is the limit",
+            {
+                "current_max_power": 2500,
+                "pv_power": 2400, # Near max
+                "consumption": 100,
+                "battery_power": 100,
+                "configured_reserve": 0,
+            },
+            100, # min(untapped=100, real_excess=2300)
+        ),
+    ],
+)
+async def test_excess_power_scenarios(scenario, inputs, expected_excess):
+    """Test calculate_excess_power_mppt with various real-world scenarios."""
+    excess = calculate_excess_power_mppt(**inputs)
+    assert excess == pytest.approx(
+        expected_excess
+    ), f"Failed scenario: {scenario}"

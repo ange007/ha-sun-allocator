@@ -2,10 +2,9 @@
 
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from conftest import create_test_config_entry
 from custom_components.sun_allocator.const import (
-    DOMAIN,
     CONF_PANEL_CONFIGURATION,
     PANEL_CONFIG_SERIES,
     PANEL_CONFIG_PARALLEL_SERIES,
@@ -57,19 +56,14 @@ async def _test_sensor_configuration_update(hass: HomeAssistant, sensor_suffix: 
         CONF_PANEL_CONFIGURATION: PANEL_CONFIG_SERIES,
     }
 
-    config_entry = MockConfigEntry(
-        domain=DOMAIN,
-        data=initial_data,
-        entry_id="test_entry_id",
-    )
-    config_entry.add_to_hass(hass)
+    config_entry = create_test_config_entry(initial_data)
+    await hass.config_entries.async_add(config_entry)
+    await hass.async_block_till_done()
 
     # Create dummy sensors
     hass.states.async_set("sensor.test_pv_power", "100")
     hass.states.async_set("sensor.test_pv_voltage", "35")
-
-    await hass.config_entries.async_setup(config_entry.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done() # Ensure dummy sensors are processed
 
     # Check initial state
     sensor_entity_id = f"sensor.sun_allocator_{config_entry.entry_id}_{sensor_suffix}"

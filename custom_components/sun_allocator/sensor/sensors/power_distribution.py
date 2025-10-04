@@ -112,6 +112,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                 )
                 if entity_id:
                     all_device_ids.append(entity_id)
+
             # If no devices in config, fallback to device_status keys
             if not all_devices_info:
                 for dev_id in device_status:
@@ -126,6 +127,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                         }
                     )
                     all_device_ids.append(device_status[dev_id].get(CONF_DEVICE_ENTITY))
+
             not_found_entities = [
                 entity_id
                 for entity_id in all_device_ids

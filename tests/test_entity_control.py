@@ -6,10 +6,10 @@ import logging
 
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from conftest import create_test_config_entry
 
 from custom_components.sun_allocator.const import (
-    DOMAIN,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_VMP,
@@ -67,30 +67,27 @@ async def test_simple_power_allocation(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     # A more complete config entry
-    config_entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_PV_POWER: "sensor.test_pv_power",
-            CONF_PV_VOLTAGE: "sensor.test_pv_voltage",
-            CONF_VMP: 30.0,
-            CONF_IMP: 10.0,
-            CONF_PANEL_COUNT: 1,
-            CONF_MIN_INVERTER_VOLTAGE: 10.0,
-            CONF_DEFAULT_MIN_START_W: 0,
-            CONF_HYSTERESIS_W: 20,
-            CONF_DEVICES: [
-                {
-                    CONF_DEVICE_ID: "test_device",
-                    CONF_DEVICE_ENTITY: "switch.test_switch",
-                    CONF_DEVICE_TYPE: DEVICE_TYPE_STANDARD,
-                    CONF_AUTO_CONTROL_ENABLED: True,
-                    CONF_MIN_EXPECTED_W: 50,
-                    CONF_DEBOUNCE_TIME: 0,
-                }
-            ],
-        },
-        entry_id="test_entry_id",
-    )
+    config_data = {
+        CONF_PV_POWER: "sensor.test_pv_power",
+        CONF_PV_VOLTAGE: "sensor.test_pv_voltage",
+        CONF_VMP: 30.0,
+        CONF_IMP: 10.0,
+        CONF_PANEL_COUNT: 1,
+        CONF_MIN_INVERTER_VOLTAGE: 10.0,
+        CONF_DEFAULT_MIN_START_W: 0,
+        CONF_HYSTERESIS_W: 20,
+        CONF_DEVICES: [
+            {
+                CONF_DEVICE_ID: "test_device",
+                CONF_DEVICE_ENTITY: "switch.test_switch",
+                CONF_DEVICE_TYPE: DEVICE_TYPE_STANDARD,
+                CONF_AUTO_CONTROL_ENABLED: True,
+                CONF_MIN_EXPECTED_W: 50,
+                CONF_DEBOUNCE_TIME: 0,
+            }
+        ],
+    }
+    config_entry = create_test_config_entry(extra_data=config_data, entry_id="test_entry_id")
     config_entry.add_to_hass(hass)
 
     # Create mock entities for sensors

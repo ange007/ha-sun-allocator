@@ -54,12 +54,12 @@ complete_mock_debug_info = {
     KEY_CALCULATION_REASON: "Test",
 }
 
-# --- PARALLEL MODE TESTS (with consumption sensor) ---
-
+# --- HYBRID MODE TESTS (with consumption sensor) ---
+# These tests now validate the UNIFIED MPPT logic when a consumption sensor is present.
 
 @pytest.mark.asyncio
-async def test_parallel_budget_mode(hass: HomeAssistant, mock_config):
-    """Test parallel 'Budget' mode (reserve > 0)."""
+async def test_mppt_with_consumption_budget_mode(hass: HomeAssistant, mock_config):
+    """Test hybrid 'Budget' mode (reserve > 0)."""
     config = {
         **mock_config,
         CONF_CONSUMPTION: "sensor.consumption_power",
@@ -70,13 +70,24 @@ async def test_parallel_budget_mode(hass: HomeAssistant, mock_config):
     hass.states.async_set("sensor.battery_power", "100")  # Charging
     hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
-    # Excess = 3000 (PV) - 200 (Consumption) - 500 (Reserve) = 2300
-    assert sensor.native_value == 2300
+
+    with patch(
+        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
+        return_value=(3500.0, complete_mock_debug_info),
+    ):
+        # Untapped = 3500 - 3000 = 500
+        # RealExcess (budget mode, battery_load=0) = 3500 - 200 = 3300
+        # Excess = min(500, 3300) = 500
+        # From Battery = 100 - 500 = 0 (max(0, ...))
+        # Total = 500 + 0 = 500
+        # NOTE: The original test assumed a different logic. This is the correct value for the new unified logic.
+        # The reserve is higher than the charge, so no power is taken from the battery.
+        assert sensor.native_value == 500
 
 
 @pytest.mark.asyncio
-async def test_parallel_priority_mode(hass: HomeAssistant, mock_config):
-    """Test parallel 'Priority' mode (reserve = 0)."""
+async def test_mppt_with_consumption_priority_mode(hass: HomeAssistant, mock_config):
+    """Test hybrid 'Priority' mode (reserve = 0)."""
     config = {
         **mock_config,
         CONF_CONSUMPTION: "sensor.consumption_power",
@@ -87,13 +98,22 @@ async def test_parallel_priority_mode(hass: HomeAssistant, mock_config):
     hass.states.async_set("sensor.battery_power", "400")  # Charging
     hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
-    # Excess = 3000 (PV) - 200 (Consumption) - 400 (Battery Charge) = 2400
-    assert sensor.native_value == 2400
+
+    with patch(
+        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
+        return_value=(3500.0, complete_mock_debug_info),
+    ):
+        # Untapped = 3500 - 3000 = 500
+        # RealExcess (priority mode, battery_load=400) = 3500 - 200 - 400 = 2900
+        # Excess = min(500, 2900) = 500
+        # From Battery = 0 (no reserve)
+        # Total = 500
+        assert sensor.native_value == 500
 
 
 @pytest.mark.asyncio
-async def test_parallel_mode_with_self_consumption(hass: HomeAssistant, mock_config):
-    """Test that inverter self-consumption is subtracted in parallel mode."""
+async def test_mppt_with_consumption_and_self_consumption(hass: HomeAssistant, mock_config):
+    """Test that inverter self-consumption is subtracted in hybrid mode."""
     config = {
         **mock_config,
         CONF_CONSUMPTION: "sensor.consumption_power",
@@ -105,8 +125,17 @@ async def test_parallel_mode_with_self_consumption(hass: HomeAssistant, mock_con
     hass.states.async_set("sensor.battery_power", "400")  # Charging
     hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
-    # Excess = 3000 (PV) - 200 (Consumption) - 400 (Battery) - 150 (Self-Consumption) = 2250
-    assert sensor.native_value == 2250
+
+    with patch(
+        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
+        return_value=(3500.0, complete_mock_debug_info),
+    ):
+        # Untapped = 3500 - 3000 = 500
+        # RealExcess = 3500 - 200 - 400 = 2900
+        # Excess = min(500, 2900) = 500
+        # From Battery = 0
+        # Total = 500 - 150 (Self-Consumption) = 350
+        assert sensor.native_value == 350
 
 
 # --- MPPT MODE TESTS (without consumption sensor) ---

@@ -91,12 +91,6 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
 
         # Update attributes with panel information
         self._update_attributes(
-            pv_power=0.0,  # Not applicable for max power sensor
-            pv_voltage=0.0,  # Not applicable for max power sensor
-            consumption=0.0,  # Not applicable for max power sensor
-            excess_possible=False,  # Not applicable for max power sensor
-            energy_harvesting_possible=True,  # Assume possible at max power
-            min_system_voltage=0.0,  # Not applicable for max power sensor
             vmp=vmp,
             imp=imp,
             voc=panel_params[CONF_VOC],
@@ -104,8 +98,6 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             panel_count=panel_params[CONF_PANEL_COUNT],
             panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
             pmax=pmax,
-            current_max_power=pmax,  # At ideal conditions, current max = theoretical max
-            usage_percent=0.0,  # Not applicable for max power sensor
             temperature_compensated=temp_compensation is not None,
         )
 

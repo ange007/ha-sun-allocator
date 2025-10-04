@@ -87,12 +87,6 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
         self._update_attributes(
             pv_power=pv_power,
             pv_voltage=pv_voltage,
-            consumption=0.0,  # Not used for usage calculation
-            excess_possible=pv_voltage > panel_params[CONF_VMP]
-            if pv_voltage > 0
-            else False,
-            energy_harvesting_possible=True,  # Assume possible if generating power
-            min_system_voltage=0.0,  # Not relevant for usage calculation
             vmp=vmp,
             imp=imp,
             voc=panel_params[CONF_VOC],
@@ -100,8 +94,6 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             panel_count=panel_params[CONF_PANEL_COUNT],
             panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
             pmax=pmax,
-            current_max_power=0.0,  # Not calculated here
-            usage_percent=usage,
             temperature_compensated=temp_compensation is not None,
         )
 

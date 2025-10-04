@@ -212,6 +212,7 @@ async def _initial_pass_with_retry(
                 entry_data["watchdog_last_seen"] = dt_util.utcnow()
                 entry_data["watchdog_alerted"] = False
                 await process_excess_power(hass, config_entry, excess_power)
+                
                 log_info(
                     "Initial pass successful for %s: %sW",
                     initial_state.entity_id,

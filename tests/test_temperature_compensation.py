@@ -2,7 +2,6 @@
 
 import pytest
 
-# Import the correct function from the actual codebase
 from custom_components.sun_allocator.core.solar_optimizer import (
     calculate_current_max_power,
 )
