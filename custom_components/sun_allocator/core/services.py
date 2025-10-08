@@ -21,12 +21,14 @@ def _find_config_entry_for_device(hass, device_id):
     for entry_id, entry_data in domain_data.items():
         if entry_id.startswith("_"):  # Skip internal keys like _entry_count
             continue
+
         config = entry_data.get("config", {})
         devices = config.get(CONF_DEVICES, [])
         for device in devices:
             if device.get(CONF_DEVICE_ID) == device_id:
                 # Return the config entry data
                 return config
+
     return None
 
 
@@ -51,9 +53,7 @@ async def handle_set_relay_mode(hass, call):
             if entity_id:
                 await set_mode_for_entity(hass, entity_id, mode)
             else:
-                log_error(
-                    f"Device {device.get(CONF_DEVICE_NAME)} has no mode select entity configured"
-                )
+                log_error(f"Device {device.get(CONF_DEVICE_NAME)} has no mode select entity configured")
         else:
             log_error(f"Device with ID {device_id} not found")
     else:
@@ -62,6 +62,7 @@ async def handle_set_relay_mode(hass, call):
         for entry_id, entry_data in domain_data.items():
             if entry_id.startswith("_"):  # Skip internal keys
                 continue
+
             config = entry_data.get("config", {})
             devices = config.get(CONF_DEVICES, [])
             for device in devices:
@@ -91,9 +92,7 @@ async def handle_set_relay_power(hass, call):
             if entity_id:
                 await set_power_for_entity(hass, entity_id, power_percent)
             else:
-                log_error(
-                    f"Device {device.get(CONF_DEVICE_NAME)} has no entity configured"
-                )
+                log_error(f"Device {device.get(CONF_DEVICE_NAME)} has no entity configured")
         else:
             log_error(f"Device with ID {device_id} not found")
     else:
@@ -102,6 +101,7 @@ async def handle_set_relay_power(hass, call):
         for entry_id, entry_data in domain_data.items():
             if entry_id.startswith("_"):  # Skip internal keys
                 continue
+
             config = entry_data.get("config", {})
             devices = config.get(CONF_DEVICES, [])
             for device in devices:

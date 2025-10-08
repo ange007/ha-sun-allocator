@@ -49,6 +49,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             "diagnostics": None,
         }
 
+
     def __init__(self, hass: HomeAssistant, entry_id: str, entry_index: int):
         """Initialize the sensor."""
         self._hass = hass
@@ -57,6 +58,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
         self._state = 0.0
         self._attr_extra_state_attributes = self._get_default_attributes()
 
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
@@ -64,6 +66,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             identifiers={(DOMAIN, self._entry_id)},
             manufacturer="Sun Allocator",
         )
+
 
     @property
     def native_value(self):
@@ -226,6 +229,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             journal_event("power_distribution_error", {"error": str(exc)})
             return self._state
 
+
     async def async_added_to_hass(self):
         """Handle entity which will be added."""
         await super().async_added_to_hass()
@@ -241,6 +245,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
         )
         # Initial state update
         self.async_schedule_update_ha_state(True)
+
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up when entity is removed."""

@@ -57,9 +57,11 @@ async def restore_entity_state(hass, config_entry, entity_id):
     for device in devices:
         relay_entity = device.get(CONF_DEVICE_ENTITY)
         mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
+
         if relay_entity == entity_id:
             percent = device.get("last_percent")
             is_on = device.get("_restore_on")
+            
             if percent is not None:
                 log_info(f"[Restore] Setting percent {percent} for {entity_id}")
                 await set_power_for_entity(hass, entity_id, percent)
@@ -68,6 +70,7 @@ async def restore_entity_state(hass, config_entry, entity_id):
                 await set_power_for_entity(hass, entity_id, 100 if is_on else 0)
             else:
                 log_info(f"[Restore] No saved state for {entity_id}")
+
         if mode_select_entity == entity_id:
             last_mode = device.get("last_mode")
             if last_mode:

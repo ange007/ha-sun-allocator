@@ -1,9 +1,8 @@
 """Tests for the Sun Allocator watchdog functionality."""
 
-from datetime import timedelta
-
 import pytest
 from unittest.mock import AsyncMock, patch
+from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
@@ -14,19 +13,18 @@ from conftest import create_test_config_entry
 from custom_components.sun_allocator.const import (
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
-    CONF_VMP,
-    CONF_IMP,
+    CONF_PANEL_VMP,
+    CONF_PANEL_IMP,
     CONF_PANEL_COUNT,
     CONF_DEVICES,
     CONF_DEVICE_ID,
     CONF_DEVICE_ENTITY,
     CONF_DEVICE_TYPE,
     CONF_AUTO_CONTROL_ENABLED,
-    CONF_MIN_EXPECTED_W,
-    CONF_DEBOUNCE_TIME,
+    CONF_DEVICE_MIN_EXPECTED_W,
+    CONF_DEVICE_DEBOUNCE_TIME,
     CONF_MIN_INVERTER_VOLTAGE,
     DEVICE_TYPE_STANDARD,
-    CONF_DEFAULT_MIN_START_W,
     CONF_HYSTERESIS_W,
     SENSOR_ID_PREFIX,
     SENSOR_EXCESS_SUFFIX,
@@ -54,11 +52,10 @@ async def setup_watchdog_test(hass: HomeAssistant):
     config_data = {
         CONF_PV_POWER: "sensor.test_pv_power",
         CONF_PV_VOLTAGE: "sensor.test_pv_voltage",
-        CONF_VMP: 30.0,
-        CONF_IMP: 10.0,
+        CONF_PANEL_VMP: 30.0,
+        CONF_PANEL_IMP: 10.0,
         CONF_PANEL_COUNT: 1,
         CONF_MIN_INVERTER_VOLTAGE: 10.0,
-        CONF_DEFAULT_MIN_START_W: 0,
         CONF_HYSTERESIS_W: 20,
         CONF_DEVICES: [
             {
@@ -66,8 +63,8 @@ async def setup_watchdog_test(hass: HomeAssistant):
                 CONF_DEVICE_ENTITY: "switch.test_switch",
                 CONF_DEVICE_TYPE: DEVICE_TYPE_STANDARD,
                 CONF_AUTO_CONTROL_ENABLED: True,
-                CONF_MIN_EXPECTED_W: 50,
-                CONF_DEBOUNCE_TIME: 0,
+                CONF_DEVICE_MIN_EXPECTED_W: 50,
+                CONF_DEVICE_DEBOUNCE_TIME: 0,
             }
         ],
     }

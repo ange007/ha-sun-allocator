@@ -40,6 +40,7 @@ class SunAllocatorDevicePowerSensor(SensorEntity):
         self._attr_unique_id = f"{entry_id}_{self._device_id}"
         self._state = 0.0
 
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
@@ -49,6 +50,7 @@ class SunAllocatorDevicePowerSensor(SensorEntity):
             manufacturer="Sun Allocator",
             via_device=(DOMAIN, self._entry_id),
         )
+
 
     @callback
     def _update_state(self):
@@ -78,6 +80,7 @@ class SunAllocatorDevicePowerSensor(SensorEntity):
             "device_id": self._device_id,
         }
         self.async_write_ha_state()
+
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""

@@ -10,9 +10,9 @@ from .solar_config_form import build_solar_config_schema
 from ..const import (
     STEP_USER,
     CONF_CONSUMPTION,
-    CONF_VMP,
-    CONF_IMP,
-    CONF_VOC,
+    CONF_PANEL_VMP,
+    CONF_PANEL_IMP,
+    CONF_PANEL_VOC,
     CONF_PANEL_COUNT,
     CONF_BATTERY_POWER,
     NONE_OPTION,
@@ -27,20 +27,20 @@ class SolarConfigMixin:
         errors = {}
         
         if (
-            user_input.get(CONF_VOC) is not None
-            and user_input.get(CONF_VMP) is not None
+            user_input.get(CONF_PANEL_VOC) is not None
+            and user_input.get(CONF_PANEL_VMP) is not None
         ):
             try:
-                voc = float(user_input.get(CONF_VOC))
-                vmp = float(user_input.get(CONF_VMP))
+                voc = float(user_input.get(CONF_PANEL_VOC))
+                vmp = float(user_input.get(CONF_PANEL_VMP))
                 if voc == vmp:
-                    errors[CONF_VOC] = "voc_equal_to_vmp"
+                    errors[CONF_PANEL_VOC] = "voc_equal_to_vmp"
             except (ValueError, TypeError) as exc:
                 errors["base"] = "invalid_values"
                 log_error(
                     "[SolarConfigMixin] Invalid Voc/Vmp: VOC=%s, VMP=%s",
-                    user_input.get(CONF_VOC),
-                    user_input.get(CONF_VMP),
+                    user_input.get(CONF_PANEL_VOC),
+                    user_input.get(CONF_PANEL_VMP),
                 )
                 log_exception("solar_config_voc_vmp", exc)
                 
@@ -57,23 +57,24 @@ class SolarConfigMixin:
             log_exception("solar_config_panel_count", exc)
             
         try:
-            vmp = float(user_input.get(CONF_VMP, 0))
+            vmp = float(user_input.get(CONF_PANEL_VMP, 0))
             if vmp <= 0:
-                errors[CONF_VMP] = "invalid_vmp"
+                errors[CONF_PANEL_VMP] = "invalid_vmp"
         except (ValueError, TypeError) as exc:
-            errors[CONF_VMP] = "invalid_vmp"
-            log_error("[SolarConfigMixin] Invalid Vmp: %s", user_input.get(CONF_VMP))
+            errors[CONF_PANEL_VMP] = "invalid_vmp"
+            log_error("[SolarConfigMixin] Invalid Vmp: %s", user_input.get(CONF_PANEL_VMP))
             log_exception("solar_config_vmp", exc)
             
         try:
-            imp = float(user_input.get(CONF_IMP, 0))
+            imp = float(user_input.get(CONF_PANEL_IMP, 0))
             if imp <= 0:
-                errors[CONF_IMP] = "invalid_imp"
+                errors[CONF_PANEL_IMP] = "invalid_imp"
         except (ValueError, TypeError) as exc:
-            errors[CONF_IMP] = "invalid_imp"
-            log_error("[SolarConfigMixin] Invalid Imp: %s", user_input.get(CONF_IMP))
+            errors[CONF_PANEL_IMP] = "invalid_imp"
+            log_error("[SolarConfigMixin] Invalid Imp: %s", user_input.get(CONF_PANEL_IMP))
             log_exception("solar_config_imp", exc)
         return errors
+
 
     def _process_solar_config_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process and clean solar configuration input."""
@@ -83,11 +84,13 @@ class SolarConfigMixin:
 
         return user_input
 
+
     def _get_solar_config_schema(
         self, defaults: Optional[Dict[str, Any]] = None
     ) -> vol.Schema:
         """Get the schema for solar panel configuration using solar_config_form.py."""
         return build_solar_config_schema(defaults)
+
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step - solar panel configuration."""

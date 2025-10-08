@@ -23,8 +23,8 @@ from ...const import (
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_BATTERY_POWER,
-    CONF_VMP,
-    CONF_IMP,
+    CONF_PANEL_VMP,
+    CONF_PANEL_IMP,
 )
 
 
@@ -72,8 +72,8 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
 
         # Guard clause: Panel parameters are essential for MPPT mode
         has_panel_params = (
-            panel_params.get(CONF_VMP) is not None
-            and panel_params.get(CONF_IMP) is not None
+            panel_params.get(CONF_PANEL_VMP) is not None
+            and panel_params.get(CONF_PANEL_IMP) is not None
         )
         if not has_panel_params:
             log_error(
@@ -111,6 +111,7 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             battery_power_reversed=battery_power_reversed,
             configured_reserve=configured_reserve,
             inverter_self_consumption=inverter_self_consumption,
+            **debug_info,
         )
 
         # Update all attributes consistently

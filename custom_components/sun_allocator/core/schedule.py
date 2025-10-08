@@ -3,7 +3,7 @@
 import homeassistant.util.dt as dt_util
 
 from ..const import (
-    CONF_SCHEDULE_ENABLED,
+    CONF_DEVICE_SCHEDULE_ENABLED,
     CONF_START_TIME,
     CONF_END_TIME,
     CONF_DAYS_OF_WEEK,
@@ -14,7 +14,7 @@ from ..const import (
 def is_device_in_schedule(device, now=None):
     """Check if the device is within its scheduled time."""
     # If scheduling is not enabled, device is always active
-    if not device.get(CONF_SCHEDULE_ENABLED, False):
+    if not device.get(CONF_DEVICE_SCHEDULE_ENABLED, False):
         return True
 
     # Get current time and day if not provided
@@ -43,5 +43,6 @@ def is_device_in_schedule(device, now=None):
     if end_time < start_time:
         # Active from start_time to midnight or from midnight to end_time
         return current_time >= start_time or current_time <= end_time
+
     # Active from start_time to end_time
     return start_time <= current_time <= end_time

@@ -5,7 +5,7 @@ from datetime import time, datetime
 
 from custom_components.sun_allocator.core.schedule import is_device_in_schedule
 from custom_components.sun_allocator.const import (
-    CONF_SCHEDULE_ENABLED,
+    CONF_DEVICE_SCHEDULE_ENABLED,
     CONF_START_TIME,
     CONF_END_TIME,
     CONF_DAYS_OF_WEEK,
@@ -38,7 +38,7 @@ from custom_components.sun_allocator.const import (
 async def test_schedule_time_ranges(current_time, start_time, end_time, days, expected):
     """Test various time range scenarios."""
     device = {
-        CONF_SCHEDULE_ENABLED: True,
+        CONF_DEVICE_SCHEDULE_ENABLED: True,
         CONF_START_TIME: start_time,
         CONF_END_TIME: end_time,
         CONF_DAYS_OF_WEEK: days,
@@ -52,6 +52,6 @@ async def test_schedule_time_ranges(current_time, start_time, end_time, days, ex
 
 async def test_schedule_disabled():
     """Test that disabled schedule always returns True."""
-    device = {CONF_SCHEDULE_ENABLED: False}
+    device = {CONF_DEVICE_SCHEDULE_ENABLED: False}
     result = is_device_in_schedule(device)
     assert result is True

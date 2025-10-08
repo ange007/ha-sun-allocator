@@ -12,10 +12,10 @@ from ...core.logger import log_debug
 from ...const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
-    CONF_VMP,
-    CONF_IMP,
-    CONF_VOC,
-    CONF_ISC,
+    CONF_PANEL_VMP,
+    CONF_PANEL_IMP,
+    CONF_PANEL_VOC,
+    CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
 )
@@ -42,6 +42,7 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             unit_of_measurement=UnitOfPower.WATT,
         )
 
+
     def _get_entity_ids_to_listen(self) -> list:
         """Override to listen only to temperature sensor if temperature compensation is enabled."""
         entity_ids = []
@@ -55,6 +56,7 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
 
         return entity_ids
 
+
     def _calculate_value(
         self,
         sensor_values: Dict[str, Any],
@@ -63,8 +65,8 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
         temp_compensation: Optional[Dict[str, float]],
     ) -> float:
         """Calculate maximum theoretical power."""
-        vmp = panel_params[CONF_VMP]
-        imp = panel_params[CONF_IMP]
+        vmp = panel_params[CONF_PANEL_VMP]
+        imp = panel_params[CONF_PANEL_IMP]
 
         # Apply temperature compensation if provided
         if temp_compensation:
@@ -93,8 +95,8 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
         self._update_attributes(
             vmp=vmp,
             imp=imp,
-            voc=panel_params[CONF_VOC],
-            isc=panel_params[CONF_ISC],
+            voc=panel_params[CONF_PANEL_VOC],
+            isc=panel_params[CONF_PANEL_ISC],
             panel_count=panel_params[CONF_PANEL_COUNT],
             panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
             pmax=pmax,

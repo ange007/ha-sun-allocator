@@ -27,6 +27,7 @@ async def persist_last_mode(hass, config_entry, entity_id, mode):
 
     if mode not in VALID_MODES:
         return
+
     data = dict(config_entry.data)
     devs = list(data.get(CONF_DEVICES, []))
     changed = False
@@ -38,6 +39,7 @@ async def persist_last_mode(hass, config_entry, entity_id, mode):
                 devs[i] = nd
                 changed = True
             break
+
     if changed:
         data[CONF_DEVICES] = devs
         log_debug("--- MODE SELECT ---: Saving %d devices. Data: %s", len(devs), data)
@@ -51,13 +53,16 @@ async def mode_select_state_listener(
     entity_id = event.data.get("entity_id")
     if entity_id not in select_entity_ids:
         return
+
     new_state = event.data.get("new_state")
     old_state = event.data.get("old_state")
     if not new_state:
         return
+
     if new_state.state in VALID_MODES:
         desired_modes[entity_id] = new_state.state
         await persist_last_mode(hass, config_entry, entity_id, new_state.state)
+
     was_unavailable = (old_state is None) or (
         old_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
     )

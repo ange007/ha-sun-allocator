@@ -15,10 +15,10 @@ from ...const import (
     CONF_MIN_INVERTER_VOLTAGE,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
-    CONF_VMP,
-    CONF_IMP,
-    CONF_VOC,
-    CONF_ISC,
+    CONF_PANEL_VMP,
+    CONF_PANEL_IMP,
+    CONF_PANEL_VOC,
+    CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
     KEY_ENERGY_HARVESTING_POSSIBLE,
@@ -48,6 +48,7 @@ class SunAllocatorCurrentMaxPowerSensor(BaseSunAllocatorSensor):
             unit_of_measurement=UnitOfPower.WATT,
         )
 
+
     def _calculate_value(
         self,
         sensor_values: Dict[str, Any],
@@ -63,10 +64,10 @@ class SunAllocatorCurrentMaxPowerSensor(BaseSunAllocatorSensor):
         current_max_power, debug_info = calculate_current_max_power(
             pv_voltage=pv_voltage,
             pv_power=pv_power,
-            vmp=panel_params[CONF_VMP],
-            imp=panel_params[CONF_IMP],
-            voc=panel_params[CONF_VOC],
-            isc=panel_params[CONF_ISC],
+            vmp=panel_params[CONF_PANEL_VMP],
+            imp=panel_params[CONF_PANEL_IMP],
+            voc=panel_params[CONF_PANEL_VOC],
+            isc=panel_params[CONF_PANEL_ISC],
             panel_count=panel_params[CONF_PANEL_COUNT],
             panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
             curve_factor_k=mppt_config[CONF_CURVE_FACTOR_K],

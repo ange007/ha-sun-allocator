@@ -11,54 +11,102 @@ RELAY_MODE_OFF = "Off"
 RELAY_MODE_ON = "On"
 RELAY_MODE_PROPORTIONAL = "Proportional"
 
+# --- Configuration Keys ---
+# These constants are used as keys in configuration dictionaries.
+
 # Solar panel configuration keys
 CONF_PV_POWER = "pv_power"
 CONF_PV_VOLTAGE = "pv_voltage"
 CONF_CONSUMPTION = "consumption"
 CONF_BATTERY_POWER = "battery_power"
 CONF_BATTERY_POWER_REVERSED = "battery_power_reversed"
-CONF_VMP = "vmp"
-CONF_IMP = "imp"
-CONF_VOC = "voc"
-CONF_ISC = "isc"
+CONF_PANEL_VMP = "vmp"
+CONF_PANEL_IMP = "imp"
+CONF_PANEL_VOC = "voc"
+CONF_PANEL_ISC = "isc"
 CONF_PANEL_COUNT = "panel_count"
 CONF_PANEL_CONFIGURATION = "panel_configuration"
+
+# Device configuration keys
+CONF_DEVICES = "devices"
+CONF_DEVICE_ID = "device_id"
+CONF_DEVICE_NAME = "device_name"
+CONF_DEVICE_ENTITY = "device_entity"
+CONF_ESPHOME_MODE_SELECT_ENTITY = "esphome_mode_select_entity"
+CONF_DEVICE_ENTITY_FRIENDLY_NAME = "device_entity_friendly_name"
+CONF_AUTO_CONTROL_ENABLED = "auto_control_enabled"
+CONF_DEVICE_MIN_EXCESS_POWER = "min_excess_power"
+CONF_DEVICE_MIN_ON_TIME = "min_on_time"
+CONF_DEVICE_TYPE = "device_type"
+CONF_DEVICE_MIN_EXPECTED_W = "min_expected_w"
+CONF_DEVICE_MAX_EXPECTED_W = "max_expected_w"
+CONF_DEVICE_DEBOUNCE_TIME = "debounce_time"
+CONF_DEVICE_PRIORITY = "priority"
+
+# Scheduling constants
+CONF_DEVICE_SCHEDULE_ENABLED = "schedule_enabled"
+CONF_START_TIME = "start_time"
+CONF_END_TIME = "end_time"
+CONF_DAYS_OF_WEEK = "days_of_week"
+
+# Advanced settings constants
+CONF_ADVANCED_SETTINGS_ENABLED = "advanced_settings_enabled"
+CONF_RESERVE_BATTERY_POWER = "reserve_battery_power"
+CONF_INVERTER_SELF_CONSUMPTION = "inverter_self_consumption"
+CONF_DEVICE_ALLOCATION_STRATEGY = "device_allocation_strategy"
+CONF_MIN_INVERTER_VOLTAGE = "min_inverter_voltage"
+CONF_RAMP_UP_STEP = "ramp_up_step"
+CONF_RAMP_DOWN_STEP = "ramp_down_step"
+CONF_RAMP_DEADBAND = "ramp_deadband"
+CONF_HYSTERESIS_W = "hysteresis_w"
+CONF_CURVE_FACTOR_K = "curve_factor_k"
+CONF_EFFICIENCY_CORRECTION_FACTOR = "efficiency_correction_factor"
+
+# Temperature compensation constants
+CONF_TEMPERATURE_COMPENSATION_ENABLED = "temperature_compensation_enabled"
+CONF_TEMPERATURE_SENSOR = "temperature_sensor"
+CONF_TEMP_COEFFICIENT_VOC = "temp_coefficient_voc"
+CONF_TEMP_COEFFICIENT_PMAX = "temp_coefficient_pmax"
+
+# --- Default & Internal Values ---
+# These constants define default values for settings and internal algorithm parameters.
+
+DEFAULT_DEBOUNCE_TIME = 15
+DEFAULT_HYSTERESIS_W = 40.0
+
+# Internal MPPT algorithm constants (not user-configurable)
+INTERNAL_CURVE_FACTOR_K = 0.2
+INTERNAL_EFFICIENCY_CORRECTION_FACTOR = 1.05
+
+# Proportional strategy options
+STRATEGY_FILL_ONE_BY_ONE = "fill"
+STRATEGY_DISTRIBUTE_EVENLY = "distribute"
+
+# Other internal constants
+PASSIVE_CHARGING_THRESHOLD_W = 50
+MAX_BRIGHTNESS = 255
+MIN_BRIGHTNESS = 0
+MAX_PERCENTAGE = 100
+MIN_PERCENTAGE = 0
+
+# --- Static Options & Keys ---
+# These constants are for lists of options, dictionary keys, etc.
 
 # Dictionary keys for temperature compensation
 KEY_TEMP_DIFF = "temp_diff"
 KEY_VOC_COEF = "voc_coef"
 KEY_PMAX_COEF = "pmax_coef"
 
-# Panel configuration options
-PANEL_CONFIG_SERIES = "series"
-PANEL_CONFIG_PARALLEL = "parallel"
-PANEL_CONFIG_PARALLEL_SERIES = "parallel-series"
-
-# Device configuration keys
-CONF_DEVICE_ENTITY = "device_entity"
-CONF_ESPHOME_MODE_SELECT_ENTITY = "esphome_mode_select_entity"
-CONF_DEVICE_ENTITY_FRIENDLY_NAME = "device_entity_friendly_name"
-CONF_AUTO_CONTROL_ENABLED = "auto_control_enabled"
-CONF_MIN_EXCESS_POWER = "min_excess_power"
-
-# Device type constants
-CONF_DEVICE_TYPE = "device_type"
+# Device type options
 DEVICE_TYPE_NONE = "none"
 DEVICE_TYPE_STANDARD = "standard"
 DEVICE_TYPE_CUSTOM = "custom"
 DEVICE_TYPE_CLIMATE = "climate"
 
-# Per-device expected load limits
-CONF_MIN_EXPECTED_W = "min_expected_w"
-CONF_MAX_EXPECTED_W = "max_expected_w"
-CONF_DEBOUNCE_TIME = "debounce_time"
-DEFAULT_DEBOUNCE_TIME = 15
-
-# Scheduling constants
-CONF_SCHEDULE_ENABLED = "schedule_enabled"
-CONF_START_TIME = "start_time"
-CONF_END_TIME = "end_time"
-CONF_DAYS_OF_WEEK = "days_of_week"
+# Panel configuration options
+PANEL_CONFIG_SERIES = "series"
+PANEL_CONFIG_PARALLEL = "parallel"
+PANEL_CONFIG_PARALLEL_SERIES = "parallel-series"
 
 # Days of week
 DAY_MONDAY = "monday"
@@ -78,42 +126,12 @@ DAYS_OF_WEEK = [
     DAY_SUNDAY,
 ]
 
-# Power distribution constants
+# Power distribution dictionary keys
 CONF_POWER_ALLOCATION = "power_allocation"
 CONF_POWER_DISTRIBUTION = "power_distribution"
 
 # Dispatcher signal names
 SIGNAL_POWER_DISTRIBUTION_UPDATED = "sunallocator_power_distribution_updated"
-
-# MPPT algorithm constants
-CONF_CURVE_FACTOR_K = "curve_factor_k"
-CONF_EFFICIENCY_CORRECTION_FACTOR = "efficiency_correction_factor"
-CONF_MIN_INVERTER_VOLTAGE = "min_inverter_voltage"
-
-# Advanced settings constants
-CONF_ADVANCED_SETTINGS_ENABLED = "advanced_settings_enabled"
-CONF_RESERVE_BATTERY_POWER = "reserve_battery_power"
-CONF_INVERTER_SELF_CONSUMPTION = "inverter_self_consumption"
-PASSIVE_CHARGING_THRESHOLD_W = 50
-
-# Ramp/hysteresis tunables (Advanced)
-CONF_RAMP_UP_STEP = "ramp_up_step"
-CONF_RAMP_DOWN_STEP = "ramp_down_step"
-CONF_RAMP_DEADBAND = "ramp_deadband"
-CONF_DEFAULT_MIN_START_W = "default_min_start_w"
-CONF_HYSTERESIS_W = "hysteresis_w"
-
-# Temperature compensation constants
-CONF_TEMPERATURE_COMPENSATION_ENABLED = "temperature_compensation_enabled"
-CONF_TEMPERATURE_SENSOR = "temperature_sensor"
-CONF_TEMP_COEFFICIENT_VOC = "temp_coefficient_voc"
-CONF_TEMP_COEFFICIENT_PMAX = "temp_coefficient_pmax"
-
-# Multiple device support
-CONF_DEVICES = "devices"
-CONF_DEVICE_ID = "device_id"
-CONF_DEVICE_NAME = "device_name"
-CONF_DEVICE_PRIORITY = "priority"
 
 # Configuration flow steps
 STEP_USER = "user"
@@ -137,10 +155,6 @@ ACTION_REMOVE = "remove"
 ACTION_SETTINGS = "settings"
 ACTION_ADD_DEVICE = "add_device"
 ACTION_MANAGE_DEVICES = "manage_devices"
-ACTION_EDIT_STANDARD = "edit_standard"
-ACTION_EDIT_CUSTOM = "edit_custom"
-ACTION_REMOVE_STANDARD = "remove_standard"
-ACTION_REMOVE_CUSTOM = "remove_custom"
 ACTION_FINISH = "finish"
 ACTION_BACK = "back"
 
@@ -177,18 +191,6 @@ DOMAIN_INPUT_BOOLEAN = "input_boolean"
 DOMAIN_AUTOMATION = "automation"
 DOMAIN_SCRIPT = "script"
 DOMAIN_CLIMATE = "climate"
-
-# Brightness constants
-MAX_BRIGHTNESS = 255
-MIN_BRIGHTNESS = 0
-
-# Percentage constants
-MAX_PERCENTAGE = 100
-MIN_PERCENTAGE = 0
-
-# Variant A defaults
-DEFAULT_MIN_START_W = 75.0
-DEFAULT_HYSTERESIS_W = 40.0
 
 # Dictionary keys for debug info
 KEY_PMAX = "pmax"

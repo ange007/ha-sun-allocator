@@ -13,13 +13,15 @@ from ..const import (
     CONF_TEMPERATURE_SENSOR,
     CONF_TEMP_COEFFICIENT_VOC,
     CONF_TEMP_COEFFICIENT_PMAX,
+    CONF_MIN_INVERTER_VOLTAGE,
     CONF_CURVE_FACTOR_K,
     CONF_EFFICIENCY_CORRECTION_FACTOR,
-    CONF_MIN_INVERTER_VOLTAGE,
     DEFAULT_STANDARD_TEMPERATURE,
     DEFAULT_VOC_COEFFICIENT,
     DEFAULT_PMAX_COEFFICIENT,
     PASSIVE_CHARGING_THRESHOLD_W,
+    INTERNAL_CURVE_FACTOR_K,
+    INTERNAL_EFFICIENCY_CORRECTION_FACTOR,
 )
 
 
@@ -203,9 +205,9 @@ def calculate_excess_power_mppt(
     consumption: float | None = None,
     configured_reserve: float = 0.0,
     inverter_self_consumption: float = 0.0,
-    *_,  # Keep wildcard for future compatibility
     relative_voltage: float | None = None,
     energy_harvesting_possible: bool | None = None,
+    **kwargs,  # Catch-all for future compatibility
 ) -> float:
     """
     Calculate excess power with proper accounting for battery charge and consumption.
@@ -217,49 +219,66 @@ def calculate_excess_power_mppt(
     if is_discharging:
         return 0.0
 
-    # 2. Topology Guard: No excess if voltage is below MPP or harvesting isn't possible.
-    if relative_voltage is not None and relative_voltage <= 1.0:
-        return 0.0
+    # 2. Topology Guard: No excess if harvesting isn't possible.
     if energy_harvesting_possible is not None and not energy_harvesting_possible:
         return 0.0
 
     # 3. Normalize battery power (positive for charging, 0 otherwise).
     battery_charge_w = max(-battery_power if battery_power_reversed else battery_power, 0.0)
 
-    # 4. Unified MPPT Calculation
-    # Start with the theoretical untapped power from the panels.
-    untapped_power = max(0, current_max_power - pv_power)
-
-    # If consumption is known, we can refine the calculation.
-    # We calculate the "real" excess based on total potential power minus known loads.
-    # This allows us to account for home consumption that isn't met by current pv_power.
-    if consumption is not None:
-        # In priority mode, battery charging is a load. In budget mode, it's a source (up to the reserve).
-        battery_load = battery_charge_w if configured_reserve == 0 else 0
-        real_excess = current_max_power - consumption - battery_load
-        # We take the minimum of untapped potential and real excess to be safe.
-        excess = min(untapped_power, real_excess)
-        print(f"MPPT (with consumption): CurrentMax={current_max_power}W, PV={pv_power}W, Consumption={consumption}W, Battery={battery_charge_w}W")
-        print(f"MPPT (with consumption): Untapped={untapped_power}W, RealExcess={real_excess}W -> Using {excess}W")
+    # 4. Calculate untapped power based on voltage relative to MPP
+    if relative_voltage is not None and relative_voltage <= 1.0:
+        # If voltage is at or below MPP, there is no untapped power from the panels.
+        # Excess can only come from battery budget spillover in this state.
+        untapped_power = 0.0
     else:
-        # Without consumption, we can only rely on untapped power.
-        excess = untapped_power
-        print(f"MPPT (no consumption): CurrentMax={current_max_power}W, Untapped={untapped_power}W")
+        # Voltage is above MPP, so there is potential untapped power.
+        untapped_power = max(0, current_max_power - pv_power)
 
-    # 5. Adjust for battery reserve in "Budgeting" mode.
+    # 5. Calculate base loads (consumption + inverter self-consumption)
+    base_loads = inverter_self_consumption
+    if consumption is not None:
+        base_loads += consumption
+
+    # 6. Calculate battery load and battery_excess
     if configured_reserve > 0:
-        excess_from_battery = max(0, battery_charge_w - configured_reserve)
-        excess += excess_from_battery
-        log_debug(f"Budgeting adjustment: Added {excess_from_battery}W from battery -> Total Excess={excess}W")
+        # Budget mode: only battery charge above reserve is load, rest is excess
+        battery_load = min(battery_charge_w, configured_reserve)
+        battery_excess = max(0, battery_charge_w - configured_reserve)
+    else:
+        # Priority mode: all battery charge is load
+        battery_load = battery_charge_w
+        battery_excess = 0
 
-    # 6. Subtract inverter self-consumption and ensure result is not negative.
-    return max(0, excess - inverter_self_consumption)
+
+    if consumption is None:
+        # No consumption sensor: excess is untapped + battery_excess
+        excess = untapped_power + battery_excess
+    else:
+        if configured_reserve > 0:
+            # Budget mode: add battery_excess to the limited excess
+            real_excess = current_max_power - base_loads - battery_load
+            excess = min(untapped_power, max(0, real_excess)) + battery_excess
+        else:
+            # Priority mode: no extra battery_excess
+            real_excess = current_max_power - base_loads - battery_load
+            excess = min(untapped_power, max(0, real_excess))
+
+    # Subtract the self-consumption of the inverter (but not more than the excess)
+    if inverter_self_consumption > 0:
+        excess = max(0.0, excess - inverter_self_consumption)
+
+    log_debug(
+        f"MPPT: PV={pv_power}W, Loads={base_loads}W, BatteryLoad={battery_load}W, BatteryExcess={battery_excess}W, Untapped={untapped_power}W -> Excess={excess}W"
+    )
+    return excess
 
 
 def calculate_usage_percentage(actual_power: float, max_power: float) -> float:
     """Calculate usage percentage."""
     if max_power > 0:
         return round((actual_power / max_power) * 100, 1)
+
     return 0.0
 
 
@@ -271,9 +290,7 @@ def is_excess_possible(pv_voltage: float, vmp: float) -> bool:
 def get_mppt_algorithm_config(config: Dict[str, Any]) -> Dict[str, float]:
     """Get MPPT algorithm configuration parameters."""
     return {
-        CONF_CURVE_FACTOR_K: config.get(CONF_CURVE_FACTOR_K, 0.2),
-        CONF_EFFICIENCY_CORRECTION_FACTOR: config.get(
-            CONF_EFFICIENCY_CORRECTION_FACTOR, 1.05
-        ),
+        CONF_CURVE_FACTOR_K: INTERNAL_CURVE_FACTOR_K,
+        CONF_EFFICIENCY_CORRECTION_FACTOR: INTERNAL_EFFICIENCY_CORRECTION_FACTOR,
         CONF_MIN_INVERTER_VOLTAGE: config.get(CONF_MIN_INVERTER_VOLTAGE, 100.0),
     }

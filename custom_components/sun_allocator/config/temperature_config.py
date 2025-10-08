@@ -45,6 +45,7 @@ class TemperatureConfigMixin:
 
         return result
 
+
     def _validate_temperature_config(
         self, user_input: Dict[str, Any]
     ) -> Dict[str, str]:
@@ -83,6 +84,7 @@ class TemperatureConfigMixin:
 
         return errors
 
+
     def _process_temperature_config_input(
         self, user_input: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -110,11 +112,14 @@ class TemperatureConfigMixin:
             pass
 
         return processed_input
+
+
     def _get_temperature_config_schema(
         self, defaults: Optional[Dict[str, Any]] = None
     ) -> vol.Schema:
         """Get the schema for temperature compensation configuration."""
         return build_temperature_config_schema(defaults)
+
 
     async def async_step_temperature_compensation(self, user_input=None):
         """Handle temperature compensation settings."""
@@ -149,6 +154,7 @@ class TemperatureConfigMixin:
             data_schema=schema,
             errors=errors,
         )
+
 
     async def _save_and_return(self):
         """Save configuration and return to appropriate step."""

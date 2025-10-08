@@ -69,13 +69,12 @@
         "description": "Configure advanced MPPT and control parameters",
         "data": {
           "reserve_battery_power": "Battery Power Reserve (W)",
-          "curve_factor_k": "I-V Curve Factor (k)",
-          "efficiency_correction_factor": "Efficiency Correction Factor",
+          "inverter_self_consumption": "Inverter Self-Consumption (W)",
+          "device_allocation_strategy": "Device Allocation Strategy",
           "min_inverter_voltage": "Minimum Inverter Voltage (V)",
           "ramp_up_step": "Ramp Up Step (% per tick)",
           "ramp_down_step": "Ramp Down Step (% per tick)",
           "ramp_deadband": "Ramp Deadband (%)",
-          "default_min_start_w": "Default Min Start (W)",
           "hysteresis_w": "Hysteresis (W)"
         }
       },
@@ -106,6 +105,7 @@
           "max_expected_w": "Maximum Expected Load (W)",
           "priority": "Device Priority",
           "debounce_time": "Debounce Time (s)",
+          "min_on_time": "Minimum on-time (s)",
           "schedule_enabled": "Enable Schedule"
         }
       },
@@ -151,7 +151,6 @@
       "invalid_ramp_up_step": "Ramp up step must be between 0 and 100",
       "invalid_ramp_down_step": "Ramp down step must be between 0 and 100",
       "invalid_ramp_deadband": "Ramp deadband must be between 0 and 10",
-      "invalid_default_min_start_w": "Default min start must be between 0 and 5000",
       "invalid_hysteresis_w": "Hysteresis must be between 0 and 5000",
       "temperature_sensor_required": "Temperature sensor is required when compensation is enabled"
     }
@@ -196,6 +195,12 @@
         "50": "Medium",
         "25": "Low",
         "1": "Very Low"
+      }
+    },
+    "device_allocation_strategy": {
+      "options": {
+        "fill": "Fill one by one",
+        "distribute": "Distribute evenly"
       }
     },
     "panel_configuration": {

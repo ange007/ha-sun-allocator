@@ -29,10 +29,10 @@ from ..const import (
     CONF_DEVICE_PRIORITY,
     CONF_DEVICE_TYPE,
     DEVICE_TYPE_CUSTOM,
-    CONF_MIN_EXPECTED_W,
-    CONF_MAX_EXPECTED_W,
-    CONF_DEBOUNCE_TIME,
-    CONF_SCHEDULE_ENABLED,
+    CONF_DEVICE_MIN_EXPECTED_W,
+    CONF_DEVICE_MAX_EXPECTED_W,
+    CONF_DEVICE_DEBOUNCE_TIME,
+    CONF_DEVICE_SCHEDULE_ENABLED,
     CONF_START_TIME,
     CONF_END_TIME,
     CONF_DAYS_OF_WEEK,
@@ -127,48 +127,24 @@ class DeviceConfigMixin:
                                 f"{icon} {friendly}" if friendly else f"{icon} {value}"
                             )
                             all_entities.append((value, label, friendly))
+
         all_entities.sort(key=lambda x: x[1])
         all_entities = [(NONE_OPTION, NONE_OPTION, "")] + all_entities
         return {"all_entities": all_entities}
 
-    def _validate_device_config(self, user_input: Dict[str, Any]) -> Dict[str, str]:
-        """Validate device configuration."""
-        errors = {}
 
+    def _validate_device_name(self, user_input: Dict[str, Any]) -> Dict[str, str]:
+        """Validate device name."""
+        errors = {}
         device_name = user_input.get(CONF_DEVICE_NAME, "").strip()
         if not device_name:
             errors[CONF_DEVICE_NAME] = "device_name_required"
 
-        try:
-            priority = int(user_input.get(CONF_DEVICE_PRIORITY, 50))
-            if not 1 <= priority <= 100:
-                errors[CONF_DEVICE_PRIORITY] = "invalid_priority"
-        except (ValueError, TypeError):
-            errors[CONF_DEVICE_PRIORITY] = "invalid_priority"
-
-        try:
-            min_expected = float(user_input.get(CONF_MIN_EXPECTED_W, 0) or 0)
-            if min_expected < 0:
-                errors[CONF_MIN_EXPECTED_W] = "invalid_min_expected_w"
-        except (ValueError, TypeError):
-            errors[CONF_MIN_EXPECTED_W] = "invalid_min_expected_w"
-        try:
-            max_expected = float(user_input.get(CONF_MAX_EXPECTED_W, 0) or 0)
-            if max_expected < 0:
-                errors[CONF_MAX_EXPECTED_W] = "invalid_max_expected_w"
-        except (ValueError, TypeError):
-            errors[CONF_MAX_EXPECTED_W] = "invalid_max_expected_w"
-
-        entity_id = user_input.get(CONF_DEVICE_ENTITY)
-        if entity_id and hasattr(self, "_devices"):
-            for d in getattr(self, "_devices", []):
-                if d.get(CONF_DEVICE_ENTITY) == entity_id:
-                    errors[CONF_DEVICE_ENTITY] = "duplicate_entity_id"
-
         return errors
 
+
     def _validate_basic_settings(self, user_input: Dict[str, Any]) -> Dict[str, str]:
-        """Validate only the fields present on the Basic Settings step."""
+        """Validate the fields present on the Basic Settings step."""
         errors = {}
 
         try:
@@ -178,41 +154,53 @@ class DeviceConfigMixin:
         except (ValueError, TypeError):
             errors[CONF_DEVICE_PRIORITY] = "invalid_priority"
 
+        min_expected = 0
         try:
-            min_expected = float(user_input.get(CONF_MIN_EXPECTED_W, 0) or 0)
-            if min_expected < 0:
-                errors[CONF_MIN_EXPECTED_W] = "invalid_min_expected_w"
+            min_expected = float(user_input.get(CONF_DEVICE_MIN_EXPECTED_W, 0) or 0)
+            if min_expected < 1:
+                errors[CONF_DEVICE_MIN_EXPECTED_W] = "invalid_min_expected_w"
         except (ValueError, TypeError):
-            errors[CONF_MIN_EXPECTED_W] = "invalid_min_expected_w"
+            errors[CONF_DEVICE_MIN_EXPECTED_W] = "invalid_min_expected_w"
+
         try:
-            max_expected = float(user_input.get(CONF_MAX_EXPECTED_W, 0) or 0)
-            if max_expected < 0:
-                errors[CONF_MAX_EXPECTED_W] = "invalid_max_expected_w"
+            max_expected = float(user_input.get(CONF_DEVICE_MAX_EXPECTED_W, min_expected) or min_expected)
+            if max_expected < min_expected:
+                errors[CONF_DEVICE_MAX_EXPECTED_W] = "invalid_max_expected_w"
         except (ValueError, TypeError):
-            errors[CONF_MAX_EXPECTED_W] = "invalid_max_expected_w"
+            errors[CONF_DEVICE_MAX_EXPECTED_W] = "invalid_max_expected_w"
 
         if (
-            CONF_DEBOUNCE_TIME in user_input
-            and user_input[CONF_DEBOUNCE_TIME] is not None
+            CONF_DEVICE_DEBOUNCE_TIME in user_input
+            and user_input[CONF_DEVICE_DEBOUNCE_TIME] is not None
         ):
             try:
-                debounce_time = int(user_input[CONF_DEBOUNCE_TIME])
-                if not 15 <= debounce_time <= 600:
-                    errors[CONF_DEBOUNCE_TIME] = "invalid_debounce_time"
+                debounce_time = int(user_input[CONF_DEVICE_DEBOUNCE_TIME])
+                if not 5 <= debounce_time <= 600:
+                    errors[CONF_DEVICE_DEBOUNCE_TIME] = "invalid_debounce_time"
             except (ValueError, TypeError):
-                errors[CONF_DEBOUNCE_TIME] = "invalid_debounce_time"
+                errors[CONF_DEVICE_DEBOUNCE_TIME] = "invalid_debounce_time"
 
         try:
             auto_enabled = bool(user_input.get(CONF_AUTO_CONTROL_ENABLED, False))
             device_type = self._device_config.get(CONF_DEVICE_TYPE)
             if auto_enabled and device_type == DEVICE_TYPE_CUSTOM:
-                max_expected = float(user_input.get(CONF_MAX_EXPECTED_W, 0) or 0)
+                max_expected = float(user_input.get(CONF_DEVICE_MAX_EXPECTED_W, 0) or 0)
                 if max_expected <= 0:
-                    errors[CONF_MAX_EXPECTED_W] = "invalid_max_expected_w"
+                    errors[CONF_DEVICE_MAX_EXPECTED_W] = "invalid_max_expected_w"
         except (ValueError, TypeError):
             pass
 
+        entity_id = user_input.get(CONF_DEVICE_ENTITY)
+        if entity_id and hasattr(self, "_devices"):
+            # Check for duplicates, excluding the device being edited
+            device_id_to_edit = self._device_config.get(CONF_DEVICE_ID)
+            for d in getattr(self, "_devices", []):
+                if d.get(CONF_DEVICE_ID) != device_id_to_edit and d.get(CONF_DEVICE_ENTITY) == entity_id:
+                    errors[CONF_DEVICE_ENTITY] = "duplicate_entity_id"
+                    break
+
         return errors
+
 
     def _validate_schedule_config(self, user_input: Dict[str, Any]) -> Dict[str, str]:
         """Validate schedule configuration."""
@@ -236,6 +224,7 @@ class DeviceConfigMixin:
 
         return errors
 
+
     def _process_device_input(
         self, user_input: Dict[str, Any], entities: Dict[str, list]
     ) -> Dict[str, Any]:
@@ -258,7 +247,9 @@ class DeviceConfigMixin:
                         break
 
             user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = friendly_name
+
         return user_input
+
 
     def _process_schedule_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process and clean schedule configuration input."""
@@ -284,11 +275,13 @@ class DeviceConfigMixin:
 
         return user_input
 
+
     def _get_device_name_type_schema(
         self, defaults: Optional[Dict[str, Any]] = None
     ) -> vol.Schema:
         """Get the schema for device name and type configuration."""
         return build_device_name_type_schema(defaults)
+
 
     def _get_device_selection_schema(
         self, entities: Dict[str, list], defaults: Optional[Dict[str, Any]] = None
@@ -296,17 +289,20 @@ class DeviceConfigMixin:
         """Get the schema for device selection configuration."""
         return build_device_selection_schema(entities, defaults)
 
+
     def _get_device_basic_settings_schema(
         self, defaults: Optional[Dict[str, Any]] = None
     ) -> vol.Schema:
         """Get the schema for device basic settings configuration."""
         return build_device_basic_settings_schema(defaults)
 
+
     def _get_device_schedule_schema(
         self, defaults: Optional[Dict[str, Any]] = None
     ) -> vol.Schema:
         """Get the schema for device schedule configuration."""
         return build_device_schedule_schema(defaults)
+
 
     async def _finalize_device_config(self):
         """Finalize device configuration and persist."""
@@ -341,14 +337,16 @@ class DeviceConfigMixin:
 
         if hasattr(self, "async_step_manage_devices"):
             return await self.async_step_manage_devices()
+
         return await self.async_step_devices()
+
 
     async def async_step_device_name_type(self, user_input=None):
         """Handle the device name and type step."""
         errors = {}
 
         if user_input is not None:
-            errors = self._validate_device_config(user_input)
+            errors = self._validate_device_name(user_input)
 
             if not errors:
                 self._device_config.update(user_input)
@@ -365,6 +363,7 @@ class DeviceConfigMixin:
             },
             errors=errors,
         )
+
 
     async def async_step_device_selection(self, user_input=None):
         """Handle the device selection step."""
@@ -390,6 +389,7 @@ class DeviceConfigMixin:
             errors=errors,
         )
 
+
     async def async_step_device_basic_settings(self, user_input=None):
         """Handle the device basic settings step."""
         errors = {}
@@ -400,7 +400,7 @@ class DeviceConfigMixin:
             if not errors:
                 self._device_config.update(user_input)
 
-                if self._device_config.get(CONF_SCHEDULE_ENABLED, False):
+                if self._device_config.get(CONF_DEVICE_SCHEDULE_ENABLED, False):
                     return await self.async_step_device_schedule()
                 return await self._finalize_device_config()
 
@@ -414,6 +414,7 @@ class DeviceConfigMixin:
             },
             errors=errors,
         )
+
 
     async def async_step_device_schedule(self, user_input=None):
         """Handle the device schedule step."""

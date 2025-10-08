@@ -25,10 +25,10 @@ from ...const import (
     CONF_PV_VOLTAGE,
     CONF_CONSUMPTION,
     CONF_BATTERY_POWER,
-    CONF_VMP,
-    CONF_IMP,
-    CONF_VOC,
-    CONF_ISC,
+    CONF_PANEL_VMP,
+    CONF_PANEL_IMP,
+    CONF_PANEL_VOC,
+    CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
     PANEL_CONFIG_SERIES,
@@ -74,10 +74,10 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         self._pv_voltage = config.get(CONF_PV_VOLTAGE)
         self._consumption = config.get(CONF_CONSUMPTION)
         self._battery_power = config.get(CONF_BATTERY_POWER)
-        self._vmp = config.get(CONF_VMP)
-        self._imp = config.get(CONF_IMP)
-        self._voc = config.get(CONF_VOC)
-        self._isc = config.get(CONF_ISC)
+        self._vmp = config.get(CONF_PANEL_VMP)
+        self._imp = config.get(CONF_PANEL_IMP)
+        self._voc = config.get(CONF_PANEL_VOC)
+        self._isc = config.get(CONF_PANEL_ISC)
         self._panel_count = config.get(CONF_PANEL_COUNT, 1)
         self._panel_configuration = config.get(
             CONF_PANEL_CONFIGURATION, PANEL_CONFIG_SERIES
@@ -89,6 +89,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
 
         # Initialize update listeners
         self._unsub_listeners = []
+
 
     def _get_default_attributes(self) -> Dict[str, Any]:
         """Get default attributes for the sensor."""
@@ -103,6 +104,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             usage_percent=0.0,
         )
 
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
@@ -111,10 +113,12 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             manufacturer="Sun Allocator",
         )
 
+
     @property
     def should_poll(self) -> bool:
         """Return False as entity pushes updates."""
         return False
+
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks when entity is added."""
@@ -133,9 +137,11 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         # Initial update
         self.async_schedule_update_ha_state(True)
 
+
     async def async_will_remove_from_hass(self) -> None:
         """Clean up when entity is removed."""
         cleanup_sensor_listeners(self._unsub_listeners)
+
 
     def _get_entity_ids_to_listen(self) -> list:
         """Get list of entity IDs to listen for state changes."""
@@ -164,6 +170,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
                 entity_ids.append(temp_sensor)
 
         return entity_ids
+
 
     def _get_sensor_values(self) -> Dict[str, Any]:
         """Get current sensor values with error handling."""
@@ -198,6 +205,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             "battery_power": battery_power,
         }
 
+
     def _get_panel_parameters(self) -> Dict[str, Any]:
         """Get panel parameters with proper fallbacks."""
         vmp, imp, voc, isc, panel_count = get_panel_parameters_with_fallbacks(
@@ -213,17 +221,21 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             "panel_configuration": self._panel_configuration,
         }
 
+
     def _get_mppt_config(self) -> Dict[str, float]:
         """Get MPPT algorithm configuration."""
         return get_mppt_algorithm_config(self._config)
+
 
     def _get_temperature_compensation(self) -> Optional[Dict[str, float]]:
         """Get temperature compensation data if enabled."""
         return get_temperature_compensation_data(self._hass, self._config)
 
+
     def _update_attributes(self, **kwargs) -> None:
         """Update sensor attributes."""
         self._attr_extra_state_attributes.update(kwargs)
+
 
     def _get_common_attributes(
         self,
@@ -239,10 +251,10 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             "pv_voltage": pv_voltage,
             "energy_harvesting_possible": debug_info[KEY_ENERGY_HARVESTING_POSSIBLE],
             "min_system_voltage": debug_info[KEY_MIN_SYSTEM_VOLTAGE],
-            "vmp": panel_params[CONF_VMP],
-            "imp": panel_params[CONF_IMP],
-            "voc": panel_params[CONF_VOC],
-            "isc": panel_params[CONF_ISC],
+            "vmp": panel_params[CONF_PANEL_VMP],
+            "imp": panel_params[CONF_PANEL_IMP],
+            "voc": panel_params[CONF_PANEL_VOC],
+            "isc": panel_params[CONF_PANEL_ISC],
             "panel_count": panel_params[CONF_PANEL_COUNT],
             "panel_configuration": panel_params[CONF_PANEL_CONFIGURATION],
             "pmax": debug_info[KEY_PMAX],
@@ -252,6 +264,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             "voc_ratio": debug_info[KEY_VOC_RATIO],
             "calculation_reason": debug_info[KEY_CALCULATION_REASON],
         }
+
 
     @property
     def native_value(self) -> StateType:
@@ -295,6 +308,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             )
 
             return self._state or 0.0
+
 
     @abstractmethod
     def _calculate_value(

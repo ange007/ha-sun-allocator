@@ -1,12 +1,16 @@
 """Watchdog for Sun Allocator."""
 
 from datetime import timedelta
+
 import homeassistant.util.dt as dt_util
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_OFF,
 )
+
+from .logger import log_error, log_info, log_warning
+
 from ..const import (
     CONF_DEVICE_ENTITY,
     DOMAIN_LIGHT,
@@ -15,8 +19,6 @@ from ..const import (
     DOMAIN_AUTOMATION,
     DOMAIN_SCRIPT,
 )
-
-from .logger import log_error, log_info, log_warning
 
 
 async def _enforce_all_off(hass, config_entry, reason: str):

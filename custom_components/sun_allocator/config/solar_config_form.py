@@ -13,10 +13,10 @@ from ..config.ui_helpers import (
 from ..const import (
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
-    CONF_VMP,
-    CONF_IMP,
-    CONF_VOC,
-    CONF_ISC,
+    CONF_PANEL_VMP,
+    CONF_PANEL_IMP,
+    CONF_PANEL_VOC,
+    CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
     CONF_CONSUMPTION,
@@ -98,23 +98,23 @@ def build_solar_config_schema(defaults=None):
         ): BooleanSelectorBuilder().build(),
 
         Required(
-            CONF_VMP,
-            default=defaults.get(CONF_VMP, 36.0),
+            CONF_PANEL_VMP,
+            default=defaults.get(CONF_PANEL_VMP, 36.0),
         ): NumberSelectorBuilder(0, 100, 0.1).build(),
 
         Required(
-            CONF_IMP,
-            default=defaults.get(CONF_IMP, 10.0),
+            CONF_PANEL_IMP,
+            default=defaults.get(CONF_PANEL_IMP, 10.0),
         ): NumberSelectorBuilder(0, 100, 0.01).build(),
 
         Required(
-            CONF_VOC,
-            default=defaults.get(CONF_VOC, 36.0),
+            CONF_PANEL_VOC,
+            default=defaults.get(CONF_PANEL_VOC, 36.0),
         ): NumberSelectorBuilder(0, 100, 0.1).build(),
 
         Optional(
-            CONF_ISC,
-            default=defaults.get(CONF_ISC, 10.8),
+            CONF_PANEL_ISC,
+            default=defaults.get(CONF_PANEL_ISC, 10.8),
         ): NumberSelectorBuilder(0, 100, 0.01).build(),
 
         Required(
@@ -131,7 +131,7 @@ def build_solar_config_schema(defaults=None):
                 PANEL_CONFIG_PARALLEL,
                 PANEL_CONFIG_PARALLEL_SERIES,
             ],
-            translation_key="panel_configuration",
+            translation_key=CONF_PANEL_CONFIGURATION,
         ).build(),
     })
 

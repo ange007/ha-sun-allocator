@@ -29,9 +29,7 @@ async def set_mode_for_entity(hass: HomeAssistant, entity_id, mode):
     """Set the mode for a select entity."""
     state = hass.states.get(entity_id)
     if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-        log_debug(
-            f"Entity {entity_id} not found or unavailable, skipping set_relay_mode({mode})"
-        )
+        log_debug(f"Entity {entity_id} not found or unavailable, skipping set_relay_mode({mode})")
         return
 
     log_debug(f"Setting relay mode to {mode} for entity {entity_id}")
@@ -65,6 +63,7 @@ async def set_power_for_entity(hass, entity_id, power_percent):
 
     if power_percent <= 0:
         log_debug(f"Turning off entity {entity_id}")
+
         if domain == DOMAIN_LIGHT:
             await hass.services.async_call(
                 DOMAIN_LIGHT,
@@ -89,9 +88,7 @@ async def set_power_for_entity(hass, entity_id, power_percent):
                 blocking=False,
             )
         else:
-            log_warning(
-                f"Unsupported entity domain: {domain}. Cannot turn off {entity_id}"
-            )
+            log_warning(f"Unsupported entity domain: {domain}. Cannot turn off {entity_id}")
         await hass.async_block_till_done()
     else:
         log_debug(f"Turning on entity {entity_id} with power {power_percent}%")
@@ -119,7 +116,5 @@ async def set_power_for_entity(hass, entity_id, power_percent):
                 blocking=False,
             )
         else:
-            log_warning(
-                f"Unsupported entity domain: {domain}. Cannot turn on {entity_id}"
-            )
+            log_warning(f"Unsupported entity domain: {domain}. Cannot turn on {entity_id}")
         await hass.async_block_till_done()

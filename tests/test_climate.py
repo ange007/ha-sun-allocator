@@ -1,5 +1,4 @@
 import pytest
-import logging
 
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
@@ -7,6 +6,7 @@ from homeassistant.setup import async_setup_component
 from conftest import create_test_config_entry
 from tests.const import MOCK_CONFIG
 
+from custom_components.sun_allocator.core.power_processor import process_excess_power
 from custom_components.sun_allocator.const import (
     DOMAIN,
     CONF_DEVICES,
@@ -15,19 +15,15 @@ from custom_components.sun_allocator.const import (
     CONF_DEVICE_TYPE,
     DEVICE_TYPE_CLIMATE,
     CONF_AUTO_CONTROL_ENABLED,
-    CONF_MIN_EXPECTED_W,
-    CONF_MAX_EXPECTED_W,
-    CONF_DEBOUNCE_TIME,
+    CONF_DEVICE_MIN_EXPECTED_W,
+    CONF_DEVICE_MAX_EXPECTED_W,
+    CONF_DEVICE_DEBOUNCE_TIME,
 )
-from custom_components.sun_allocator.core.power_processor import process_excess_power
-
-_LOGGER = logging.getLogger(__name__)
-
 
 @pytest.mark.asyncio
 async def test_climate_device_turn_on(hass: HomeAssistant, caplog) -> None:
-    caplog.set_level(logging.DEBUG)
     """Test that a climate device is turned on when there is excess power."""
+    
     # Create a mock climate entity
     await async_setup_component(
         hass, "input_boolean", {"input_boolean": {"test_heater": None}}
@@ -93,9 +89,9 @@ async def test_climate_device_turn_on(hass: HomeAssistant, caplog) -> None:
                 CONF_DEVICE_ENTITY: "climate.test_climate",
                 CONF_DEVICE_TYPE: DEVICE_TYPE_CLIMATE,
                 CONF_AUTO_CONTROL_ENABLED: True,
-                CONF_MIN_EXPECTED_W: 100,
-                CONF_MAX_EXPECTED_W: 1000,
-                CONF_DEBOUNCE_TIME: 0,
+                CONF_DEVICE_MIN_EXPECTED_W: 100,
+                CONF_DEVICE_MAX_EXPECTED_W: 1000,
+                CONF_DEVICE_DEBOUNCE_TIME: 0,
             }
         ],
     }
@@ -105,6 +101,7 @@ async def test_climate_device_turn_on(hass: HomeAssistant, caplog) -> None:
     # Initialize hass.data structure
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
+
     hass.data[DOMAIN][config_entry.entry_id] = {
         "device_status": {},
         "device_filter_reasons": {},
@@ -117,42 +114,24 @@ async def test_climate_device_turn_on(hass: HomeAssistant, caplog) -> None:
     # Mock states
     hass.states.async_set("climate.test_climate", "off")
     await hass.async_block_till_done()
-    _LOGGER.debug(
-        f"Initial climate.test_climate state: {hass.states.get('climate.test_climate').state}"
-    )
 
     # Test with enough excess power to turn on the climate device
     excess_power = 500
-
     await process_excess_power(hass, config_entry, excess_power)
-    _LOGGER.debug(
-        f"After process_excess_power - climate.test_climate state: {hass.states.get('climate.test_climate').state}"
-    )
-    _LOGGER.debug(
-        f"After process_excess_power - input_boolean.test_heater state: {hass.states.get('input_boolean.test_heater').state}"
-    )
-    _LOGGER.debug(
-        f"After process_excess_power - switch.test_heater state: {hass.states.get('switch.test_heater').state}"
-    )
 
     # Workaround: Directly set the climate entity state to 'heat' for testing purposes
     hass.states.async_set("climate.test_climate", "heat")
     await hass.async_block_till_done()
-    _LOGGER.debug(
-        f"Workaround: climate.test_climate state after direct set: {hass.states.get('climate.test_climate').state}"
-    )
 
     # Assert that the climate device is turned on
     state = hass.states.get("climate.test_climate")
-    _LOGGER.debug(
-        f"Final climate.test_climate state before assertion: {state.state if state else 'None'}"
-    )
     assert state and state.state == "heat"
 
 
 @pytest.mark.asyncio
 async def test_direct_climate_set_hvac_mode(hass: HomeAssistant) -> None:
     """Test direct service call to set HVAC mode for a climate device."""
+    
     # Create a mock climate entity
     await async_setup_component(
         hass, "input_boolean", {"input_boolean": {"test_heater": None}}
@@ -229,8 +208,8 @@ async def test_direct_climate_set_hvac_mode(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_heater_switch_turn_on(hass: HomeAssistant, caplog) -> None:
-    caplog.set_level(logging.DEBUG)
     """Test that the template switch and input_boolean can be turned on."""
+    
     await async_setup_component(
         hass, "input_boolean", {"input_boolean": {"test_heater": None}}
     )
@@ -260,27 +239,10 @@ async def test_heater_switch_turn_on(hass: HomeAssistant, caplog) -> None:
     )
     await hass.async_block_till_done()
 
-    _LOGGER.debug(
-        f"Initial input_boolean.test_heater state: {hass.states.get('input_boolean.test_heater').state}"
-    )
-    _LOGGER.debug(
-        f"Initial switch.test_heater state: {hass.states.get('switch.test_heater').state}"
-    )
-
-    await hass.services.async_call(
-        "switch",
-        "turn_on",
-        {"entity_id": "switch.test_heater"},
-        blocking=True,
-    )
+    # Directly call the service to turn on the switch
+    await hass.services.async_call("switch", "turn_on", {"entity_id": "switch.test_heater"}, blocking=True)
     await hass.async_block_till_done()
 
-    _LOGGER.debug(
-        f"After turn_on - input_boolean.test_heater state: {hass.states.get('input_boolean.test_heater').state}"
-    )
-    _LOGGER.debug(
-        f"After turn_on - switch.test_heater state: {hass.states.get('switch.test_heater').state}"
-    )
-
+    # Assert that both the input_boolean and the switch are turned on
     assert hass.states.get("input_boolean.test_heater").state == "on"
     assert hass.states.get("switch.test_heater").state == "on"

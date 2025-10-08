@@ -45,6 +45,11 @@ def calculate_current_max_power(
         Tuple of (current_max_power, debug_info)
     """
     # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+
+    # Guard clause for zero or negative PV power
+    if pv_power <= 0:
+        return 0.0, {"pmax": 0, "light_factor": 0, "min_system_voltage": 0, "energy_harvesting_possible": False, "relative_voltage": 0, "voc_ratio": 0, "calculation_reason": "PV power is zero or negative"}
+
     # Apply temperature compensation if provided
     if temperature_compensation:
         temp_diff = temperature_compensation.get("temp_diff", 0)
@@ -136,7 +141,7 @@ def calculate_current_max_power(
         power_factor = max(floor, power_factor)
 
         # Back-estimate light level from current operating point: pv_power ≈ pmax * lf * power_factor * efficiency
-        if pmax > 0 and power_factor > 0:
+        if pmax > 0 and power_factor > 0.1:
             light_est = pv_power / (pmax * power_factor * efficiency_correction_factor)
             light_est = max(0.1, min(1.0, light_est))
         else:
@@ -199,8 +204,10 @@ def calculate_min_system_voltage(
     """Calculate minimum system voltage based on configuration."""
     if panel_configuration == PANEL_CONFIG_SERIES:
         return min_inverter_voltage
+    
     if panel_configuration == PANEL_CONFIG_PARALLEL_SERIES:
         return min_inverter_voltage
+
     # parallel
     return min_inverter_voltage
 
@@ -212,11 +219,13 @@ def calculate_relative_voltage(
     if panel_configuration == PANEL_CONFIG_SERIES:
         # For series: divide by (Vmp * panel_count)
         return pv_voltage / (vmp * panel_count) if vmp > 0 else 0
+
     if panel_configuration == PANEL_CONFIG_PARALLEL_SERIES:
         # For parallel-series: divide by (Vmp * panels_per_string)
         string_count = 2
         panels_per_string = panel_count / string_count
         return pv_voltage / (vmp * panels_per_string) if vmp > 0 else 0
+
     # For parallel: divide by Vmp (voltage is the same across all panels)
     return pv_voltage / vmp if vmp > 0 else 0
 

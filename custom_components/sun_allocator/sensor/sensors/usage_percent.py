@@ -13,10 +13,10 @@ from ...core.logger import log_debug
 from ...const import (
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
-    CONF_VMP,
-    CONF_IMP,
-    CONF_VOC,
-    CONF_ISC,
+    CONF_PANEL_VMP,
+    CONF_PANEL_IMP,
+    CONF_PANEL_VOC,
+    CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
 )
@@ -43,6 +43,7 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             unit_of_measurement=PERCENTAGE,
         )
 
+
     def _calculate_value(
         self,
         sensor_values: Dict[str, Any],
@@ -54,8 +55,8 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
         pv_power = sensor_values[CONF_PV_POWER]
         pv_voltage = sensor_values[CONF_PV_VOLTAGE]
 
-        vmp = panel_params[CONF_VMP]
-        imp = panel_params[CONF_IMP]
+        vmp = panel_params[CONF_PANEL_VMP]
+        imp = panel_params[CONF_PANEL_IMP]
 
         # Apply temperature compensation if provided
         if temp_compensation:
@@ -89,8 +90,8 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             pv_voltage=pv_voltage,
             vmp=vmp,
             imp=imp,
-            voc=panel_params[CONF_VOC],
-            isc=panel_params[CONF_ISC],
+            voc=panel_params[CONF_PANEL_VOC],
+            isc=panel_params[CONF_PANEL_ISC],
             panel_count=panel_params[CONF_PANEL_COUNT],
             panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
             pmax=pmax,

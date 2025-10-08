@@ -10,6 +10,7 @@ class EntitySelectorBuilder:
         """Initialize the EntitySelectorBuilder."""
         self.icon_map = icon_map or {}
 
+
     def build(self, entities, domain_filter=None, esphome_only=False, none_option=True):
         """Builds the entity selector options."""
         result = []
@@ -43,6 +44,7 @@ class NumberSelectorBuilder:
         self.mode = mode
         self.unit = unit
 
+
     def build(self):
         """Builds the number selector."""
         d = {"min": self.min, "max": self.max, "step": self.step, "mode": self.mode}
@@ -68,9 +70,11 @@ class SelectSelectorBuilder:
         self.mode = mode
         self.translation_key = translation_key
 
+
     def build(self):
         """Builds the select selector."""
         select_info = {"options": self.options, "mode": self.mode}
         if self.translation_key:
             select_info["translation_key"] = self.translation_key
+
         return selector({"select": select_info})

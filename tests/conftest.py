@@ -16,9 +16,9 @@ from custom_components.sun_allocator.const import (
     CONF_DEVICE_PRIORITY,
     CONF_DEVICE_TYPE,
     CONF_AUTO_CONTROL_ENABLED,
-    CONF_MIN_EXPECTED_W,
-    CONF_MAX_EXPECTED_W,
-    CONF_SCHEDULE_ENABLED,
+    CONF_DEVICE_MIN_EXPECTED_W,
+    CONF_DEVICE_MAX_EXPECTED_W,
+    CONF_DEVICE_SCHEDULE_ENABLED,
 )
 
 # Mock the 'resource' module on Windows
@@ -65,10 +65,10 @@ def create_test_device(device_name, extra_data=None):
         CONF_DEVICE_TYPE: "standard",
         CONF_DEVICE_ENTITY: f"switch.{device_name}",
         CONF_DEVICE_PRIORITY: 50,
-        CONF_MIN_EXPECTED_W: 10,
-        CONF_MAX_EXPECTED_W: 100,
+        CONF_DEVICE_MIN_EXPECTED_W: 10,
+        CONF_DEVICE_MAX_EXPECTED_W: 100,
         CONF_AUTO_CONTROL_ENABLED: True,
-        CONF_SCHEDULE_ENABLED: False,
+        CONF_DEVICE_SCHEDULE_ENABLED: False,
     }
     
     if extra_data:

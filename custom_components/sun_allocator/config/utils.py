@@ -5,7 +5,6 @@ from typing import Dict, Any, List, Optional
 from homeassistant.core import HomeAssistant
 
 from ..core.logger import log_error, log_exception
-
 from ..const import (
     NONE_OPTION,
     STATE_ON,
