@@ -4,7 +4,7 @@ This document explains the core concepts and calculations used by the SunAllocat
 
 ## Excess Power Calculation
 
-The `sunallocator_excess_1` sensor calculates the untapped potential power that could be extracted from your solar panel. It is calculated as:
+The `sun_allocator_excess_power` sensor calculates the untapped potential power that could be extracted from your solar panel. It is calculated as:
 
 ```
 Excess = Maximum Possible Power at Current Voltage - Current Power Output

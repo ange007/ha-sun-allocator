@@ -21,17 +21,10 @@ def build_temperature_config_schema(defaults=None):
     if defaults is None:
         defaults = {}
 
-    default_temp_sensor = (
-        NONE_OPTION
-        if defaults.get(CONF_TEMPERATURE_SENSOR) is None
-        else defaults.get(CONF_TEMPERATURE_SENSOR, NONE_OPTION)
-    )
-
     return Schema(
         {
             Required(
                 CONF_TEMPERATURE_SENSOR,
-                default=default_temp_sensor,
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="sensor",

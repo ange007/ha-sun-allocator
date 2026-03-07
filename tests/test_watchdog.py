@@ -11,6 +11,7 @@ import homeassistant.util.dt as dt_util
 from conftest import create_test_config_entry
 
 from custom_components.sun_allocator.const import (
+    DOMAIN,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_PANEL_VMP,
@@ -26,7 +27,6 @@ from custom_components.sun_allocator.const import (
     CONF_MIN_INVERTER_VOLTAGE,
     DEVICE_TYPE_STANDARD,
     CONF_HYSTERESIS_W,
-    SENSOR_ID_PREFIX,
     SENSOR_EXCESS_SUFFIX,
 )
 from custom_components.sun_allocator import async_setup_entry, async_unload_entry
@@ -97,7 +97,7 @@ async def test_watchdog_enforces_off_on_stale_sensor(
     ) as mock_async_call:
         # Create excess sensor to be tracked
         excess_sensor_id = (
-            f"sensor.{SENSOR_ID_PREFIX}_{SENSOR_EXCESS_SUFFIX}_{config_entry.entry_id}"
+            f"sensor.{DOMAIN}_{SENSOR_EXCESS_SUFFIX}_{config_entry.entry_id}"
         )
         hass.states.async_set(excess_sensor_id, "100")
         await hass.async_block_till_done()

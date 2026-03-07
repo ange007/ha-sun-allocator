@@ -17,6 +17,7 @@ from ...const import (
     DOMAIN,
     CONF_DEVICES,
     CONF_POWER_DISTRIBUTION,
+    SENSOR_POWER_DISTRIBUTION_SUFFIX,
     SIGNAL_POWER_DISTRIBUTION_UPDATED,
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
@@ -29,7 +30,8 @@ from ...const import (
 class SunAllocatorPowerDistributionSensor(SensorEntity):
     """Representation of a SunAllocator power distribution sensor."""
 
-    _attr_translation_key = "power_distribution"
+    _attr_has_entity_name = True
+    _attr_translation_key = SENSOR_POWER_DISTRIBUTION_SUFFIX
     _attr_icon = "mdi:flash"
     _attr_should_poll = False
     _attr_native_unit_of_measurement = UnitOfPower.WATT
@@ -54,7 +56,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
         """Initialize the sensor."""
         self._hass = hass
         self._entry_id = entry_id
-        self._attr_unique_id = f"{entry_id}_power_distribution"
+        self._attr_unique_id = f"{entry_id}_{SENSOR_POWER_DISTRIBUTION_SUFFIX}"
         self._state = 0.0
         self._attr_extra_state_attributes = self._get_default_attributes()
 

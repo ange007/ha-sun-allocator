@@ -73,16 +73,8 @@ def build_device_selection_schema(entities, defaults=None):
     default_entity = (
         NONE_OPTION
         if defaults.get(CONF_DEVICE_ENTITY) is None
-        else defaults.get(CONF_DEVICE_ENTITY, NONE_OPTION)
+        else defaults.get(CONF_DEVICE_ENTITY)
     )
-
-    if len(options) <= 1:
-        options.append(
-            {
-                "label": "config.step.device_selection.data.no_devices_found",
-                "value": NONE_OPTION,
-            }
-        )
 
     return Schema(
         {

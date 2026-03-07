@@ -4,24 +4,24 @@ cards:
   - type: entities
     title: Power Distribution Overview
     entities:
-      - entity: sensor.sunallocator_power_distribution_1
+      - entity: sensor.sun_allocator_power_distribution
         name: Total Allocated Power
         secondary_info: last-changed
       - type: attribute
-        entity: sensor.sunallocator_power_distribution_1
+        entity: sensor.sun_allocator_power_distribution
         attribute: total_power
         name: Total Available Power
       - type: attribute
-        entity: sensor.sunallocator_power_distribution_1
+        entity: sensor.sun_allocator_power_distribution
         attribute: remaining_power
         name: Remaining Power
       - type: attribute
-        entity: sensor.sunallocator_power_distribution_1
+        entity: sensor.sun_allocator_power_distribution
         attribute: allocated_power
         name: Allocated Power
   - type: markdown
     content: >-
-      {% set SENSOR = 'sensor.sunallocator_power_distribution_1' %} {% set meta
+      {% set SENSOR = 'sensor.sun_allocator_power_distribution' %} {% set meta
       = state_attr(SENSOR, 'device_meta') or {} %} 
       {% set alloc = state_attr(SENSOR, 'allocation_w') or {} %} 
       {% set percent = state_attr(SENSOR, 'allocation_percent') or {} %} 
@@ -50,10 +50,10 @@ cards:
   - type: custom:mini-graph-card
     title: Power Allocation
     entities:
-      - entity: sensor.sunallocator_power_distribution_1
+      - entity: sensor.sun_allocator_power_distribution
         name: Allocated Power
         attribute: allocated_power
-      - entity: sensor.sunallocator_power_distribution_1
+      - entity: sensor.sun_allocator_power_distribution
         name: Remaining Power
         attribute: remaining_power
     hours_to_show: 1
@@ -71,9 +71,9 @@ cards:
   - type: custom:mini-graph-card
     title: Power Distribution History
     entities:
-      - entity: sensor.sunallocator_power_distribution_1
+      - entity: sensor.sun_allocator_power_distribution
         name: Allocated Power
-      - entity: sensor.sunallocator_excess_1
+      - entity: sensor.sun_allocator_excess_power
         name: Available Power
     hours_to_show: 24
     points_per_hour: 4

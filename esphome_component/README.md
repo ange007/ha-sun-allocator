@@ -52,8 +52,8 @@ output:
 
 After installation, you'll have the following entities in Home Assistant:
 
-- **Light Entity**: light.sunallocator_relay - Used to manually control the relay
-- **Select Entity**: select.sunallocator_mode — Off / On / Proportional
+- **Light Entity**: light.sun_allocator_relay - Used to manually control the relay
+- **Select Entity**: select.sun_allocator_mode — Off / On / Proportional
 - **Sensor Entities**:
   - sensor.untapped_potential - Shows the current untapped potential from SunAllocator
   - sensor.max_power - Shows the maximum power from SunAllocator
@@ -124,7 +124,7 @@ For advanced users, you can modify the C++ code to customize the behavior of the
   - esphome_component/sun_allocator_relay_esp01.yaml (single channel on GPIO2)
   - esphome_component/sun_allocator_relay_esp01_2ch.yaml (two channels on GPIO2 + GPIO0)
 - Entity naming updated for better Home Assistant discovery in Sun Allocator options flow:
-  - Select entity name now contains "SunAllocator" (e.g., "SunAllocator Mode"), so entity_id becomes select.sunallocator_mode (or select.sunallocator_mode_1 for multi‑channel).
+  - Select entity name now contains "SunAllocator" (e.g., "SunAllocator Mode"), so entity_id becomes select.sun_allocator_mode (or select.sun_allocator_mode_1 for multi‑channel).
 - AC vs DC SSR tuning guidance added (slow_pwm vs fast PWM).
 
 ## Pin‑out quick reference
@@ -156,10 +156,10 @@ For advanced users, you can modify the C++ code to customize the behavior of the
 
 ## Home Assistant entities
 - Single‑channel examples create:
-  - light.sunallocator_relay (or light.sunallocator_relay_1)
-  - select.sunallocator_mode (or select.sunallocator_mode_1)
+  - light.sun_allocator_relay (or light.sun_allocator_relay_1)
+  - select.sun_allocator_mode (or select.sun_allocator_mode_1)
 - Multi‑channel examples create per‑channel entities:
-  - light.sunallocator_relay_1..4 and select.sunallocator_mode_1..4
+  - light.sun_allocator_relay_1..4 and select.sun_allocator_mode_1..4
 - Modes supported by the select: Off / On / Proportional.
   - In Proportional mode, Sun Allocator integration sets brightness via standard light.turn_on, so the YAML doesn’t change brightness locally to avoid conflicts.
 

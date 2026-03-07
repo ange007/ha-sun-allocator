@@ -24,6 +24,7 @@ from ...const import (
     KEY_ENERGY_HARVESTING_POSSIBLE,
     KEY_RELATIVE_VOLTAGE,
     KEY_CALCULATION_REASON,
+    SENSOR_CURRENT_MAX_POWER_SUFFIX,
 )
 
 
@@ -43,8 +44,8 @@ class SunAllocatorCurrentMaxPowerSensor(BaseSunAllocatorSensor):
             config=config,
             entry_id=entry_id,
             entry_index=entry_index,
-            name="current_max_power",
-            unique_id_suffix="current_max_power",
+            name=SENSOR_CURRENT_MAX_POWER_SUFFIX,
+            unique_id_suffix=SENSOR_CURRENT_MAX_POWER_SUFFIX,
             unit_of_measurement=UnitOfPower.WATT,
         )
 

@@ -31,7 +31,6 @@ from ..const import (
     ACTION_EDIT,
     ACTION_REMOVE,
     ACTION_SETTINGS,
-    ACTION_ADD_DEVICE,
     ACTION_MANAGE_DEVICES,
     ACTION_BACK,
     STEP_CONFIRM_REMOVE,
@@ -59,6 +58,7 @@ class SunAllocatorConfigFlow(
     def async_get_options_flow(config_entry):
         """Return the options flow."""
         return SunAllocatorOptionsFlowHandler(config_entry)
+
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step - solar panel configuration."""
@@ -111,15 +111,17 @@ class SunAllocatorConfigFlow(
             errors=errors,
         )
 
+
     def _create_entry(self):
         """Create the config entry."""
         data = self._solar_config.copy()
-        data[CONF_DEVICES] = [] 
-        
+        data[CONF_DEVICES] = []
+
         return self.async_create_entry(
             title="Sun Allocator",
             data=data,
         )
+
 
     async def _save_and_return(self):
         """Save config and proceed to entry creation."""
@@ -143,7 +145,11 @@ class SunAllocatorOptionsFlowHandler(
     def __init__(self, config_entry):
         """Initialize options flow."""
         super().__init__()
-        self.config_entry = config_entry
+
+        # `config_entry` property on OptionsFlow is read-only in newer HA versions.
+        # Store the provided entry in a private attribute and use that.
+        self._config_entry = config_entry
+
         self._solar_config = {}
         self._devices = []
         self._device_config = {}
@@ -151,15 +157,17 @@ class SunAllocatorOptionsFlowHandler(
         self._action = None
         self._device_to_remove = None
 
+
     async def async_step_init(self, _user_input=None):
         """Manage the options for the custom component."""
         self._solar_config = {
-            k: v for k, v in self.config_entry.data.items() if k != CONF_DEVICES
+            k: v for k, v in self._config_entry.data.items() if k != CONF_DEVICES
         }
-        self._devices = self.config_entry.data.get(CONF_DEVICES, [])
+        self._devices = self._config_entry.data.get(CONF_DEVICES, [])
 
         log_debug("Loaded %d devices", len(self._devices))
         return await self.async_step_main_menu()
+
 
     async def async_step_main_menu(self, user_input=None):
         """Handle the main menu step."""
@@ -193,6 +201,7 @@ class SunAllocatorOptionsFlowHandler(
             description_placeholders={"devices_count": len(self._devices)},
             errors=errors,
         )
+
 
     async def async_step_settings(self, user_input=None):
         """Handle the settings step."""
@@ -237,6 +246,7 @@ class SunAllocatorOptionsFlowHandler(
             errors=errors,
         )
 
+
     async def async_step_manage_devices(self, user_input=None):
         """Handle device management step."""
         errors = {}
@@ -245,7 +255,7 @@ class SunAllocatorOptionsFlowHandler(
             action = user_input.get(CONF_ACTION, "")
             selected_device_id = user_input.get(CONF_DEVICE_ID)
 
-            if action == ACTION_ADD_DEVICE:
+            if action == ACTION_ADD:
                 self._action = ACTION_ADD
                 self._device_config = {}
                 return await self.async_step_device_name_type()
@@ -277,7 +287,7 @@ class SunAllocatorOptionsFlowHandler(
 
         device_options = {d[CONF_DEVICE_ID]: d[CONF_DEVICE_NAME] for d in self._devices}
 
-        action_options = [ACTION_ADD_DEVICE, ACTION_EDIT, ACTION_REMOVE, ACTION_BACK]
+        action_options = [ACTION_ADD, ACTION_EDIT, ACTION_REMOVE, ACTION_BACK]
 
         schema_dict = {}
 
@@ -315,6 +325,7 @@ class SunAllocatorOptionsFlowHandler(
             errors=errors,
         )
 
+
     async def async_step_confirm_remove(self, user_input=None):
         """Confirmation step for device removal."""
         if user_input is not None:
@@ -332,7 +343,7 @@ class SunAllocatorOptionsFlowHandler(
                     for d in self._devices
                     if d[CONF_DEVICE_ID] != self._device_to_remove
                 ]
-                data = dict(self.config_entry.data)
+                data = dict(self._config_entry.data)
                 data.update(self._solar_config)
                 data[CONF_DEVICES] = self._devices
 
@@ -342,9 +353,7 @@ class SunAllocatorOptionsFlowHandler(
                     len(self._devices),
                     data,
                 )
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry, data=data
-                )
+                self.hass.config_entries.async_update_entry(self._config_entry, data=data)
                 return await self.async_step_manage_devices()
 
             return await self.async_step_manage_devices()
@@ -357,6 +366,7 @@ class SunAllocatorOptionsFlowHandler(
             },
         )
 
+
     def _get_device_name(self, device_id):
         """Get device name by its ID."""
         for device in self._devices:
@@ -364,9 +374,10 @@ class SunAllocatorOptionsFlowHandler(
                 return device.get(CONF_DEVICE_NAME, "Unnamed device")
         return "Unknown device"
 
+
     async def _save_and_return(self):
         """Save configuration, reload integration and return to main menu."""
-        data = dict(self.config_entry.data)
+        data = dict(self._config_entry.data)
         data.update(self._solar_config)
         data[CONF_DEVICES] = self._devices
         data["devices_str"] = json.dumps(self._devices)
@@ -376,9 +387,10 @@ class SunAllocatorOptionsFlowHandler(
             len(self._devices),
             data,
         )
-        self.hass.config_entries.async_update_entry(self.config_entry, data=data)
-        await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+        self.hass.config_entries.async_update_entry(self._config_entry, data=data)
+        await self.hass.config_entries.async_reload(self._config_entry.entry_id)
         return await self.async_step_main_menu()
+
 
     async def _finalize_device_config(self):
         """Finalize device configuration, persist, and reload."""
@@ -392,7 +404,7 @@ class SunAllocatorOptionsFlowHandler(
             if self._device_index is not None:
                 self._devices[self._device_index] = self._device_config
 
-        data = dict(self.config_entry.data)
+        data = dict(self._config_entry.data)
         data.update(self._solar_config)
         data[CONF_DEVICES] = self._devices
         data["devices_str"] = json.dumps(self._devices)
@@ -402,8 +414,8 @@ class SunAllocatorOptionsFlowHandler(
             len(self._devices),
             data,
         )
-        self.hass.config_entries.async_update_entry(self.config_entry, data=data)
-        await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+        self.hass.config_entries.async_update_entry(self._config_entry, data=data)
+        await self.hass.config_entries.async_reload(self._config_entry.entry_id)
         return await self.async_step_manage_devices()
 
 

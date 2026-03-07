@@ -19,6 +19,7 @@ from ...const import (
     CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
+    SENSOR_USAGE_PERCENT_SUFFIX,
 )
 
 
@@ -38,8 +39,8 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
             config=config,
             entry_id=entry_id,
             entry_index=entry_index,
-            name="usage_percent",
-            unique_id_suffix="usage_percent",
+            name=SENSOR_USAGE_PERCENT_SUFFIX,
+            unique_id_suffix=SENSOR_USAGE_PERCENT_SUFFIX,
             unit_of_measurement=PERCENTAGE,
         )
 

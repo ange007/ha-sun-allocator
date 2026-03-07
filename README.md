@@ -40,10 +40,10 @@ For a detailed guide on all configuration options, please see the [**Detailed Co
 
 The integration creates several sensors to monitor your solar array:
 
--   `sensor.sunallocator_excess_1`: The untapped potential power available. Use this to trigger your automations.
--   `sensor.sunallocator_current_max_power_1`: The estimated maximum power your panels could produce at the current voltage.
--   `sensor.sunallocator_usage_percent_1`: The current power usage as a percentage of the maximum possible power.
--   `sensor.sunallocator_power_distribution_1`: The total power currently allocated to all your controlled devices.
+-   `sensor.sun_allocator_excess_power`: The untapped potential power available. Use this to trigger your automations.
+-   `sensor.sun_allocator_current_max_power`: The estimated maximum power your panels could produce at the current voltage.
+-   `sensor.sun_allocator_usage_percent`: The current power usage as a percentage of the maximum possible power.
+-   `sensor.sun_allocator_power_distribution`: The total power currently allocated to all your controlled devices.
 
 ### Example Automation
 
@@ -54,7 +54,7 @@ automation:
   - alias: "Turn on Device with Solar Excess"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.sunallocator_excess_1
+        entity_id: sensor.sun_allocator_excess_power
         above: 50
     action:
       - service: switch.turn_on

@@ -3,11 +3,11 @@
 from homeassistant.helpers.selector import selector
 
 
-class EntitySelectorBuilder:
+class CustomEntitySelectorBuilder:
     """Builds entity selectors with custom options."""
 
     def __init__(self, icon_map=None):
-        """Initialize the EntitySelectorBuilder."""
+        """Initialize the CustomEntitySelectorBuilder."""
         self.icon_map = icon_map or {}
 
 

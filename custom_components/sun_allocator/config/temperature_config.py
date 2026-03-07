@@ -7,7 +7,7 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant
 
 from ..core.logger import log_error, log_exception, audit_action
-from ..config.ui_helpers import EntitySelectorBuilder
+from ..config.ui_helpers import CustomEntitySelectorBuilder
 from .temperature_config_form import build_temperature_config_schema
 
 from ..const import (
@@ -37,8 +37,10 @@ class TemperatureConfigMixin:
                 or (entity.attributes.get("unit_of_measurement") in ["°C", "°F", "K"])
             )
         ]
-        builder = EntitySelectorBuilder(icon_map)
+
+        builder = CustomEntitySelectorBuilder(icon_map)
         result = builder.build(sensors, none_option=True)
+
         # NONE_OPTION замість "None"
         if result and result[0]["value"] == "None":
             result[0]["value"] = NONE_OPTION
@@ -51,6 +53,7 @@ class TemperatureConfigMixin:
     ) -> Dict[str, str]:
         """Validate temperature compensation configuration."""
         errors = {}
+
         # Validate temperature coefficients
         try:
             voc_coef = float(user_input.get(CONF_TEMP_COEFFICIENT_VOC, -0.3))
@@ -64,6 +67,7 @@ class TemperatureConfigMixin:
                 user_input.get(CONF_TEMP_COEFFICIENT_VOC),
             )
             log_exception("temperature_config_voc_coef", exc)
+
         try:
             pmax_coef = float(user_input.get(CONF_TEMP_COEFFICIENT_PMAX, -0.4))
             # PMAX coefficient should typically be negative (around -0.4% per °C)
@@ -76,6 +80,7 @@ class TemperatureConfigMixin:
                 user_input.get(CONF_TEMP_COEFFICIENT_PMAX),
             )
             log_exception("temperature_config_pmax_coef", exc)
+
         # Validate that temperature sensor is selected if compensation is enabled
         if user_input.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False):
             temp_sensor = user_input.get(CONF_TEMPERATURE_SENSOR)

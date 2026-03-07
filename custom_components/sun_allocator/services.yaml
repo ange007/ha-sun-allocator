@@ -5,7 +5,7 @@ set_relay_mode:
     entity_id:
       name: Entity ID
       description: Target entity ID (optional - if not provided, applies to all devices)
-      example: "select.sunallocator_mode"
+      example: "select.sun_allocator_mode"
       selector:
         entity:
           domain: select
@@ -34,7 +34,7 @@ set_relay_power:
     entity_id:
       name: Entity ID
       description: Target entity ID (optional - if not provided, applies to all devices)
-      example: "light.sunallocator_relay"
+      example: "light.sun_allocator_relay"
       selector:
         entity:
           domain: light

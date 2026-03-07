@@ -17,7 +17,7 @@ After flashing your ESP device with the Sun Allocator Relay firmware, it will au
 Once integrated, you'll have the following entities in Home Assistant:
 
 - **Light Entity**: light.sun_allocator_relay — manual/proportional brightness control
-- **Select Entity**: select.sunallocator_mode — Off / On / Proportional
+- **Select Entity**: select.sun_allocator_mode — Off / On / Proportional
 - **Sensor Entities**:
   - sensor.untapped_potential — Untapped potential from SunAllocator
   - sensor.max_power — Maximum power from SunAllocator
@@ -34,7 +34,7 @@ Add this card to your dashboard for basic control:
 type: entities
 title: Sun Allocator Relay
 entities:
-  - entity: select.sunallocator_mode
+  - entity: select.sun_allocator_mode
   - entity: light.sun_allocator_relay
   - entity: sensor.untapped_potential
   - entity: sensor.untapped_percentage

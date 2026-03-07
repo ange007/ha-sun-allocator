@@ -47,6 +47,8 @@ from ...const import (
 class BaseSunAllocatorSensor(SensorEntity, ABC):
     """Base class for all SunAllocator sensors."""
 
+    _attr_has_entity_name = True
+
     # pylint: disable=too-many-instance-attributes
     def __init__(
         self,

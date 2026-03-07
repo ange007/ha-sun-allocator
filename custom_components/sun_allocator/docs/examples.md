@@ -11,7 +11,7 @@ automation:
   - alias: "Enable relay on excess"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.sunallocator_excess_1
+        entity_id: sensor.sun_allocator_excess_power
         above: 50
     action:
       - service: switch.turn_on
@@ -26,7 +26,7 @@ automation:
   - alias: "Enable relay on high usage"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.sunallocator_usage_percent_1
+        entity_id: sensor.sun_allocator_usage_percent
         above: 90
     action:
       - service: switch.turn_on
@@ -44,8 +44,8 @@ automation:
     trigger:
       - platform: template
         value_template: >
-          {% set current_power = states('sensor.pv_power_1') | float(0) %}
-          {% set max_power = states('sensor.sunallocator_current_max_power_1') | float(0) %}
+          {% set current_power = states('sensor.pv_power') | float(0) %}
+          {% set max_power = states('sensor.sun_allocator_current_max_power') | float(0) %}
           {% set power_difference = max_power - current_power %}
           {{ power_difference > 100 }}
     action:
@@ -116,7 +116,7 @@ For a specific entity:
 ```yaml
 service: sun_allocator.set_relay_power
 data:
-  entity_id: light.sunallocator_relay_1
+  entity_id: light.sun_allocator_relay_1
   power: 75
 ```
 
@@ -143,14 +143,14 @@ data:
 type: entities
 title: Solar Panel Performance
 entities:
-  - entity: sensor.sunallocator_current_max_power_1
+  - entity: sensor.sun_allocator_current_max_power
     name: Maximum Possible Power (W)
-  - entity: sensor.pv_power_1
+  - entity: sensor.pv_power
     name: Current Power (W)
-  - entity: sensor.sunallocator_usage_percent_1
+  - entity: sensor.sun_allocator_usage_percent
     name: Efficiency (%)
   - type: custom:bar-card
-    entity: sensor.sunallocator_usage_percent_1
+    entity: sensor.sun_allocator_usage_percent
     title: Panel Efficiency
     max: 100
     severity:
@@ -167,11 +167,11 @@ cards:
   - type: entities
     title: SunAllocator Status
     entities:
-      - entity: sensor.sunallocator_excess_1
+      - entity: sensor.sun_allocator_excess_power
         name: Untapped Potential (W)
-      - entity: sensor.sunallocator_current_max_power_1
+      - entity: sensor.sun_allocator_current_max_power
         name: Current Max Power (W)
-      - entity: sensor.sunallocator_usage_percent_1
+      - entity: sensor.sun_allocator_usage_percent
         name: PV Usage (%)
   
   - type: entities
@@ -200,7 +200,7 @@ cards:
   
   - type: gauge
     name: Untapped Potential
-    entity: sensor.sunallocator_excess_1
+    entity: sensor.sun_allocator_excess_power
     min: 0
     max: 500
     severity:
@@ -215,11 +215,11 @@ SunAllocator provides sensors for visualizing how power is distributed among dev
 
 #### Power Distribution Sensors
 
-1.  **Main Power Distribution Sensor**: `sensor.sunallocator_power_distribution_1`
+1.  **Main Power Distribution Sensor**: `sensor.sun_allocator_power_distribution`
     *   Shows the total allocated power across all devices
     *   Provides attributes for total power, remaining power, and allocation per device
 
-2.  **Device Power Allocation Sensors**: `sensor.sunallocator_device_power_[device_id]`
+2.  **Device Power Allocation Sensors**: `sensor.sun_allocator_device_power_[device_id]`
     *   One sensor is created for each device, showing the power allocated to it.
 
 #### Example Power Distribution Dashboard
@@ -233,25 +233,25 @@ cards:
   - type: entities
     title: Power Distribution Overview
     entities:
-      - entity: sensor.sunallocator_power_distribution_1
+      - entity: sensor.sun_allocator_power_distribution
         name: Total Allocated Power
         secondary_info: last-changed
       - type: attribute
-        entity: sensor.sunallocator_power_distribution_1
+        entity: sensor.sun_allocator_power_distribution
         attribute: total_power
         name: Total Available Power
       - type: attribute
-        entity: sensor.sunallocator_power_distribution_1
+        entity: sensor.sun_allocator_power_distribution
         attribute: remaining_power
         name: Remaining Power
       - type: attribute
-        entity: sensor.sunallocator_power_distribution_1
+        entity: sensor.sun_allocator_power_distribution
         attribute: allocated_power
         name: Allocated Power
   
   - type: custom:bar-card
     title: Power Allocation
-    entity: sensor.sunallocator_power_distribution_1
+    entity: sensor.sun_allocator_power_distribution
     # ... (bar-card config) ...
     
   - type: custom:apexcharts-card
@@ -263,11 +263,11 @@ cards:
       show_states: true
     series:
       # Replace these with your actual device power sensors
-      - entity: sensor.sunallocator_device_power_device1
+      - entity: sensor.sun_allocator_device_power_device1
         name: Water Heater
-      - entity: sensor.sunallocator_device_power_device2
+      - entity: sensor.sun_allocator_device_power_device2
         name: Space Heater
-      - entity: sensor.sunallocator_device_power_device3
+      - entity: sensor.sun_allocator_device_power_device3
         name: Pool Pump
 ```
 
@@ -277,9 +277,9 @@ cards:
 type: custom:mini-graph-card
 title: Power Distribution History
 entities:
-  - entity: sensor.sunallocator_power_distribution_1
+  - entity: sensor.sun_allocator_power_distribution
     name: Allocated Power
-  - entity: sensor.sunallocator_excess_1
+  - entity: sensor.sun_allocator_excess_power
     name: Available Power
 hours_to_show: 24
 points_per_hour: 4

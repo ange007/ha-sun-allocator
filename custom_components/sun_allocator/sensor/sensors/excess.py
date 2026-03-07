@@ -25,6 +25,7 @@ from ...const import (
     CONF_BATTERY_POWER,
     CONF_PANEL_VMP,
     CONF_PANEL_IMP,
+    SENSOR_EXCESS_SUFFIX,
 )
 
 
@@ -44,8 +45,8 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             config=config,
             entry_id=entry_id,
             entry_index=entry_index,
-            name="excess",
-            unique_id_suffix="excess",
+            name=SENSOR_EXCESS_SUFFIX,
+            unique_id_suffix=SENSOR_EXCESS_SUFFIX,
             unit_of_measurement=UnitOfPower.WATT,
         )
 

@@ -45,7 +45,9 @@ async def async_setup_entry(
         SunAllocatorUsagePercentSensor(
             hass, config_entry.data, config_entry.entry_id, entry_index
         ),
-        SunAllocatorPowerDistributionSensor(hass, config_entry.entry_id, entry_index),
+        SunAllocatorPowerDistributionSensor(
+            hass, config_entry.entry_id, entry_index
+        ),
     ]
 
     # Create a sensor for each configured device

@@ -18,6 +18,7 @@ from ...const import (
     CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
+    SENSOR_MAX_POWER_SUFFIX,
 )
 
 
@@ -37,8 +38,8 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             config=config,
             entry_id=entry_id,
             entry_index=entry_index,
-            name="max_power",
-            unique_id_suffix="max_power",
+            name=SENSOR_MAX_POWER_SUFFIX,
+            unique_id_suffix=SENSOR_MAX_POWER_SUFFIX,
             unit_of_measurement=UnitOfPower.WATT,
         )
 
