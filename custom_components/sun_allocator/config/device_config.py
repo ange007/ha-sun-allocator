@@ -9,7 +9,7 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from ..core.logger import log_info, log_error, audit_action, log_exception
+from ..core.logger import log_debug, log_info, log_error, audit_action, log_exception
 from ..utils import clean_entity_id_and_mode
 from .device_config_form import (
     build_device_name_type_schema,
@@ -110,6 +110,7 @@ class DeviceConfigMixin:
                             else f"{icon} {e.entity_id} (Heat)"
                         )
                         all_entities.append((value_heat, label_heat, friendly))
+                        
                         value_cool = f"{e.entity_id}|cool"
                         label_cool = (
                             f"{icon} {friendly} (Cool)"
@@ -248,6 +249,10 @@ class DeviceConfigMixin:
 
             user_input[CONF_DEVICE_ENTITY_FRIENDLY_NAME] = friendly_name
 
+            log_debug(
+                f"[DeviceConfigMixin] Process device input {entity_id_from_input}: cleaned_id={cleaned_id}, hvac_mode={hvac_mode}, friendly_name={friendly_name}",
+            )
+
         return user_input
 
 
@@ -309,12 +314,12 @@ class DeviceConfigMixin:
         if self._action == ACTION_ADD:
             self._device_config[CONF_DEVICE_ID] = str(uuid.uuid4())
             self._devices.append(self._device_config)
+
             log_info("[DeviceConfigMixin] Added device: %s", self._device_config)
             audit_action("device_add", {"device": self._device_config})
         else:
-            self._device_config[CONF_DEVICE_ID] = self._device_config.get(
-                CONF_DEVICE_ID
-            ) or str(uuid.uuid4())
+            self._device_config[CONF_DEVICE_ID] = self._device_config.get(CONF_DEVICE_ID) or str(uuid.uuid4())
+
             if self._device_index is not None:
                 self._devices[self._device_index] = self._device_config
                 log_info("[DeviceConfigMixin] Edited device: %s", self._device_config)
@@ -327,6 +332,7 @@ class DeviceConfigMixin:
                 self.hass.config_entries.async_update_entry(
                     self.config_entry, data=data
                 )
+
                 log_info(
                     "[DeviceConfigMixin] Persisted devices: %d devices",
                     len(self._devices),
@@ -382,9 +388,7 @@ class DeviceConfigMixin:
             data_schema=schema,
             description_placeholders={
                 "device_name": self._device_config.get(CONF_DEVICE_NAME, "New Device"),
-                "device_type": self._device_config.get(
-                    CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM
-                ),
+                "device_type": self._device_config.get(CONF_DEVICE_TYPE, DEVICE_TYPE_CUSTOM),
             },
             errors=errors,
         )
@@ -402,6 +406,7 @@ class DeviceConfigMixin:
 
                 if self._device_config.get(CONF_DEVICE_SCHEDULE_ENABLED, False):
                     return await self.async_step_device_schedule()
+
                 return await self._finalize_device_config()
 
         schema = self._get_device_basic_settings_schema(self._device_config)

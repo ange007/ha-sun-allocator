@@ -128,11 +128,6 @@ class SunAllocatorConfigFlow(
         return self._create_entry()
 
 
-# TODO: Fix deprecation warning for explicit config_entry setting in OptionsFlow.
-# This will require changes in how the options flow is tested.
-# The current test environment does not seem to automatically provide the config_entry
-# to the handler, which causes tests to fail when the deprecation is fixed.
-# This needs to be addressed before HA version 2025.12.
 class SunAllocatorOptionsFlowHandler(
     solar_config.SolarConfigMixin,
     device_config.DeviceConfigMixin,

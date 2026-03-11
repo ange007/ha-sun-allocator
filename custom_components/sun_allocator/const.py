@@ -70,7 +70,7 @@ CONF_TEMP_COEFFICIENT_PMAX = "temp_coefficient_pmax"
 
 # --- Default & Internal Values ---
 # These constants define default values for settings and internal algorithm parameters.
-
+DEFAULT_STARTUP_GRACE_PERIOD = 90
 DEFAULT_DEBOUNCE_TIME = 15
 DEFAULT_HYSTERESIS_W = 40.0
 
@@ -198,3 +198,4 @@ KEY_LIGHT_FACTOR = "light_factor"
 KEY_RELATIVE_VOLTAGE = "relative_voltage"
 KEY_VOC_RATIO = "voc_ratio"
 KEY_CALCULATION_REASON = "calculation_reason"
+KEY_STARTUP_GRACE_PERIOD = "startup_grace_period"

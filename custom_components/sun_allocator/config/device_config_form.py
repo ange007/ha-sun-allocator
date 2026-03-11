@@ -76,6 +76,11 @@ def build_device_selection_schema(entities, defaults=None):
         else defaults.get(CONF_DEVICE_ENTITY)
     )
 
+    # For climate devices, reconstruct the full entity ID with mode suffix
+    # since options include the mode but stored defaults are cleaned
+    if default_entity != NONE_OPTION and defaults.get("hvac_mode"):
+        default_entity = f"{default_entity}|{defaults['hvac_mode']}"
+
     return Schema(
         {
             Optional(

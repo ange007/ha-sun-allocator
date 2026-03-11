@@ -1,3 +1,5 @@
+[🇬🇧 English](./configuration.md) | [🇺🇦 Українська](./configuration_uk.md)
+
 # Detailed Configuration
 
 SunAllocator is configured through the Home Assistant UI. This document provides a detailed explanation of all the configuration parameters.
@@ -45,14 +47,14 @@ In this section, you can add, edit, or remove the devices (loads) that you want 
 ### Device Settings
 - **Device Name**: A friendly name for the device.
 - **Device Type**:
-  - **Standard**: An on/off device, like a switch, light, or input boolean.
+  - **Standard**: An on/off device — switch, light, input boolean, or climate entity (thermostat/heat pump). For climate entities, select the entity in the format `climate.your_entity` and the integration will call `set_hvac_mode` to turn it on/off.
   - **Custom (ESPHome)**: A device that can handle proportional power, typically a dimmer or a custom ESPHome component. This allows the integration to send a percentage of power to the device.
 - **Device Entity**: The Home Assistant entity that represents your device.
 - **Min Expected (W)**: (Required) The minimum power in Watts the device consumes when it's on. This is used to determine if the device is actually running.
 - **Max Expected (W)**: (Required for Custom devices) The maximum power in Watts the device consumes at 100% load. This is used for proportional control.
 - **Priority**: A number from 1 to 100 that determines the order in which devices are turned on. Devices with higher priority are turned on first.
 - **Debounce Time (s)**: The time in seconds the system will wait before turning a device on or off. This prevents the device from rapidly switching on and off.
-- **Min On-Time (s)**: The minimum time in seconds that the device must remain on before it can be turned off. This is useful for appliances like compressors or pumps that should not be cycled on and off rapidly.
+- **Min On-Time (s)**: The minimum time in seconds that the device must remain on before it can be turned off. This is useful for appliances like compressors or pumps that should not be cycled on and off rapidly. When a device is turned on, a **startup grace period** is also applied (configurable in Advanced Settings), during which the device will not be turned off even if solar power drops below the threshold.
 - **Auto-Control**: Enable or disable automatic control for this device.
 - **Enable Schedule**: Enable or disable a schedule for this device.
 
@@ -88,3 +90,4 @@ This section allows you to fine-tune the behavior of the power allocation algori
 - **Ramp Down Step (%)**: The percentage by which the power is decreased for proportional devices in each step.
 - **Ramp Deadband (%)**: A small range around the target power where no changes are made, to prevent oscillations.
 - **Hysteresis (W)**: A power buffer to prevent devices from turning on and off too frequently. A device will turn on at its configured minimum power and turn off at `Minimum Power - Hysteresis`.
+- **Startup Grace Period (s)**: The time in seconds after a device is first turned on during which it will not be turned off, even if solar power drops below the threshold. This gives devices time to ramp up to their operating power before the allocator can decide to turn them off.

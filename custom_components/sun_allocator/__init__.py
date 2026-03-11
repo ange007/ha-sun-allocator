@@ -5,8 +5,11 @@ from datetime import timedelta
 
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import config_validation as cv
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import (
+    config_validation as cv,
+    entity_registry as er,
+)
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.event import (
     async_track_state_change_event,
@@ -26,6 +29,7 @@ from .core.device_restore import (
     persist_device_state,
     restore_entity_state,
     restore_all_devices,
+    _load_restore_data,
 )
 from .core.services import handle_set_relay_mode, handle_set_relay_power
 from .core.mode_select import mode_select_state_listener
@@ -59,7 +63,6 @@ from .const import (
     MAX_PERCENTAGE,
 )
 
-# Service schema for set_relay_mode
 SET_RELAY_MODE_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_ENTITY_ID): cv.entity_id,
@@ -70,7 +73,6 @@ SET_RELAY_MODE_SCHEMA = vol.Schema(
     }
 )
 
-# Service schema for set_relay_power
 SET_RELAY_POWER_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_ENTITY_ID): cv.entity_id,
@@ -83,15 +85,12 @@ SET_RELAY_POWER_SCHEMA = vol.Schema(
 async def _setup_entity_state_listeners(hass, config_entry, entry_data):
     """Setup listeners for entity state changes to persist and restore state."""
 
-    @callback
     async def _entity_state_listener(event):
-        """Handle entity state changes to persist and restore state."""
         entity_id = event.data.get("entity_id")
         new_state = event.data.get("new_state")
         old_state = event.data.get("old_state")
         if not new_state:
             return
-        # Persist percent and ON/OFF for relay entities
         try:
             percent = None
             is_on = None
@@ -116,7 +115,7 @@ async def _setup_entity_state_listeners(hass, config_entry, entry_data):
             )
         except (TypeError, ValueError, OSError) as exc:
             log_debug(f"[Persist] Error persisting state for {entity_id}: {exc}")
-        # Restore if entity just became available
+
         was_unavailable = (old_state is None) or (
             old_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
         )
@@ -124,7 +123,6 @@ async def _setup_entity_state_listeners(hass, config_entry, entry_data):
         if was_unavailable and now_available:
             await restore_entity_state(hass, config_entry, entity_id)
 
-    # Subscribe to all relevant entity state changes
     relay_entities = set()
     mode_entities = set()
     for dev in config_entry.data.get(CONF_DEVICES, []):
@@ -150,6 +148,7 @@ async def _setup_esphome_mode_tracking(hass, config_entry, entry_data):
     desired_modes = {}
     select_entity_ids = []
     devices = config_entry.data.get(CONF_DEVICES, [])
+
     for dev in devices:
         entity = dev.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
         if entity:
@@ -157,13 +156,15 @@ async def _setup_esphome_mode_tracking(hass, config_entry, entry_data):
             state = hass.states.get(entity)
             if state and state.state in valid_modes:
                 desired_modes[entity] = state.state
+
     entry_data["desired_modes"] = desired_modes
 
-    # Fallback: load persisted last_mode
+    # Fallback: load persisted last_mode from Storage
+    restore_data = await _load_restore_data(hass, config_entry)
     for dev in devices:
         entity = dev.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
         if entity and entity not in desired_modes:
-            persisted = dev.get("last_mode")
+            persisted = restore_data.get(entity, {}).get("last_mode")
             if persisted in valid_modes:
                 desired_modes[entity] = persisted
 
@@ -175,58 +176,50 @@ async def _setup_esphome_mode_tracking(hass, config_entry, entry_data):
                 hass, config_entry, event, desired_modes, select_entity_ids
             ),
         )
-        # Initial re-assert of desired mode
-        for _entity_id in select_entity_ids:
-            _state = hass.states.get(_entity_id)
-            _desired = desired_modes.get(_entity_id)
-            if (
-                _desired
-                and _state
-                and _state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
-                and _state.state != _desired
-            ):
-                log_debug("Re-applying desired mode %s to %s", _desired, _entity_id)
-                await set_mode_for_entity(hass, _entity_id, _desired)
+
+    for _entity_id in select_entity_ids:
+        _state = hass.states.get(_entity_id)
+        _desired = desired_modes.get(_entity_id)
+        if (
+            _desired
+            and _state
+            and _state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+            and _state.state != _desired
+        ):
+            log_debug("Re-applying desired mode %s to %s", _desired, _entity_id)
+            await set_mode_for_entity(hass, _entity_id, _desired)
 
 
-async def _initial_pass_with_retry(
-    hass, config_entry, entry_data, excess_sensor_id, legacy_excess_sensor_id
-):
+async def _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor_id):
     """Perform an initial pass to set the state of the devices."""
-    for i in range(3):  # Try 3 times
-        initial_state = hass.states.get(excess_sensor_id) or hass.states.get(
-            legacy_excess_sensor_id
-        )
+    for i in range(3):
+        initial_state = hass.states.get(excess_sensor_id)
         log_debug(
             "--- INITIAL PASS (attempt %d) ---: id=%s, state=%s",
             i + 1,
             excess_sensor_id,
             initial_state,
         )
-        if initial_state and initial_state.state not in (
-            STATE_UNKNOWN,
-            STATE_UNAVAILABLE,
-        ):
+        if initial_state and initial_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try:
                 excess_power = float(initial_state.state)
                 entry_data["watchdog_last_seen"] = dt_util.utcnow()
                 entry_data["watchdog_alerted"] = False
                 await process_excess_power(hass, config_entry, excess_power)
-                
                 log_info(
                     "Initial pass successful for %s: %sW",
                     initial_state.entity_id,
                     excess_power,
                 )
-                return  # Success
+                return
             except (ValueError, TypeError):
                 log_debug(
                     "Excess sensor state not numeric yet for initial pass: %s",
                     initial_state.state,
                 )
-
+            except Exception as exc:
+                log_error("Unexpected error during initial pass: %s", exc)
         await asyncio.sleep(0.1 * (i + 1))
-
     log_warning("Failed to perform initial pass after multiple retries.")
 
 
@@ -236,7 +229,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
         "--- COMPONENT SETUP ---: Loading entry. Data: %s",
         config_entry.data,
     )
-    # Store config entry data EARLY so it's available for all listeners
     hass.data.setdefault(DOMAIN, {})
     entry_data = {
         "config": config_entry.data,
@@ -245,7 +237,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     }
     hass.data[DOMAIN][config_entry.entry_id] = entry_data
 
-    # --- Log all loaded devices for diagnostics ---
     devices = config_entry.data.get(CONF_DEVICES, [])
     if LOG_STARTUP_DEVICES:
         if devices:
@@ -261,19 +252,19 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
         else:
             log_info("[Startup] No devices loaded from config.")
 
-    # --- Restore device state after Home Assistant restart ---
     async def _on_ha_started(_):
-        """Restore device state after Home Assistant restart."""
         await restore_all_devices(hass, config_entry)
+        _entry_data = hass.data[DOMAIN][config_entry.entry_id]
+        if not _entry_data.get("unsub_auto_control"):
+            log_info("Retrying auto-control setup after HA started (sensor was not ready at initial setup)")
+            await setup_auto_control(hass, config_entry)
 
-    hass.bus.async_listen_once("homeassistant_started", _on_ha_started)
+    unsub_ha_start = hass.bus.async_listen_once("homeassistant_started", _on_ha_started)
+    entry_data["unsub_ha_start"] = unsub_ha_start
 
     await _setup_entity_state_listeners(hass, config_entry, entry_data)
-
-    # Set up sensors
     await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
 
-    # Register the services once (global) and track entry count
     root = hass.data[DOMAIN]
     root.setdefault("_entry_count", 0)
     root.setdefault("_services_registered", False)
@@ -286,27 +277,20 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
             await handle_set_relay_power(hass, call)
 
         hass.services.async_register(
-            DOMAIN,
-            SERVICE_SET_RELAY_MODE,
-            _handle_set_relay_mode,
+            DOMAIN, SERVICE_SET_RELAY_MODE, _handle_set_relay_mode,
             schema=SET_RELAY_MODE_SCHEMA,
         )
         hass.services.async_register(
-            DOMAIN,
-            SERVICE_SET_RELAY_POWER,
-            _handle_set_relay_power,
+            DOMAIN, SERVICE_SET_RELAY_POWER, _handle_set_relay_power,
             schema=SET_RELAY_POWER_SCHEMA,
         )
         root["_services_registered"] = True
-    # Increment active entry count
+
     root["_entry_count"] = int(root.get("_entry_count", 0)) + 1
 
     await _setup_esphome_mode_tracking(hass, config_entry, entry_data)
-
-    # Set up auto-control
     await setup_auto_control(hass, config_entry)
 
-    # Listen for config entry updates
     entry_data["unsub_update_listener"] = config_entry.add_update_listener(
         update_listener
     )
@@ -319,22 +303,18 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     log_info("--- SETUP AUTO CONTROL ---")
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
 
-    # Cancel any existing auto-control
     if entry_data.get("unsub_auto_control"):
         entry_data["unsub_auto_control"]()
         entry_data["unsub_auto_control"] = None
 
-    # Cancel existing watchdog timer
     if entry_data.get("unsub_watchdog_timer"):
         entry_data["unsub_watchdog_timer"]()
         entry_data["unsub_watchdog_timer"] = None
 
-    # Cancel existing ramp timer
     if entry_data.get("unsub_ramp_timer"):
         entry_data["unsub_ramp_timer"]()
         entry_data["unsub_ramp_timer"] = None
 
-    # Get devices from config
     devices = config_entry.data.get(CONF_DEVICES, [])
     auto_control_devices = [
         dev for dev in devices if dev.get(CONF_AUTO_CONTROL_ENABLED, False)
@@ -355,7 +335,6 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             power_allocation[device_id] = 0
     entry_data[CONF_POWER_ALLOCATION] = power_allocation
 
-    # Watchdog for stale excess sensor
     watchdog_period = timedelta(seconds=60)
     entry_data["watchdog_last_seen"] = dt_util.utcnow()
     entry_data["watchdog_alerted"] = False
@@ -369,32 +348,40 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
 
     entry_data["process_excess_power"] = process_excess_power
 
-    @callback
     async def handle_state_change(event):
-        """Handle changes to the excess power sensor."""
         new_state = event.data.get("new_state") if hasattr(event, "data") else None
         if not new_state or new_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             return
-
         entry_data["watchdog_last_seen"] = dt_util.utcnow()
         entry_data["watchdog_alerted"] = False
-
         try:
             excess_power = float(new_state.state)
             await process_excess_power(hass, config_entry, excess_power)
         except (ValueError, TypeError) as exc:
             log_error(f"Error processing excess power value: {exc}")
+        except Exception as exc:
+            log_error(f"Unexpected error in process_excess_power: {exc}")
 
-    excess_sensor_id = f"sensor.sun_allocator_{config_entry.entry_id}_excess"
-    legacy_excess_sensor_id = "sensor.sunallocator_excess_1"
+    registry = er.async_get(hass)
+    excess_sensor_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{config_entry.entry_id}_excess"
+    )
+
+    if not excess_sensor_id:
+        log_warning(
+            "Excess sensor not found in entity registry (looked for unique_id=%s_excess). "
+            "Will retry after homeassistant_started event.",
+            config_entry.entry_id,
+        )
+        return
+
+    log_info("Tracking excess sensor: %s", excess_sensor_id)
     entry_data["unsub_auto_control"] = async_track_state_change_event(
-        hass, [excess_sensor_id, legacy_excess_sensor_id], handle_state_change
+        hass, [excess_sensor_id], handle_state_change
     )
 
     entry_data["initial_pass_task"] = hass.async_create_task(
-        _initial_pass_with_retry(
-            hass, config_entry, entry_data, excess_sensor_id, legacy_excess_sensor_id
-        )
+        _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor_id)
     )
 
     log_info(f"Auto-control set up for {len(auto_control_devices)} devices")
@@ -411,27 +398,27 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigType):
     await hass.config_entries.async_forward_entry_unload(config_entry, "sensor")
 
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
+
     if entry_data.get("unsub_update_listener"):
         entry_data["unsub_update_listener"]()
-
     if entry_data.get("unsub_auto_control"):
         entry_data["unsub_auto_control"]()
-
     if entry_data.get("unsub_mode_listener"):
         entry_data["unsub_mode_listener"]()
-
     if entry_data.get("unsub_watchdog_timer"):
         entry_data["unsub_watchdog_timer"]()
-
     if entry_data.get("unsub_ramp_timer"):
         entry_data["unsub_ramp_timer"]()
-
     if entry_data.get("initial_pass_task"):
         entry_data["initial_pass_task"].cancel()
         try:
             await entry_data["initial_pass_task"]
         except asyncio.CancelledError:
             pass
+    if entry_data.get("unsub_restore_listener"):
+        entry_data["unsub_restore_listener"]()
+    if entry_data.get("unsub_ha_start"):
+        entry_data["unsub_ha_start"]()
 
     root = hass.data.get(DOMAIN, {})
     root.pop(config_entry.entry_id, None)

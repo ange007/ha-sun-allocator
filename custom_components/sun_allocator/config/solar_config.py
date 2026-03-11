@@ -101,9 +101,9 @@ class SolarConfigMixin:
 
             if not errors:
                 user_input = self._process_solar_config_input(user_input)
-
                 self._solar_config = user_input
                 audit_action("solar_config_saved", {"config": user_input})
+
                 return await self.async_step_devices()
 
         schema = self._get_solar_config_schema(self._solar_config)

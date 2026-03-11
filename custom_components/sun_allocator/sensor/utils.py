@@ -254,7 +254,11 @@ def calculate_excess_power_mppt(
     if consumption is None:
         # No consumption sensor: excess is untapped + battery_excess
         excess = untapped_power + battery_excess
+        # Subtract inverter self-consumption (only here, since base_loads is not used above)
+        if inverter_self_consumption > 0:
+            excess = max(0.0, excess - inverter_self_consumption)
     else:
+        # inverter_self_consumption is already included in base_loads
         if configured_reserve > 0:
             # Budget mode: add battery_excess to the limited excess
             real_excess = current_max_power - base_loads - battery_load
@@ -263,10 +267,6 @@ def calculate_excess_power_mppt(
             # Priority mode: no extra battery_excess
             real_excess = current_max_power - base_loads - battery_load
             excess = min(untapped_power, max(0, real_excess))
-
-    # Subtract the self-consumption of the inverter (but not more than the excess)
-    if inverter_self_consumption > 0:
-        excess = max(0.0, excess - inverter_self_consumption)
 
     log_debug(
         f"MPPT: PV={pv_power}W, Loads={base_loads}W, BatteryLoad={battery_load}W, BatteryExcess={battery_excess}W, Untapped={untapped_power}W -> Excess={excess}W"

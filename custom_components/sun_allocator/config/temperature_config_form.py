@@ -24,6 +24,7 @@ def build_temperature_config_schema(defaults=None):
         {
             Required(
                 CONF_TEMPERATURE_SENSOR,
+                default=defaults.get(CONF_TEMPERATURE_SENSOR),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="sensor",

@@ -76,8 +76,9 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
             pmax_coef = temp_compensation["pmax_coef"]
 
             # Adjust Vmp and Imp for temperature
+            # Pmax = Vmp * Imp, so Imp_coef = Pmax_coef - Vmp_coef
             vmp = vmp * (1 + voc_coef * temp_diff)
-            imp = imp * (1 + pmax_coef * temp_diff + voc_coef * temp_diff)
+            imp = imp * (1 + (pmax_coef - voc_coef) * temp_diff)
 
             log_debug(
                 f"Temperature compensation applied: temp_diff={temp_diff}°C, "

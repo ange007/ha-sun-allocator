@@ -23,6 +23,7 @@ def build_advanced_config_schema(defaults=None):
     """Build the schema for the advanced config form."""
     if defaults is None:
         defaults = {}
+
     return Schema(
         {
             Required(

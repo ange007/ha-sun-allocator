@@ -18,7 +18,17 @@ from ..const import (
     DOMAIN_INPUT_BOOLEAN,
     DOMAIN_AUTOMATION,
     DOMAIN_SCRIPT,
+    DOMAIN_CLIMATE,
 )
+
+SUPPORTED_OFF_DOMAINS = {
+    DOMAIN_LIGHT,
+    DOMAIN_SWITCH,
+    DOMAIN_INPUT_BOOLEAN,
+    DOMAIN_AUTOMATION,
+    DOMAIN_SCRIPT,
+    DOMAIN_CLIMATE,
+}
 
 
 async def _enforce_all_off(hass, config_entry, reason: str):
@@ -41,25 +51,23 @@ async def _enforce_all_off(hass, config_entry, reason: str):
             log_warning(f"Empty domain in entity_id: {entity_id}")
             continue
 
+        if domain not in SUPPORTED_OFF_DOMAINS:
+            log_warning(f"Watchdog: unsupported domain '{domain}' for {entity_id}, skipping")
+            continue
+
         try:
-            service_domain = (
-                domain
-                if domain
-                in [
-                    DOMAIN_LIGHT,
-                    DOMAIN_SWITCH,
-                    DOMAIN_INPUT_BOOLEAN,
-                    DOMAIN_AUTOMATION,
-                    DOMAIN_SCRIPT,
-                ]
-                else DOMAIN_LIGHT
-            )
-            await hass.services.async_call(
-                service_domain,
-                SERVICE_TURN_OFF,
-                {ATTR_ENTITY_ID: entity_id},
-                blocking=True,
-            )
+            if domain == DOMAIN_CLIMATE:
+                await hass.services.async_call(
+                    domain, "set_hvac_mode",
+                    {ATTR_ENTITY_ID: entity_id, "hvac_mode": "off"},
+                    blocking=True,
+                )
+            else:
+                await hass.services.async_call(
+                    domain, SERVICE_TURN_OFF,
+                    {ATTR_ENTITY_ID: entity_id},
+                    blocking=True,
+                )
         except HomeAssistantError as exc:
             log_warning(f"Watchdog OFF failed for {entity_id}: {exc}")
 

@@ -42,26 +42,6 @@ def filter_entities_by_domain(hass: HomeAssistant, domain: str) -> List[str]:
     ]
 
 
-def filter_entities_by_keywords(entities: List[str], keywords: List[str]) -> List[str]:
-    """Filter entities that contain any of the specified keywords."""
-    filtered = []
-    for entity in entities:
-        if any(keyword.lower() in entity.lower() for keyword in keywords):
-            filtered.append(entity)
-
-    return filtered
-
-
-def exclude_entities_by_keywords(entities: List[str], keywords: List[str]) -> List[str]:
-    """Exclude entities that contain any of the specified keywords."""
-    filtered = []
-    for entity in entities:
-        if not any(keyword.lower() in entity.lower() for keyword in keywords):
-            filtered.append(entity)
-
-    return filtered
-
-
 def get_boolean_entities(
     hass: HomeAssistant, exclude_keywords: Optional[List[str]] = None
 ) -> List[str]:

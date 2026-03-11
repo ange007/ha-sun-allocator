@@ -1,3 +1,5 @@
+[🇬🇧 English](./examples.md) | [🇺🇦 Українська](./examples_uk.md)
+
 # Examples
 
 This file contains examples for automations, Lovelace cards, and dashboards.
@@ -116,7 +118,7 @@ For a specific entity:
 ```yaml
 service: sun_allocator.set_relay_power
 data:
-  entity_id: light.sun_allocator_relay_1
+  entity_id: light.sun_allocator_relay
   power: 75
 ```
 

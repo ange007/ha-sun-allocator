@@ -59,7 +59,7 @@ def calculate_current_max_power(
         # Adjust values
         voc = round(voc * (1 + voc_coef * temp_diff), 3)
         vmp = round(vmp * (1 + voc_coef * temp_diff), 3)
-        imp = round(imp * (1 + pmax_coef * temp_diff + voc_coef * temp_diff), 3)
+        imp = round(imp * (1 + (pmax_coef - voc_coef) * temp_diff), 3)
 
         log_debug(f"Applied temperature compensation: temp_diff={temp_diff}°C")
 
@@ -68,15 +68,12 @@ def calculate_current_max_power(
 
     # Calculate light factor based on actual power vs max power
     if pmax > 0 and pv_power > 0:
-        light_factor = max(0.1, min(1.0, pv_power / pmax))
+        light_factor = max(0.01, min(1.0, pv_power / pmax))
     else:
-        light_factor = 0.1
+        light_factor = 0.01
 
     # Calculate if energy harvesting is possible
-    min_system_voltage = calculate_min_system_voltage(
-        min_inverter_voltage, panel_count, panel_configuration
-    )
-    energy_harvesting_possible = pv_voltage >= min_system_voltage
+    energy_harvesting_possible = pv_voltage >= min_inverter_voltage
 
     # Calculate relative voltage
     relative_voltage = calculate_relative_voltage(
@@ -85,7 +82,7 @@ def calculate_current_max_power(
 
     # Calculate voc_ratio with protection against 1.0
     voc_ratio = voc / vmp if vmp > 0 else 1.2
-    if voc_ratio == 1.0:
+    if abs(voc_ratio - 1.0) < 1e-6:
         voc_ratio = 1.01  # Add a small buffer
         log_debug(f"Fix applied: Adjusted voc_ratio from 1.0 to {voc_ratio:.2f}")
 
@@ -104,7 +101,10 @@ def calculate_current_max_power(
         calculation_reason = "Energy harvesting not possible"
     elif relative_voltage <= 1.0:
         # Below or at MPP: Use improved I-V model
-        current_ratio = 1.0 - (1.0 - (imp / isc)) * (relative_voltage**curve_factor_k)
+        fill_factor = imp / isc
+        raw_ratio = 1.0 - (1.0 - fill_factor) * (relative_voltage ** curve_factor_k)
+        current_ratio = raw_ratio / fill_factor if fill_factor > 0 else raw_ratio
+
         current_max_power = (
             pmax
             * light_factor
@@ -125,10 +125,10 @@ def calculate_current_max_power(
                 else 0.0
             )
 
+        position = max(0.0, min(1.0, position))
+
         # Use a softer dependence on light level and cap the drop rate to avoid over-penalizing at low light
-        base_drop_rate = 1.5
-        adjusted_drop_rate = base_drop_rate / (light_factor**0.5)
-        adjusted_drop_rate = min(adjusted_drop_rate, 3.0)
+        adjusted_drop_rate = 1.5 + 1.5 * (1.0 - light_factor)
 
         # For very high voltage ratios (above 90% of Voc), increase drop rate further
         if position > 0.9:
@@ -137,15 +137,15 @@ def calculate_current_max_power(
 
         # Calculate power factor with adjusted drop rate and apply a small floor away from Voc
         power_factor = 1 - (adjusted_drop_rate * position**2)
-        floor = 0.05 if position <= 0.98 else 0.0
+        floor = 0.05 * max(0.0, min(1.0, (1.0 - position) / 0.05))
         power_factor = max(floor, power_factor)
 
         # Back-estimate light level from current operating point: pv_power ≈ pmax * lf * power_factor * efficiency
-        if pmax > 0 and power_factor > 0.1:
+        if pmax > 0 and power_factor > 0.01:
             light_est = pv_power / (pmax * power_factor * efficiency_correction_factor)
-            light_est = max(0.1, min(1.0, light_est))
+            light_est = max(0.01, min(1.0, light_est))
         else:
-            light_est = light_factor  # fallback
+            light_est = light_factor
 
         # Project to MPP at the same light level
         current_max_power = pmax * light_est * efficiency_correction_factor
@@ -160,7 +160,7 @@ def calculate_current_max_power(
     debug_info = {
         "pmax": pmax,
         "light_factor": light_factor,
-        "min_system_voltage": min_system_voltage,
+        "min_system_voltage": min_inverter_voltage,
         "energy_harvesting_possible": energy_harvesting_possible,
         "relative_voltage": relative_voltage,
         "voc_ratio": voc_ratio,
@@ -196,20 +196,6 @@ def calculate_pmax(
         pmax = vmp * (imp * panel_count)
     
     return round(pmax, 2)
-
-
-def calculate_min_system_voltage(
-    min_inverter_voltage: float, panel_count: int, panel_configuration: str
-) -> float:
-    """Calculate minimum system voltage based on configuration."""
-    if panel_configuration == PANEL_CONFIG_SERIES:
-        return min_inverter_voltage
-    
-    if panel_configuration == PANEL_CONFIG_PARALLEL_SERIES:
-        return min_inverter_voltage
-
-    # parallel
-    return min_inverter_voltage
 
 
 def calculate_relative_voltage(

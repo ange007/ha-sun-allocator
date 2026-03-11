@@ -1,5 +1,7 @@
 """Schedule handling for Sun Allocator."""
 
+from datetime import time
+
 import homeassistant.util.dt as dt_util
 
 from ..const import (
@@ -9,6 +11,19 @@ from ..const import (
     CONF_DAYS_OF_WEEK,
     DAYS_OF_WEEK,
 )
+
+
+def _ensure_time(value):
+    """Convert a string or time object to datetime.time safely."""
+    if isinstance(value, time):
+        return value
+    if isinstance(value, str):
+        try:
+            parts = value.split(":")
+            return time(int(parts[0]), int(parts[1]))
+        except (ValueError, IndexError):
+            return None
+    return None
 
 
 def is_device_in_schedule(device, now=None):
@@ -21,9 +36,9 @@ def is_device_in_schedule(device, now=None):
     if now is None:
         now = dt_util.now()
 
-    # Get schedule settings
-    start_time = device.get(CONF_START_TIME)
-    end_time = device.get(CONF_END_TIME)
+    # Get schedule settings and ensure they are time objects
+    start_time = _ensure_time(device.get(CONF_START_TIME))
+    end_time = _ensure_time(device.get(CONF_END_TIME))
     days_of_week = device.get(CONF_DAYS_OF_WEEK, DAYS_OF_WEEK)
 
     # If no schedule settings, device is always active
