@@ -1,12 +1,11 @@
-"""Sensor for power allocated to a single device by SunAllocator."""
+"""Status sensor for a single device managed by SunAllocator."""
 
 from __future__ import annotations
 from typing import Any, Dict
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.const import UnitOfPower
 from homeassistant.helpers.entity import DeviceInfo
 
 from ...const import (
@@ -14,21 +13,19 @@ from ...const import (
     CONF_POWER_DISTRIBUTION,
     SIGNAL_POWER_DISTRIBUTION_UPDATED,
     CONF_DEVICE_ID,
-    CONF_DEVICE_SCHEDULE_MODE,
-    SCHEDULE_MODE_DISABLED,
 )
-from ..utils import get_device_info, build_device_status
+from ..utils import get_device_info, build_device_status, DEVICE_STATUS_OPTIONS
 
 
-class SunAllocatorDevicePowerSensor(SensorEntity):
-    """Representation of a SunAllocator device power sensor."""
+class SunAllocatorDeviceStatusSensor(SensorEntity):
+    """Text status sensor for a SunAllocator device."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "device_power"
-    _attr_icon = "mdi:power-plug"
+    _attr_translation_key = "device_status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = DEVICE_STATUS_OPTIONS
+    _attr_icon = "mdi:information-outline"
     _attr_should_poll = False
-    _attr_native_unit_of_measurement = UnitOfPower.WATT
-    _attr_extra_state_attributes: Dict[str, Any] | None = None
 
     def __init__(
         self, hass: HomeAssistant, entry_id: str, device_config: Dict[str, Any]
@@ -38,9 +35,7 @@ class SunAllocatorDevicePowerSensor(SensorEntity):
         self._entry_id = entry_id
         self._device_id = device_config.get(CONF_DEVICE_ID)
         self._device_config = device_config
-        self._schedule_mode = device_config.get(CONF_DEVICE_SCHEDULE_MODE, SCHEDULE_MODE_DISABLED)
-        self._attr_unique_id = f"{entry_id}_{self._device_id}_power"
-        self._state = 0.0
+        self._attr_unique_id = f"{entry_id}_{self._device_id}_status"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -48,40 +43,36 @@ class SunAllocatorDevicePowerSensor(SensorEntity):
 
     @callback
     def _update_state(self):
-        """Update the sensor's state."""
         data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
         if not data:
             return
 
         pd_data = data.get(CONF_POWER_DISTRIBUTION, {})
         device_status = data.get("device_status", {})
-        filter_reasons = data.get("device_filter_reasons", {})
         runtime_flags = data.get("device_auto_control_runtime", {})
 
         allocated_power = float(
             (pd_data.get("allocation", {}) or {}).get(self._device_id, 0.0)
         )
-        self._attr_native_value = round(allocated_power, 1)
-
         auto_control_on = runtime_flags.get(self._device_id, True)
         st = device_status.get(self._device_id, {}) or {}
 
+        self._attr_native_value = build_device_status(
+            self._device_id, device_status, allocated_power, auto_control_on,
+        )
         self._attr_extra_state_attributes = {
-            "power_percent": round(float(st.get("percent_actual") or 0.0), 1),
-            "min_expected_w": st.get("min_expected_w"),
-            "max_expected_w": st.get("max_expected_w") or None,
             "priority": st.get("priority"),
-            "schedule_mode": self._schedule_mode,
+            "auto_control": auto_control_on,
+            "manual_override": st.get("manual_override", False),
+            "is_active": allocated_power > 0,
+            "is_candidate": st.get("is_active_candidate"),
+            "mode": st.get("mode"),
             "last_on_time": st.get("last_on_time"),
             "last_off_time": st.get("last_off_time"),
-            "status": build_device_status(
-                self._device_id, device_status, allocated_power, auto_control_on,
-            ),
         }
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
-        """Handle entity which will be added."""
         await super().async_added_to_hass()
         self.async_on_remove(
             async_dispatcher_connect(

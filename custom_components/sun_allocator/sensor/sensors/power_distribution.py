@@ -63,8 +63,11 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
+        entry = self._hass.config_entries.async_get_entry(self._entry_id)
+        name = entry.title if entry else "SunAllocator"
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
+            name=name,
             manufacturer="Sun Allocator",
         )
 

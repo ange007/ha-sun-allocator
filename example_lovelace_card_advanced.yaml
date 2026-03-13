@@ -21,8 +21,8 @@ cards:
         name: Allocated Power
   - type: markdown
     content: >-
-      {% set SENSOR = 'sensor.sun_allocator_power_distribution' %} {% set meta
-      = state_attr(SENSOR, 'device_meta') or {} %} 
+      {% set SENSOR = 'sensor.sun_allocator_power_distribution' %} 
+      {% set meta = state_attr(SENSOR, 'device_meta') or {} %} 
       {% set alloc = state_attr(SENSOR, 'allocation_w') or {} %} 
       {% set percent = state_attr(SENSOR, 'allocation_percent') or {} %} 
       {% set reasons = state_attr(SENSOR, 'reasons') or {} %}

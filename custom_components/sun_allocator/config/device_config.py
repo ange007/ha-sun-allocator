@@ -16,9 +16,11 @@ from .device_config_form import (
     build_device_selection_schema,
     build_device_basic_settings_schema,
     build_device_schedule_schema,
+    build_device_schedule_helper_schema,
 )
 
 from ..const import (
+    DOMAIN,
     CONF_DEVICE_ENTITY,
     CONF_DEVICE_ENTITY_FRIENDLY_NAME,
     DOMAIN_CLIMATE,
@@ -32,7 +34,10 @@ from ..const import (
     CONF_DEVICE_MIN_EXPECTED_W,
     CONF_DEVICE_MAX_EXPECTED_W,
     CONF_DEVICE_DEBOUNCE_TIME,
-    CONF_DEVICE_SCHEDULE_ENABLED,
+    CONF_DEVICE_SCHEDULE_MODE,
+    SCHEDULE_MODE_STANDARD,
+    SCHEDULE_MODE_HELPER,
+    CONF_DEVICE_SCHEDULE_HELPER_ENTITY,
     CONF_START_TIME,
     CONF_END_TIME,
     CONF_DAYS_OF_WEEK,
@@ -41,6 +46,7 @@ from ..const import (
     STEP_DEVICE_SELECTION,
     STEP_DEVICE_BASIC_SETTINGS,
     STEP_DEVICE_SCHEDULE,
+    STEP_DEVICE_SCHEDULE_HELPER,
     ACTION_ADD,
     NONE_OPTION,
     STATE_ON,
@@ -209,18 +215,20 @@ class DeviceConfigMixin:
 
         if CONF_START_TIME in user_input and user_input[CONF_START_TIME]:
             try:
-                hour, minute = map(int, user_input[CONF_START_TIME].split(":"))
+                parts = str(user_input[CONF_START_TIME]).split(":")
+                hour, minute = int(parts[0]), int(parts[1])
                 if not 0 <= hour <= 23 or not 0 <= minute <= 59:
                     errors[CONF_START_TIME] = "invalid_time_format"
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError, IndexError):
                 errors[CONF_START_TIME] = "invalid_time_format"
 
         if CONF_END_TIME in user_input and user_input[CONF_END_TIME]:
             try:
-                hour, minute = map(int, user_input[CONF_END_TIME].split(":"))
+                parts = str(user_input[CONF_END_TIME]).split(":")
+                hour, minute = int(parts[0]), int(parts[1])
                 if not 0 <= hour <= 23 or not 0 <= minute <= 59:
                     errors[CONF_END_TIME] = "invalid_time_format"
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError, IndexError):
                 errors[CONF_END_TIME] = "invalid_time_format"
 
         return errors
@@ -258,18 +266,18 @@ class DeviceConfigMixin:
 
     def _process_schedule_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process and clean schedule configuration input."""
-        if CONF_START_TIME in user_input and user_input[CONF_START_TIME]:
+        if CONF_START_TIME in user_input and user_input[CONF_START_TIME] is not None:
             try:
-                hour, minute = map(int, user_input[CONF_START_TIME].split(":"))
-                user_input[CONF_START_TIME] = time(hour, minute)
-            except (ValueError, AttributeError):
+                parts = str(user_input[CONF_START_TIME]).split(":")
+                user_input[CONF_START_TIME] = time(int(parts[0]), int(parts[1]))
+            except (ValueError, AttributeError, IndexError):
                 pass
 
-        if CONF_END_TIME in user_input and user_input[CONF_END_TIME]:
+        if CONF_END_TIME in user_input and user_input[CONF_END_TIME] is not None:
             try:
-                hour, minute = map(int, user_input[CONF_END_TIME].split(":"))
-                user_input[CONF_END_TIME] = time(hour, minute)
-            except (ValueError, AttributeError):
+                parts = str(user_input[CONF_END_TIME]).split(":")
+                user_input[CONF_END_TIME] = time(int(parts[0]), int(parts[1]))
+            except (ValueError, AttributeError, IndexError):
                 pass
 
         days_of_week = []
@@ -307,6 +315,12 @@ class DeviceConfigMixin:
     ) -> vol.Schema:
         """Get the schema for device schedule configuration."""
         return build_device_schedule_schema(defaults)
+
+    def _get_device_schedule_helper_schema(
+        self, defaults: Optional[Dict[str, Any]] = None
+    ) -> vol.Schema:
+        """Get the schema for schedule helper entity selection."""
+        return build_device_schedule_helper_schema(defaults)
 
 
     async def _finalize_device_config(self):
@@ -394,6 +408,13 @@ class DeviceConfigMixin:
         )
 
 
+    def _get_entry_data(self):
+        """Return entry_data dict for the current config entry, or None."""
+        cfg_entry = getattr(self, "config_entry", None)
+        if cfg_entry is None:
+            return None
+        return self.hass.data.get(DOMAIN, {}).get(cfg_entry.entry_id)
+
     async def async_step_device_basic_settings(self, user_input=None):
         """Handle the device basic settings step."""
         errors = {}
@@ -404,12 +425,35 @@ class DeviceConfigMixin:
             if not errors:
                 self._device_config.update(user_input)
 
-                if self._device_config.get(CONF_DEVICE_SCHEDULE_ENABLED, False):
+                # Sync auto_control runtime state immediately (before reload)
+                device_id = self._device_config.get(CONF_DEVICE_ID)
+                new_enabled = self._device_config.get(CONF_AUTO_CONTROL_ENABLED, False)
+                entry_data = self._get_entry_data()
+                if device_id and entry_data is not None:
+                    entry_data.setdefault("device_auto_control_runtime", {})[device_id] = new_enabled
+                    switch = entry_data.get("auto_control_switches", {}).get(device_id)
+                    if switch:
+                        switch.sync_state(new_enabled)
+
+                schedule_mode = self._device_config.get(CONF_DEVICE_SCHEDULE_MODE)
+                if schedule_mode == SCHEDULE_MODE_STANDARD:
                     return await self.async_step_device_schedule()
+                if schedule_mode == SCHEDULE_MODE_HELPER:
+                    return await self.async_step_device_schedule_helper()
 
                 return await self._finalize_device_config()
 
-        schema = self._get_device_basic_settings_schema(self._device_config)
+        # Pre-fill auto_control_enabled from runtime switch state
+        display_defaults = dict(self._device_config)
+        device_id = display_defaults.get(CONF_DEVICE_ID)
+        if device_id:
+            entry_data = self._get_entry_data()
+            if entry_data is not None:
+                runtime = entry_data.get("device_auto_control_runtime", {}).get(device_id)
+                if runtime is not None:
+                    display_defaults[CONF_AUTO_CONTROL_ENABLED] = runtime
+
+        schema = self._get_device_basic_settings_schema(display_defaults)
 
         return self.async_show_form(
             step_id=STEP_DEVICE_BASIC_SETTINGS,
@@ -437,6 +481,29 @@ class DeviceConfigMixin:
 
         return self.async_show_form(
             step_id=STEP_DEVICE_SCHEDULE,
+            data_schema=schema,
+            description_placeholders={
+                "device_name": self._device_config.get(CONF_DEVICE_NAME, "New Device"),
+            },
+            errors=errors,
+        )
+
+    async def async_step_device_schedule_helper(self, user_input=None):
+        """Handle the schedule helper entity selection step."""
+        errors = {}
+
+        if user_input is not None:
+            helper_entity = user_input.get(CONF_DEVICE_SCHEDULE_HELPER_ENTITY)
+            if not helper_entity:
+                errors[CONF_DEVICE_SCHEDULE_HELPER_ENTITY] = "schedule_helper_required"
+            else:
+                self._device_config.update(user_input)
+                return await self._finalize_device_config()
+
+        schema = self._get_device_schedule_helper_schema(self._device_config)
+
+        return self.async_show_form(
+            step_id=STEP_DEVICE_SCHEDULE_HELPER,
             data_schema=schema,
             description_placeholders={
                 "device_name": self._device_config.get(CONF_DEVICE_NAME, "New Device"),

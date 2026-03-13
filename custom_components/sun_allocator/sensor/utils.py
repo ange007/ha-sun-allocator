@@ -4,11 +4,17 @@ from typing import Optional, Dict, Any, Tuple
 
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_state_change_event
 
 from ..core.logger import log_debug, log_error, journal_event
 
 from ..const import (
+    DOMAIN,
+    CONF_DEVICE_ID,
+    CONF_DEVICE_NAME,
+    CONF_DEVICE_ENTITY,
+    CONF_DEVICE_ENTITY_FRIENDLY_NAME,
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
     CONF_TEMP_COEFFICIENT_VOC,
@@ -23,6 +29,80 @@ from ..const import (
     INTERNAL_CURVE_FACTOR_K,
     INTERNAL_EFFICIENCY_CORRECTION_FACTOR,
 )
+
+
+def get_device_entity_friendly_name(hass: HomeAssistant, device_config: Dict[str, Any]) -> str | None:
+    """Return the real HA entity friendly name (for device model field)."""
+    stored = device_config.get(CONF_DEVICE_ENTITY_FRIENDLY_NAME)
+    if stored:
+        return stored
+    entity_id = device_config.get(CONF_DEVICE_ENTITY)
+    if entity_id:
+        clean_id = entity_id.split("|")[0] if "|" in entity_id else entity_id
+        state = hass.states.get(clean_id)
+        if state:
+            fn = state.attributes.get("friendly_name")
+            if fn:
+                return fn
+        return clean_id
+    return None
+
+
+def get_device_info(hass: HomeAssistant, device_config: Dict[str, Any], entry_id: str) -> DeviceInfo:
+    """Shared DeviceInfo for all per-device entities."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, device_config.get(CONF_DEVICE_ID))},
+        name=device_config.get(CONF_DEVICE_NAME) or "Unknown Device",
+        manufacturer="Sun Allocator",
+        model=get_device_entity_friendly_name(hass, device_config),
+        via_device=(DOMAIN, entry_id),
+    )
+
+
+# Machine-readable status keys for SensorDeviceClass.ENUM
+DEVICE_STATUS_ACTIVE = "active"
+DEVICE_STATUS_INSUFFICIENT_POWER = "insufficient_power"
+DEVICE_STATUS_DEBOUNCING_ON = "debouncing_on"
+DEVICE_STATUS_DEBOUNCING_OFF = "debouncing_off"
+DEVICE_STATUS_AUTO_CONTROL_OFF = "auto_control_off"
+DEVICE_STATUS_MANUAL_OVERRIDE = "manual_override"
+DEVICE_STATUS_FILTERED = "filtered"
+
+DEVICE_STATUS_OPTIONS = [
+    DEVICE_STATUS_ACTIVE,
+    DEVICE_STATUS_INSUFFICIENT_POWER,
+    DEVICE_STATUS_DEBOUNCING_ON,
+    DEVICE_STATUS_DEBOUNCING_OFF,
+    DEVICE_STATUS_AUTO_CONTROL_OFF,
+    DEVICE_STATUS_MANUAL_OVERRIDE,
+    DEVICE_STATUS_FILTERED,
+]
+
+
+def build_device_status(
+    device_id: str,
+    device_status: dict,
+    allocated_power: float,
+    auto_control_on: bool,
+) -> str:
+    """Return a machine-readable status key for the device (used with SensorDeviceClass.ENUM)."""
+    if not auto_control_on:
+        return DEVICE_STATUS_AUTO_CONTROL_OFF
+
+    if device_id not in device_status:
+        return DEVICE_STATUS_FILTERED
+
+    st = device_status[device_id]
+
+    if st.get("manual_override"):
+        return DEVICE_STATUS_MANUAL_OVERRIDE
+
+    is_candidate = st.get("is_active_candidate")
+    is_active = allocated_power > 0
+
+    if is_active:
+        return DEVICE_STATUS_DEBOUNCING_OFF if is_candidate is False else DEVICE_STATUS_ACTIVE
+    return DEVICE_STATUS_DEBOUNCING_ON if is_candidate else DEVICE_STATUS_INSUFFICIENT_POWER
 
 
 def get_sensor_state_safely(

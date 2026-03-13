@@ -24,7 +24,11 @@ from ..const import (
     CONF_DEVICE_MIN_EXPECTED_W,
     CONF_DEVICE_MAX_EXPECTED_W,
     CONF_DEVICE_PRIORITY,
-    CONF_DEVICE_SCHEDULE_ENABLED,
+    CONF_DEVICE_SCHEDULE_MODE,
+    SCHEDULE_MODE_DISABLED,
+    SCHEDULE_MODE_STANDARD,
+    SCHEDULE_MODE_HELPER,
+    CONF_DEVICE_SCHEDULE_HELPER_ENTITY,
     DAYS_OF_WEEK,
     CONF_START_TIME,
     CONF_END_TIME,
@@ -91,6 +95,11 @@ def build_device_selection_schema(entities, defaults=None):
     )
 
 
+def _get_schedule_mode_default(defaults):
+    """Get schedule mode default."""
+    return defaults.get(CONF_DEVICE_SCHEDULE_MODE, SCHEDULE_MODE_DISABLED)
+
+
 def build_device_basic_settings_schema(defaults=None):
     """Builds the schema for device basic settings configuration."""
     if defaults is None:
@@ -128,9 +137,12 @@ def build_device_basic_settings_schema(defaults=None):
         ): selector({"boolean": {}}),
 
         Required(
-            CONF_DEVICE_SCHEDULE_ENABLED,
-            default=defaults.get(CONF_DEVICE_SCHEDULE_ENABLED, False),
-        ): selector({"boolean": {}}),
+            CONF_DEVICE_SCHEDULE_MODE,
+            default=_get_schedule_mode_default(defaults),
+        ): SelectSelectorBuilder(
+            options=[SCHEDULE_MODE_DISABLED, SCHEDULE_MODE_STANDARD, SCHEDULE_MODE_HELPER],
+            translation_key=CONF_DEVICE_SCHEDULE_MODE,
+        ).build(),
     }
 
     if device_type == DEVICE_TYPE_CUSTOM:
@@ -142,6 +154,21 @@ def build_device_basic_settings_schema(defaults=None):
         ] = NumberSelectorBuilder(1, 50000, 1, unit="W").build()
 
     return Schema(schema_dict)
+
+
+def build_device_schedule_helper_schema(defaults=None):
+    """Builds the schema for selecting a HA Schedule Helper entity."""
+    if defaults is None:
+        defaults = {}
+
+    return Schema(
+        {
+            Required(
+                CONF_DEVICE_SCHEDULE_HELPER_ENTITY,
+                default=defaults.get(CONF_DEVICE_SCHEDULE_HELPER_ENTITY, ""),
+            ): selector({"entity": {"domain": "schedule"}}),
+        }
+    )
 
 
 def build_device_schedule_schema(defaults=None):

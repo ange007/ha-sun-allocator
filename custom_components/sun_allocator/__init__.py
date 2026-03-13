@@ -276,7 +276,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     entry_data["unsub_ha_start"] = unsub_ha_start
 
     await _setup_entity_state_listeners(hass, config_entry, entry_data)
-    await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
+    await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor", "switch"])
 
     root = hass.data[DOMAIN]
     root.setdefault("_entry_count", 0)
@@ -402,6 +402,10 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
 
 async def update_listener(hass: HomeAssistant, config_entry: ConfigType):
     """Handle options update."""
+    entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
+    if entry_data.pop("_skip_reload", False):
+        log_debug("--- UPDATE LISTENER ---: skipping reload (switch sync)")
+        return
     log_debug("--- UPDATE LISTENER ---: Entry updated. Data: %s", config_entry.data)
     await hass.config_entries.async_reload(config_entry.entry_id)
 
@@ -409,6 +413,7 @@ async def update_listener(hass: HomeAssistant, config_entry: ConfigType):
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigType):
     """Unload a config entry."""
     await hass.config_entries.async_forward_entry_unload(config_entry, "sensor")
+    await hass.config_entries.async_forward_entry_unload(config_entry, "switch")
 
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
 

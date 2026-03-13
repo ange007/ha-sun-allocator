@@ -13,8 +13,10 @@ from .sensors import (
     SunAllocatorPowerDistributionSensor,
 )
 
-# Import the new per-device sensor
+# Import per-device sensors
 from .sensors.device_power_alloc import SunAllocatorDevicePowerSensor
+from .sensors.device_status import SunAllocatorDeviceStatusSensor
+from .sensors.device_power_percent import SunAllocatorDevicePowerPercentSensor
 
 from ..const import DOMAIN, CONF_DEVICES, CONF_DEVICE_ID
 from ..core.logger import log_debug
@@ -50,12 +52,22 @@ async def async_setup_entry(
         ),
     ]
 
-    # Create a sensor for each configured device
+    # Create sensors for each configured device
     devices = config_entry.data.get(CONF_DEVICES, [])
     for device_config in devices:
         if device_config.get(CONF_DEVICE_ID):
             sensors.append(
                 SunAllocatorDevicePowerSensor(
+                    hass, config_entry.entry_id, device_config
+                )
+            )
+            sensors.append(
+                SunAllocatorDeviceStatusSensor(
+                    hass, config_entry.entry_id, device_config
+                )
+            )
+            sensors.append(
+                SunAllocatorDevicePowerPercentSensor(
                     hass, config_entry.entry_id, device_config
                 )
             )

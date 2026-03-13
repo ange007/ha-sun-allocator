@@ -81,8 +81,11 @@ def _initialize_run(entry_data, devices_config):
     entry_data["device_filter_reasons"] = {}
     entry_data["ramp_targets"] = {}
 
+    runtime_flags = entry_data.get("device_auto_control_runtime", {})
     auto_control_devices = [
-        d for d in devices_config if d.get(CONF_AUTO_CONTROL_ENABLED, False)
+        d for d in devices_config
+        if d.get(CONF_AUTO_CONTROL_ENABLED, False)
+        and runtime_flags.get(d.get(CONF_DEVICE_ID), True)
     ]
     auto_control_devices.sort(
         key=lambda d: int(d.get(CONF_DEVICE_PRIORITY, 50)), reverse=True
@@ -112,7 +115,7 @@ async def _filter_device(hass, device, now):
         log_debug(f"Device '{device_name}' skipped: Entity {relay_entity} not found or unavailable.")
         return "Entity unavailable or not found"
 
-    if not is_device_in_schedule(device, now):
+    if not is_device_in_schedule(device, now, hass):
         log_debug(f"Device '{device_name}' skipped: Outside of schedule.")
         is_device_on = (
             relay_state_obj.state != "off"

@@ -5,7 +5,11 @@ from datetime import time
 import homeassistant.util.dt as dt_util
 
 from ..const import (
-    CONF_DEVICE_SCHEDULE_ENABLED,
+    CONF_DEVICE_SCHEDULE_MODE,
+    SCHEDULE_MODE_DISABLED,
+    SCHEDULE_MODE_STANDARD,
+    SCHEDULE_MODE_HELPER,
+    CONF_DEVICE_SCHEDULE_HELPER_ENTITY,
     CONF_START_TIME,
     CONF_END_TIME,
     CONF_DAYS_OF_WEEK,
@@ -26,12 +30,23 @@ def _ensure_time(value):
     return None
 
 
-def is_device_in_schedule(device, now=None):
+def is_device_in_schedule(device, now=None, hass=None):
     """Check if the device is within its scheduled time."""
-    # If scheduling is not enabled, device is always active
-    if not device.get(CONF_DEVICE_SCHEDULE_ENABLED, False):
+    schedule_mode = device.get(CONF_DEVICE_SCHEDULE_MODE, SCHEDULE_MODE_DISABLED)
+
+    if schedule_mode == SCHEDULE_MODE_DISABLED:
         return True
 
+    if schedule_mode == SCHEDULE_MODE_HELPER:
+        if hass is None:
+            return True
+        helper_entity = device.get(CONF_DEVICE_SCHEDULE_HELPER_ENTITY)
+        if not helper_entity:
+            return True
+        state = hass.states.get(helper_entity)
+        return state is not None and state.state == "on"
+
+    # SCHEDULE_MODE_STANDARD — time-based schedule
     # Get current time and day if not provided
     if now is None:
         now = dt_util.now()
@@ -42,8 +57,11 @@ def is_device_in_schedule(device, now=None):
     days_of_week = device.get(CONF_DAYS_OF_WEEK, DAYS_OF_WEEK)
 
     # If no schedule settings, device is always active
-    if not start_time or not end_time or not days_of_week:
+    if start_time is None or end_time is None:
         return True
+    # No days selected = never active within schedule
+    if not days_of_week:
+        return False
 
     # Check if current day is in schedule (locale-independent)
     day_index_to_name = DAYS_OF_WEEK  # ["monday", ..., "sunday"]

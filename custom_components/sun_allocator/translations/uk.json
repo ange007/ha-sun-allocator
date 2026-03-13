@@ -80,7 +80,7 @@
           "max_expected_w": "Максимальне очікуване навантаження (Вт)",
           "priority": "Пріоритет пристрою",
           "debounce_time": "Час затримки (с)",
-          "schedule_enabled": "Увімкнути розклад"
+          "schedule_mode": "Режим розкладу"
         }
       },
       "device_schedule": {
@@ -96,6 +96,13 @@
           "friday": "П'ятниця",
           "saturday": "Субота",
           "sunday": "Неділя"
+        }
+      },
+      "device_schedule_helper": {
+        "title": "Помічник розкладу",
+        "description": "Оберіть сутність помічника розкладу Home Assistant для керування цим пристроєм",
+        "data": {
+          "schedule_helper_entity": "Сутність помічника розкладу"
         }
       },
       "temperature_compensation": {
@@ -217,7 +224,7 @@
           "priority": "Пріоритет пристрою",
           "debounce_time": "Час затримки (с)",
           "min_on_time": "Мінімальний час роботи (с)",
-          "schedule_enabled": "Увімкнути розклад"
+          "schedule_mode": "Режим розкладу"
         }
       },
       "device_schedule": {
@@ -233,6 +240,13 @@
           "friday": "П'ятниця",
           "saturday": "Субота",
           "sunday": "Неділя"
+        }
+      },
+      "device_schedule_helper": {
+        "title": "Помічник розкладу",
+        "description": "Оберіть сутність помічника розкладу Home Assistant для керування цим пристроєм",
+        "data": {
+          "schedule_helper_entity": "Сутність помічника розкладу"
         }
       },
       "temperature_compensation": {
@@ -324,6 +338,13 @@
         "1": "Дуже низький"
       }
     },
+    "schedule_mode": {
+      "options": {
+        "disabled": "Вимкнено",
+        "standard": "Стандартний розклад",
+        "helper": "Помічник розкладу"
+      }
+    },
     "device_allocation_strategy": {
       "options": {
         "fill": "Заповнювати по черзі",
@@ -353,6 +374,11 @@
     }
   },
   "entity": {
+    "switch": {
+      "auto_control": {
+        "name": "Автоматичне керування"
+      }
+    },
     "sensor": {
       "power_distribution": {
         "name": "Розподіл потужності",
@@ -610,6 +636,76 @@
           },
           "temperature_compensated": {
             "name": "З температурною компенсацією"
+          }
+        }
+      },
+      "device_power": {
+        "name": "Потужність",
+        "state_attributes": {
+          "power_percent": {
+            "name": "Потужність (%)"
+          },
+          "min_expected_w": {
+            "name": "Мін. очікувана (Вт)"
+          },
+          "max_expected_w": {
+            "name": "Макс. очікувана (Вт)"
+          },
+          "priority": {
+            "name": "Пріоритет"
+          },
+          "schedule_mode": {
+            "name": "Режим розкладу"
+          },
+          "last_on_time": {
+            "name": "Останнє вмикання"
+          },
+          "last_off_time": {
+            "name": "Останнє вимикання"
+          },
+          "status": {
+            "name": "Статус"
+          }
+        }
+      },
+      "device_power_percent": {
+        "name": "Потужність (%)"
+      },
+      "device_status": {
+        "name": "Статус",
+        "state": {
+          "active": "Активний",
+          "insufficient_power": "Недостатньо потужності",
+          "debouncing_on": "Очікування (вмикання)",
+          "debouncing_off": "Очікування (вимикання)",
+          "auto_control_off": "Автокерування вимкнено",
+          "manual_override": "Ручне керування",
+          "filtered": "Відфільтровано"
+        },
+        "state_attributes": {
+          "priority": {
+            "name": "Пріоритет"
+          },
+          "auto_control": {
+            "name": "Автокерування"
+          },
+          "manual_override": {
+            "name": "Ручне керування"
+          },
+          "is_active": {
+            "name": "Активний"
+          },
+          "is_candidate": {
+            "name": "Кандидат"
+          },
+          "mode": {
+            "name": "Режим"
+          },
+          "last_on_time": {
+            "name": "Останнє вмикання"
+          },
+          "last_off_time": {
+            "name": "Останнє вимикання"
           }
         }
       }

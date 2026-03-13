@@ -80,7 +80,7 @@
           "max_expected_w": "Maximum Expected Load (W)",
           "priority": "Device Priority",
           "debounce_time": "Debounce Time (s)",
-          "schedule_enabled": "Enable Schedule"
+          "schedule_mode": "Schedule Mode"
         }
       },
       "device_schedule": {
@@ -96,6 +96,13 @@
           "friday": "Friday",
           "saturday": "Saturday",
           "sunday": "Sunday"
+        }
+      },
+      "device_schedule_helper": {
+        "title": "Schedule Helper",
+        "description": "Select a Home Assistant Schedule Helper entity to control this device",
+        "data": {
+          "schedule_helper_entity": "Schedule Helper Entity"
         }
       },
       "temperature_compensation": {
@@ -217,7 +224,7 @@
           "priority": "Device Priority",
           "debounce_time": "Debounce Time (s)",
           "min_on_time": "Minimum on-time (s)",
-          "schedule_enabled": "Enable Schedule"
+          "schedule_mode": "Schedule Mode"
         }
       },
       "device_schedule": {
@@ -233,6 +240,13 @@
           "friday": "Friday",
           "saturday": "Saturday",
           "sunday": "Sunday"
+        }
+      },
+      "device_schedule_helper": {
+        "title": "Schedule Helper",
+        "description": "Select a Home Assistant Schedule Helper entity to control this device",
+        "data": {
+          "schedule_helper_entity": "Schedule Helper Entity"
         }
       },
       "temperature_compensation": {
@@ -325,6 +339,13 @@
         "1": "Very Low"
       }
     },
+    "schedule_mode": {
+      "options": {
+        "disabled": "Disabled",
+        "standard": "Standard Schedule",
+        "helper": "Schedule Helper"
+      }
+    },
     "device_allocation_strategy": {
       "options": {
         "fill": "Fill one by one",
@@ -354,6 +375,11 @@
     }
   },
   "entity": {
+    "switch": {
+      "auto_control": {
+        "name": "Auto Control"
+      }
+    },
     "sensor": {
       "power_distribution": {
         "name": "Power Distribution",
@@ -611,6 +637,76 @@
           },
           "temperature_compensated": {
             "name": "Temperature Compensated"
+          }
+        }
+      },
+      "device_power": {
+        "name": "Power",
+        "state_attributes": {
+          "power_percent": {
+            "name": "Power (%)"
+          },
+          "min_expected_w": {
+            "name": "Min Expected (W)"
+          },
+          "max_expected_w": {
+            "name": "Max Expected (W)"
+          },
+          "priority": {
+            "name": "Priority"
+          },
+          "schedule_mode": {
+            "name": "Schedule Mode"
+          },
+          "last_on_time": {
+            "name": "Last On"
+          },
+          "last_off_time": {
+            "name": "Last Off"
+          },
+          "status": {
+            "name": "Status"
+          }
+        }
+      },
+      "device_power_percent": {
+        "name": "Power (%)"
+      },
+      "device_status": {
+        "name": "Status",
+        "state": {
+          "active": "Active",
+          "insufficient_power": "Insufficient power",
+          "debouncing_on": "Debouncing (turning on)",
+          "debouncing_off": "Debouncing (turning off)",
+          "auto_control_off": "Auto control off",
+          "manual_override": "Manual override",
+          "filtered": "Filtered"
+        },
+        "state_attributes": {
+          "priority": {
+            "name": "Priority"
+          },
+          "auto_control": {
+            "name": "Auto Control"
+          },
+          "manual_override": {
+            "name": "Manual Override"
+          },
+          "is_active": {
+            "name": "Active"
+          },
+          "is_candidate": {
+            "name": "Is Candidate"
+          },
+          "mode": {
+            "name": "Mode"
+          },
+          "last_on_time": {
+            "name": "Last On"
+          },
+          "last_off_time": {
+            "name": "Last Off"
           }
         }
       }
