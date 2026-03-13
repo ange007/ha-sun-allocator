@@ -165,7 +165,7 @@ def _calculate_device_state(
 
     if device_id not in device_debounce_state:
         log_debug(f"Device {device_name}: Initializing new debounce state")
-        device_debounce_state[device_id] = {"candidate_state": None, "state_change_time": None}
+        device_debounce_state[device_id] = {"candidate_state": None, "state_change_time": None, "counter_debounce_start": None}
 
     debounce_info = device_debounce_state[device_id]
     log_debug(f"Device {device_name}: Current debounce info: {debounce_info}")
@@ -177,33 +177,49 @@ def _calculate_device_state(
     else:
         is_active = prev_on
 
-        if is_active_candidate == prev_on:
-            debounce_info["state_change_time"] = None
-            device_on_state[device_id] = prev_on
-        else:
-            if debounce_info["state_change_time"] is None:
+        if debounce_info["state_change_time"] is None:
+            # No debounce active
+            if is_active_candidate != prev_on:
                 log_debug(f"Device {device_name}: Starting debounce timer {prev_on} -> {is_active_candidate}")
                 debounce_info["candidate_state"] = is_active_candidate
                 debounce_info["state_change_time"] = now
+                debounce_info["counter_debounce_start"] = None
                 device_debounce_state[device_id] = debounce_info
+            device_on_state[device_id] = prev_on
+        else:
+            # Debounce is active
+            debounce_elapsed = (now - debounce_info["state_change_time"]).total_seconds()
+
+            if is_active_candidate == prev_on:
+                # Signal reverted to original state — use counter-debounce to avoid
+                # cancelling on brief power fluctuations (e.g., kettle cycling)
+                if debounce_info.get("counter_debounce_start") is None:
+                    log_debug(f"Device {device_name}: Signal reversed, starting counter-debounce")
+                    debounce_info["counter_debounce_start"] = now
+                else:
+                    counter_elapsed = (now - debounce_info["counter_debounce_start"]).total_seconds()
+                    log_debug(f"Device {device_name}: Counter-debounce elapsed={counter_elapsed:.1f}s / {debounce_time_s * 0.5:.1f}s")
+                    if counter_elapsed >= debounce_time_s * 0.5:
+                        log_debug(f"Device {device_name}: Cancelling debounce — sustained reversal for {counter_elapsed:.1f}s")
+                        debounce_info["state_change_time"] = None
+                        debounce_info["counter_debounce_start"] = None
+                        device_debounce_state[device_id] = debounce_info
+                device_on_state[device_id] = prev_on
             else:
-                debounce_elapsed = (now - debounce_info["state_change_time"]).total_seconds()
-                log_debug(f"Device {device_name}: debounce elapsed={debounce_elapsed}s / {debounce_time_s}s, candidate={debounce_info['candidate_state']} vs target={is_active_candidate}")
+                # Candidate still pointing toward debounce target — reset counter-debounce
+                debounce_info["counter_debounce_start"] = None
+                log_debug(f"Device {device_name}: debounce elapsed={debounce_elapsed:.1f}s / {debounce_time_s}s, candidate={debounce_info['candidate_state']} vs target={is_active_candidate}")
 
                 if debounce_elapsed >= debounce_time_s:
-                    if debounce_info["candidate_state"] == is_active_candidate:
-                        is_active = is_active_candidate
-                        device_on_state[device_id] = is_active
-                        debounce_info["state_change_time"] = None
-                        device_debounce_state[device_id] = debounce_info
-                        log_debug(f"Device {device_name}: Debounce complete: {prev_on} -> {is_active}")
-                    else:
-                        log_debug(f"Device {device_name}: Restarting debounce — candidate changed")
-                        debounce_info["candidate_state"] = is_active_candidate
-                        debounce_info["state_change_time"] = now
-                        device_debounce_state[device_id] = debounce_info
+                    is_active = is_active_candidate
+                    device_on_state[device_id] = is_active
+                    debounce_info["state_change_time"] = None
+                    debounce_info["counter_debounce_start"] = None
+                    device_debounce_state[device_id] = debounce_info
+                    log_debug(f"Device {device_name}: Debounce complete: {prev_on} -> {is_active}")
                 else:
                     log_debug(f"Device {device_name}: Still debouncing ({debounce_elapsed:.1f}s < {debounce_time_s}s)")
+                    device_on_state[device_id] = prev_on
 
     log_debug(f"Device {device_name}: final decision: active={is_active}, candidate={is_active_candidate}")
     return is_active, is_active_candidate
@@ -252,7 +268,12 @@ async def _control_standard_device(
     hvac_mode = device.get("hvac_mode")
 
     actual_state = hass.states.get(relay_entity)
-    is_actually_on = actual_state is not None and actual_state.state == STATE_ON
+    if actual_state is None:
+        is_actually_on = False
+    elif service_domain == DOMAIN_CLIMATE:
+        is_actually_on = actual_state.state != "off"
+    else:
+        is_actually_on = actual_state.state == STATE_ON
 
     if is_active:
         if device_id:
@@ -394,6 +415,23 @@ async def process_excess_power(
     device_on_time_state = entry_data.setdefault("device_on_time_state", {})
 
     auto_control_devices = _initialize_run(entry_data, cfg.get(CONF_DEVICES, []))
+
+    # On first run after startup, sync device_on_state with actual HA entity states.
+    # Without this, all devices default to False (off), causing wrong hysteresis thresholds.
+    if not entry_data.get("_device_on_state_initialized"):
+        for _dev in auto_control_devices:
+            _dev_id = _dev.get(CONF_DEVICE_ID)
+            _relay = _dev.get(CONF_DEVICE_ENTITY)
+            if _relay and "." in _relay:
+                if "|" in _relay:
+                    _relay = _relay.split("|")[0]
+                _state = hass.states.get(_relay)
+                if _state and _state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                    _domain = _relay.split(".")[0]
+                    _is_on = _state.state != "off" if _domain == DOMAIN_CLIMATE else _state.state == STATE_ON
+                    device_on_state[_dev_id] = _is_on
+                    log_debug(f"[init] Synced device_on_state[{_dev_id}] = {_is_on} from actual state")
+        entry_data["_device_on_state_initialized"] = True
     log_debug(f"auto_control_devices: {auto_control_devices}")
 
     for device in auto_control_devices:
@@ -441,6 +479,45 @@ async def process_excess_power(
                 status_entry["refusal_reasons"] = [filter_reason]
             continue
 
+        # --- Manual Override Detection ---
+        # Detect when actual HA entity state diverges from what auto-control set.
+        # Only trigger if entity state changed AFTER our last command (avoids false overrides on slow devices).
+        manual_overrides = entry_data.setdefault("manual_overrides", {})
+        _relay_entity = device.get(CONF_DEVICE_ENTITY)
+        if _relay_entity and "|" in _relay_entity:
+            _relay_entity = _relay_entity.split("|")[0]
+        _actual_state = hass.states.get(_relay_entity) if _relay_entity else None
+        _expected_on = device_on_state.get(device_id)
+
+        if _actual_state and _actual_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE) and _expected_on is not None:
+            _service_domain = _relay_entity.split(".")[0] if _relay_entity else ""
+            _actual_on = _actual_state.state != "off" if _service_domain == DOMAIN_CLIMATE else _actual_state.state == STATE_ON
+            _last_controlled = entry_data.get("last_controlled_at", {}).get(device_id)
+            # Only treat as manual override if the entity state changed AFTER our last command.
+            # If last_changed is before our command, the device hasn't responded yet — not an override.
+            _state_changed_after_command = (
+                _last_controlled is None
+                or _actual_state.last_changed >= _last_controlled
+            )
+            if _actual_on != _expected_on and _state_changed_after_command:
+                if device_id not in manual_overrides:
+                    log_debug(f"[manual_override] Detected external state change for {device_id}: expected={_expected_on}, actual={_actual_on}")
+                    manual_overrides[device_id] = {"since": now, "state": _actual_on}
+                    device_on_state[device_id] = _actual_on
+
+        if device_id in manual_overrides:
+            _override = manual_overrides[device_id]
+            _override_elapsed = (now - _override["since"]).total_seconds()
+            if _override_elapsed > 300:
+                log_debug(f"[manual_override] Override expired for {device_id} after {_override_elapsed:.0f}s")
+                del manual_overrides[device_id]
+            else:
+                status_entry["manual_override"] = True
+                status_entry["refusal_reasons"].append(f"Manual override ({int(300 - _override_elapsed)}s remaining)")
+                device_on_state[device_id] = _override["state"]
+                log_debug(f"[manual_override] Skipping auto-control for {device_id}, override active for {_override_elapsed:.0f}s")
+                continue
+
         # Save prev_on BEFORE _calculate_device_state, since that function updates device_on_state
         prev_on_before_calc = bool(device_on_state.get(device_id, False))
 
@@ -451,8 +528,8 @@ async def process_excess_power(
         log_debug(f"Calculated state for {device_id}: is_active={is_active}, is_active_candidate={is_active_candidate}")
         status_entry["is_active_candidate"] = is_active_candidate
 
-        # prev_on after state calculation — used by _control_standard_device for turn_on/turn_off decisions
-        prev_on = bool(device_on_state.get(device_id, False))
+        # Use prev_on_before_calc — the state BEFORE _calculate_device_state modified device_on_state
+        prev_on = prev_on_before_calc
 
         # --- Minimum On-Time Logic ---
         min_on_time = status_entry.get(CONF_DEVICE_MIN_ON_TIME, 0)
@@ -483,15 +560,6 @@ async def process_excess_power(
                     is_active = True
                     status_entry["refusal_reasons"].append(f"Minimum on-time not yet elapsed: {elapsed:.1f}s < {min_on_time}s")
                     log_debug(f"[min_on_time] Keeping {device_id} ON (min_on_time not elapsed)")
-                    relay_entity = device.get(CONF_DEVICE_ENTITY)
-                    if relay_entity:
-                        service_domain = relay_entity.split(".")[0]
-                        try:
-                            await hass.services.async_call(
-                                service_domain, SERVICE_TURN_ON, {ATTR_ENTITY_ID: relay_entity}, blocking=True,
-                            )
-                        except HomeAssistantError as exc:
-                            log_error(f"Failed to keep {device_id} ON (min_on_time): {exc}")
                 else:
                     log_debug(f"[min_on_time] Allowing turn off for {device_id}")
                     device_on_time_state.setdefault(device_id, {})["last_off_time"] = now
@@ -548,6 +616,10 @@ async def process_excess_power(
 
         remaining_power -= power_used
         log_debug(f"Power used by {device_id}: {power_used}, remaining_power: {remaining_power}")
+
+        # Track when we last controlled this device (used by manual override detection)
+        if device_id and is_active != prev_on_before_calc:
+            entry_data.setdefault("last_controlled_at", {})[device_id] = now
 
         if device_id:
             entry_data[CONF_POWER_ALLOCATION][device_id] = power_used

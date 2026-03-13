@@ -47,8 +47,15 @@ In this section, you can add, edit, or remove the devices (loads) that you want 
 ### Device Settings
 - **Device Name**: A friendly name for the device.
 - **Device Type**:
-  - **Standard**: An on/off device — switch, light, input boolean, or climate entity (thermostat/heat pump). For climate entities, select the entity in the format `climate.your_entity` and the integration will call `set_hvac_mode` to turn it on/off.
-  - **Custom (ESPHome)**: A device that can handle proportional power, typically a dimmer or a custom ESPHome component. This allows the integration to send a percentage of power to the device.
+  - **Standard**: A simple on/off device. Supported entity domains:
+    - `switch`, `input_boolean` — controlled via `turn_on` / `turn_off`
+    - `light` — controlled via `turn_on` (at full brightness) / `turn_off`
+    - `climate` (thermostat, heat pump) — controlled via `set_hvac_mode`. When selecting the device entity, the dropdown shows each available HVAC mode as a separate option (e.g., "Thermostat — heat", "Thermostat — cool"). Simply pick the desired mode — the integration stores it automatically.
+    - `automation`, `script` — triggered via `turn_on` / `turn_off`
+  - **Custom (ESPHome)**: A device with proportional power support. How it works depends on the entity type:
+    - `light` — true proportional control: brightness is adjusted as a percentage of available power
+    - `switch`, `input_boolean`, `automation`, `script` — on/off only; the integration tracks the power allocation internally but the device itself receives only on or off commands
+    - `climate` — same as Standard: pick the desired HVAC mode from the entity dropdown. The integration calls `set_hvac_mode` with the selected mode to turn on and `set_hvac_mode` with `off` to turn off.
 - **Device Entity**: The Home Assistant entity that represents your device.
 - **Min Expected (W)**: (Required) The minimum power in Watts the device consumes when it's on. This is used to determine if the device is actually running.
 - **Max Expected (W)**: (Required for Custom devices) The maximum power in Watts the device consumes at 100% load. This is used for proportional control.

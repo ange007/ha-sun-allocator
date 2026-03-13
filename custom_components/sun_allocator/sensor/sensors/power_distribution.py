@@ -169,7 +169,9 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                         reason_list.append("Not enough excess power")
                     elif not is_active and is_active_candidate:
                         reason_list.append("Debouncing")
-                elif not is_active:
+                    elif is_active and not is_active_candidate:
+                        reason_list.append("Debouncing (turning off)")
+                elif not is_active and not st.get("manual_override", False):
                     if st.get("allocated_w", 0) < st.get("min_expected_w", 0):
                         reason_list.append("Not enough excess power")
 

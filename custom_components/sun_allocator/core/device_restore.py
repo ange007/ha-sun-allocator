@@ -74,7 +74,7 @@ async def restore_entity_state(hass, config_entry, entity_id):
         relay_entity = device.get(CONF_DEVICE_ENTITY)
         mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
 
-        if relay_entity == entity_id:
+        if relay_entity and relay_entity.split("|")[0] == entity_id:
             entity_restore = restore_data.get(entity_id, {})
             percent = entity_restore.get("last_percent")
             is_on = entity_restore.get("_restore_on")
@@ -105,7 +105,7 @@ async def restore_all_devices(hass, config_entry):
 
     for device in devices:
         device_id = device.get(CONF_DEVICE_ID)
-        hvac_mode = device.get("_hvac_mode")
+        hvac_mode = device.get("hvac_mode")
         log_info(f"Checking restore state for device_id: {device_id}")
 
         relay_entity = device.get(CONF_DEVICE_ENTITY)
@@ -122,26 +122,36 @@ async def restore_all_devices(hass, config_entry):
                     restored.add(mode_select_entity)
 
         if relay_entity:
-            entity_to_restore = relay_entity
-            domain = relay_entity.split(".")[0]
-            if domain == DOMAIN_CLIMATE and hvac_mode:
-                entity_to_restore = f"{relay_entity}|{hvac_mode}"
+            # Strip |hvac_mode suffix to get the bare HA entity id
+            base_entity = relay_entity.split("|")[0] if "|" in relay_entity else relay_entity
+            domain = base_entity.split(".")[0]
 
-            state = hass.states.get(relay_entity)
-            entity_data = restore_data.get(relay_entity, {})
+            # Build the entity_to_restore with hvac_mode suffix if needed
+            hvac_suffix = relay_entity.split("|")[1] if "|" in relay_entity else hvac_mode
+            if domain == DOMAIN_CLIMATE and hvac_suffix:
+                entity_to_restore = f"{base_entity}|{hvac_suffix}"
+            else:
+                entity_to_restore = base_entity
+
+            state = hass.states.get(base_entity)
+            entity_data = restore_data.get(base_entity, {})
             percent = entity_data.get("last_percent")
 
             if percent is not None:
                 log_info(f"Restoring percent {percent} for {entity_to_restore}")
                 await set_power_for_entity(hass, entity_to_restore, percent)
                 restored.add(relay_entity)
-            elif state and state.state in (STATE_ON, STATE_OFF):
+            elif state:
                 is_on = entity_data.get("_restore_on", False)
-                if is_on and state.state != STATE_ON:
+                # Climate entities use non-binary states ("heat", "cool", "off") — check != "off"
+                currently_on = (
+                    state.state != "off" if domain == DOMAIN_CLIMATE else state.state == STATE_ON
+                )
+                if is_on and not currently_on:
                     log_info(f"Restoring ON state for {entity_to_restore}")
                     await set_power_for_entity(hass, entity_to_restore, 100)
                     restored.add(relay_entity)
-                elif not is_on and state.state != STATE_OFF:
+                elif not is_on and currently_on:
                     log_info(f"Restoring OFF state for {entity_to_restore}")
                     await set_power_for_entity(hass, entity_to_restore, 0)
                     restored.add(relay_entity)

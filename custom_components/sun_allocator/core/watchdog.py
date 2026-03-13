@@ -33,6 +33,14 @@ SUPPORTED_OFF_DOMAINS = {
 
 async def _enforce_all_off(hass, config_entry, reason: str):
     """Enforce all devices are turned off."""
+    # Reset internal state tracking so hysteresis thresholds recalculate correctly on recovery
+    entry_data = hass.data.get(config_entry.domain, {}).get(config_entry.entry_id, {})
+    device_on_state = entry_data.get("device_on_state", {})
+    for _device_id in device_on_state:
+        device_on_state[_device_id] = False
+    # Also clear manual overrides — watchdog takes priority over everything
+    entry_data.pop("manual_overrides", None)
+
     devices_cfg = config_entry.data.get("devices", [])
     for dev in devices_cfg:
         entity_id = dev.get(CONF_DEVICE_ENTITY)

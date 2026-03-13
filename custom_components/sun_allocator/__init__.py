@@ -120,6 +120,19 @@ async def _setup_entity_state_listeners(hass, config_entry, entry_data):
             old_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
         )
         now_available = new_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+        now_unavailable = new_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+
+        if now_unavailable:
+            # Reset device_on_state and clear any manual override so that when the
+            # entity recovers it starts fresh without triggering a false override.
+            for dev in config_entry.data.get(CONF_DEVICES, []):
+                dev_entity = dev.get(CONF_DEVICE_ENTITY, "")
+                if dev_entity and dev_entity.split("|")[0] == entity_id:
+                    dev_id = dev.get(CONF_DEVICE_ID)
+                    if dev_id:
+                        entry_data.get("device_on_state", {}).pop(dev_id, None)
+                        entry_data.get("manual_overrides", {}).pop(dev_id, None)
+
         if was_unavailable and now_available:
             await restore_entity_state(hass, config_entry, entity_id)
 
