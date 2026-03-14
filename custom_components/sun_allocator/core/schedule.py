@@ -7,7 +7,6 @@ import homeassistant.util.dt as dt_util
 from ..const import (
     CONF_DEVICE_SCHEDULE_MODE,
     SCHEDULE_MODE_DISABLED,
-    SCHEDULE_MODE_STANDARD,
     SCHEDULE_MODE_HELPER,
     CONF_DEVICE_SCHEDULE_HELPER_ENTITY,
     CONF_START_TIME,

@@ -25,6 +25,7 @@ from ...const import (
     CONF_DEVICE_ENTITY,
     CONF_AUTO_CONTROL_ENABLED,
 )
+from ..utils import build_device_reason
 
 
 class SunAllocatorPowerDistributionSensor(SensorEntity):
@@ -156,35 +157,16 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                 except (TypeError, ValueError):
                     allocation_percent[dev_id] = 0.0
 
-            reasons = {}
-            for dev_id, st in device_status.items():
-                reason_list = []
-                if st.get(CONF_AUTO_CONTROL_ENABLED) is False:
-                    reason_list.append("Auto control disabled")
-                if st.get("schedule_enabled") and not st.get("schedule_active", True):
-                    reason_list.append("Out of schedule")
-
-                is_active = st.get("allocated_w", 0) > 0
-                is_active_candidate = st.get("is_active_candidate")
-
-                if is_active_candidate is not None:
-                    if not is_active and not is_active_candidate:
-                        reason_list.append("Not enough excess power")
-                    elif not is_active and is_active_candidate:
-                        reason_list.append("Debouncing")
-                    elif is_active and not is_active_candidate:
-                        reason_list.append("Debouncing (turning off)")
-                elif not is_active and not st.get("manual_override", False):
-                    if st.get("allocated_w", 0) < st.get("min_expected_w", 0):
-                        reason_list.append("Not enough excess power")
-
-                if st.get("manual_override", False):
-                    reason_list.append("Manual override")
-
-                if not reason_list:
-                    reason_list.append("Active" if is_active else "Idle")
-
-                reasons[dev_id] = ", ".join(reason_list)
+            runtime_flags = data.get("device_auto_control_runtime", {})
+            reasons = {
+                dev_id: build_device_reason(
+                    dev_id,
+                    device_status,
+                    float((allocation.get(dev_id) or 0)),
+                    runtime_flags.get(dev_id, True),
+                )
+                for dev_id in device_status
+            }
 
             diagnostics = {
                 "all_devices_info": all_devices_info,

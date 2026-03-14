@@ -11,7 +11,6 @@ from homeassistant.const import PERCENTAGE
 
 from ...const import (
     DOMAIN,
-    CONF_POWER_DISTRIBUTION,
     SIGNAL_POWER_DISTRIBUTION_UPDATED,
     CONF_DEVICE_ID,
 )

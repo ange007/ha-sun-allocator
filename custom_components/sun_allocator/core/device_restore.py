@@ -1,6 +1,6 @@
 """Device restore and persist logic for Sun Allocator."""
 
-from homeassistant.const import STATE_ON, STATE_OFF
+from homeassistant.const import STATE_ON
 from homeassistant.helpers.storage import Store
 
 from .logger import log_info, log_debug

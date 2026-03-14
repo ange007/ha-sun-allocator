@@ -19,6 +19,7 @@ from homeassistant.const import (
 # Local imports from the same 'core' directory
 from .logger import log_debug, log_warning, log_error
 from .schedule import is_device_in_schedule
+from .entity_control import _resolve_hvac_mode
 
 # Imports from the parent directory 'sun_allocator'
 from ..const import (
@@ -290,7 +291,7 @@ async def _control_standard_device(
                 service_data[ATTR_BRIGHTNESS] = MAX_BRIGHTNESS
             elif service_domain == DOMAIN_CLIMATE:
                 service_name = "set_hvac_mode"
-                service_data["hvac_mode"] = hvac_mode or "heat"
+                service_data["hvac_mode"] = _resolve_hvac_mode(hass, relay_entity, hvac_mode)
             try:
                 await hass.services.async_call(service_domain, service_name, service_data, blocking=True)
             except HomeAssistantError as exc:
@@ -396,10 +397,10 @@ def _finalize_run(entry_data, excess_power, remaining_power):
     _finalize_device_status(entry_data)
 
     entry_data[CONF_POWER_DISTRIBUTION] = {
-        "total_power": excess_power,
-        "remaining_power": remaining_power,
-        "allocated_power": excess_power - remaining_power,
-        "allocation": allocation,
+        "total_power": round(excess_power, 1),
+        "remaining_power": round(remaining_power, 1),
+        "allocated_power": round(excess_power - remaining_power, 1),
+        "allocation": {k: round(v, 1) for k, v in allocation.items()},
     }
 
 
@@ -496,11 +497,13 @@ async def process_excess_power(
             _service_domain = _relay_entity.split(".")[0] if _relay_entity else ""
             _actual_on = _actual_state.state != "off" if _service_domain == DOMAIN_CLIMATE else _actual_state.state == STATE_ON
             _last_controlled = entry_data.get("last_controlled_at", {}).get(device_id)
-            # Only treat as manual override if the entity state changed AFTER our last command.
-            # If last_changed is before our command, the device hasn't responded yet — not an override.
+            # Treat as manual override if:
+            # a) state changed AFTER our last command (normal case), OR
+            # b) we sent a command >30s ago but device still hasn't responded (unresponsive device)
             _state_changed_after_command = (
                 _last_controlled is None
                 or _actual_state.last_changed >= _last_controlled
+                or (now - _last_controlled).total_seconds() > 30
             )
             if _actual_on != _expected_on and _state_changed_after_command:
                 if device_id not in manual_overrides:

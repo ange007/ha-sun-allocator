@@ -1,7 +1,6 @@
 """Device configuration module for Sun Allocator config flow."""
 
 import uuid
-from datetime import time
 from typing import Dict, Any, Optional
 
 import voluptuous as vol
@@ -109,21 +108,25 @@ class DeviceConfigMixin:
             else:
                 if domain in allowed_domains:
                     if domain == DOMAIN_CLIMATE:
-                        value_heat = f"{e.entity_id}|heat"
-                        label_heat = (
-                            f"{icon} {friendly} (Heat)"
-                            if friendly
-                            else f"{icon} {e.entity_id} (Heat)"
-                        )
-                        all_entities.append((value_heat, label_heat, friendly))
-                        
-                        value_cool = f"{e.entity_id}|cool"
-                        label_cool = (
-                            f"{icon} {friendly} (Cool)"
-                            if friendly
-                            else f"{icon} {e.entity_id} (Cool)"
-                        )
-                        all_entities.append((value_cool, label_cool, friendly))
+                        hvac_modes = e.attributes.get("hvac_modes") or []
+                        active_modes = [m for m in hvac_modes if m != "off"]
+                        if not active_modes:
+                            # Entity unavailable or no info yet — show single entry, runtime will auto-detect
+                            label = f"{icon} {friendly}" if friendly else f"{icon} {e.entity_id}"
+                            all_entities.append((e.entity_id, label, friendly))
+                        elif len(active_modes) == 1:
+                            # Only one non-off mode — no need for suffix
+                            label = f"{icon} {friendly}" if friendly else f"{icon} {e.entity_id}"
+                            all_entities.append((f"{e.entity_id}|{active_modes[0]}", label, friendly))
+                        else:
+                            for mode in active_modes:
+                                value = f"{e.entity_id}|{mode}"
+                                label = (
+                                    f"{icon} {friendly} ({mode.replace('_', ' ').title()})"
+                                    if friendly
+                                    else f"{icon} {e.entity_id} ({mode})"
+                                )
+                                all_entities.append((value, label, friendly))
                     elif state in [STATE_ON, STATE_OFF]:
                         if (
                             "sun_allocator" not in e.entity_id.lower()
@@ -266,19 +269,13 @@ class DeviceConfigMixin:
 
     def _process_schedule_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process and clean schedule configuration input."""
-        if CONF_START_TIME in user_input and user_input[CONF_START_TIME] is not None:
-            try:
-                parts = str(user_input[CONF_START_TIME]).split(":")
-                user_input[CONF_START_TIME] = time(int(parts[0]), int(parts[1]))
-            except (ValueError, AttributeError, IndexError):
-                pass
-
-        if CONF_END_TIME in user_input and user_input[CONF_END_TIME] is not None:
-            try:
-                parts = str(user_input[CONF_END_TIME]).split(":")
-                user_input[CONF_END_TIME] = time(int(parts[0]), int(parts[1]))
-            except (ValueError, AttributeError, IndexError):
-                pass
+        for key in (CONF_START_TIME, CONF_END_TIME):
+            if key in user_input and user_input[key] is not None:
+                try:
+                    parts = str(user_input[key]).split(":")
+                    user_input[key] = f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+                except (ValueError, AttributeError, IndexError):
+                    pass
 
         days_of_week = []
         for day in DAYS_OF_WEEK:

@@ -158,12 +158,12 @@ def calculate_current_max_power(
 
     # Prepare debug information
     debug_info = {
-        "pmax": pmax,
-        "light_factor": light_factor,
-        "min_system_voltage": min_inverter_voltage,
+        "pmax": round(pmax, 1),
+        "light_factor": round(light_factor, 4),
+        "min_system_voltage": round(min_inverter_voltage, 1),
         "energy_harvesting_possible": energy_harvesting_possible,
-        "relative_voltage": relative_voltage,
-        "voc_ratio": voc_ratio,
+        "relative_voltage": round(relative_voltage, 4),
+        "voc_ratio": round(voc_ratio, 4),
         "calculation_reason": calculation_reason,
     }
 

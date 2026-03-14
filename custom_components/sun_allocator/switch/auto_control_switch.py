@@ -11,7 +11,6 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from ..const import (
     DOMAIN,
     CONF_DEVICE_ID,
-    CONF_DEVICE_NAME,
     CONF_DEVICES,
     CONF_AUTO_CONTROL_ENABLED,
 )

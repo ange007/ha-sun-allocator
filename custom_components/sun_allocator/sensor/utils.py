@@ -79,30 +79,78 @@ DEVICE_STATUS_OPTIONS = [
 ]
 
 
+_STATUS_REASON_MAP = {
+    DEVICE_STATUS_ACTIVE: "Active",
+    DEVICE_STATUS_DEBOUNCING_OFF: "Debouncing (turning off)",
+    DEVICE_STATUS_DEBOUNCING_ON: "Debouncing (turning on)",
+    DEVICE_STATUS_INSUFFICIENT_POWER: "Not enough excess power",
+    DEVICE_STATUS_AUTO_CONTROL_OFF: "Auto control disabled",
+    DEVICE_STATUS_MANUAL_OVERRIDE: "Manual override",
+    DEVICE_STATUS_FILTERED: "Filtered",
+}
+
+
+def _resolve_device_status(
+    device_id: str,
+    device_status: dict,
+    allocated_power: float,
+    auto_control_on: bool,
+) -> tuple[str, list[str]]:
+    """Core logic: return (status_key, refusal_reasons) for a device.
+
+    Single source of truth used by both build_device_status (ENUM sensor)
+    and build_device_reason (human-readable text).
+    """
+    if not auto_control_on:
+        return DEVICE_STATUS_AUTO_CONTROL_OFF, []
+
+    if device_id not in device_status:
+        return DEVICE_STATUS_FILTERED, []
+
+    st = device_status[device_id]
+
+    if st.get("manual_override"):
+        return DEVICE_STATUS_MANUAL_OVERRIDE, []
+
+    is_active = allocated_power > 0
+    is_candidate = st.get("is_active_candidate")
+    refusals: list[str] = st.get("refusal_reasons") or []
+
+    if is_active:
+        key = DEVICE_STATUS_DEBOUNCING_OFF if is_candidate is False else DEVICE_STATUS_ACTIVE
+        return key, refusals if key == DEVICE_STATUS_DEBOUNCING_OFF else []
+
+    if refusals:
+        return DEVICE_STATUS_FILTERED, refusals
+
+    if is_candidate is None or not is_candidate:
+        return DEVICE_STATUS_INSUFFICIENT_POWER, []
+    return DEVICE_STATUS_DEBOUNCING_ON, []
+
+
 def build_device_status(
     device_id: str,
     device_status: dict,
     allocated_power: float,
     auto_control_on: bool,
 ) -> str:
-    """Return a machine-readable status key for the device (used with SensorDeviceClass.ENUM)."""
-    if not auto_control_on:
-        return DEVICE_STATUS_AUTO_CONTROL_OFF
+    """Return a machine-readable status key (used with SensorDeviceClass.ENUM)."""
+    key, _ = _resolve_device_status(device_id, device_status, allocated_power, auto_control_on)
+    return key
 
-    if device_id not in device_status:
-        return DEVICE_STATUS_FILTERED
 
-    st = device_status[device_id]
-
-    if st.get("manual_override"):
-        return DEVICE_STATUS_MANUAL_OVERRIDE
-
-    is_candidate = st.get("is_active_candidate")
-    is_active = allocated_power > 0
-
-    if is_active:
-        return DEVICE_STATUS_DEBOUNCING_OFF if is_candidate is False else DEVICE_STATUS_ACTIVE
-    return DEVICE_STATUS_DEBOUNCING_ON if is_candidate else DEVICE_STATUS_INSUFFICIENT_POWER
+def build_device_reason(
+    device_id: str,
+    device_status: dict,
+    allocated_power: float,
+    auto_control_on: bool,
+) -> str:
+    """Return a human-readable reason string for display in Lovelace cards."""
+    key, refusals = _resolve_device_status(device_id, device_status, allocated_power, auto_control_on)
+    base = _STATUS_REASON_MAP.get(key, key)
+    if refusals:
+        return f"{base}: {', '.join(refusals)}"
+    return base
 
 
 def get_sensor_state_safely(

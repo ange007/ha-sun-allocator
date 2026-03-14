@@ -55,7 +55,6 @@ class SunAllocatorDevicePowerSensor(SensorEntity):
 
         pd_data = data.get(CONF_POWER_DISTRIBUTION, {})
         device_status = data.get("device_status", {})
-        filter_reasons = data.get("device_filter_reasons", {})
         runtime_flags = data.get("device_auto_control_runtime", {})
 
         allocated_power = float(

@@ -12,6 +12,19 @@ from homeassistant.const import (
 
 from .logger import log_debug, log_warning
 
+
+def _resolve_hvac_mode(hass, entity_id: str, hvac_mode: str | None) -> str:
+    """Return hvac_mode; auto-detect from supported modes if not set."""
+    if hvac_mode:
+        return hvac_mode
+    state = hass.states.get(entity_id)
+    supported = (state.attributes.get("hvac_modes") or []) if state else []
+    for preferred in ("heat", "heat_cool", "auto"):
+        if preferred in supported:
+            return preferred
+    non_off = [m for m in supported if m != "off"]
+    return non_off[0] if non_off else "heat"
+
 from ..const import (
     DOMAIN_SELECT,
     DOMAIN_LIGHT,
@@ -112,7 +125,7 @@ async def set_power_for_entity(hass, entity_id, power_percent):
             await hass.services.async_call(
                 DOMAIN_CLIMATE,
                 "set_hvac_mode",
-                {ATTR_ENTITY_ID: entity_id, "hvac_mode": hvac_mode or "heat"},
+                {ATTR_ENTITY_ID: entity_id, "hvac_mode": _resolve_hvac_mode(hass, entity_id, hvac_mode)},
                 blocking=False,
             )
         else:
