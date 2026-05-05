@@ -751,8 +751,8 @@ async def process_excess_power(
             auto_control_devices,
             entry_data["device_status"],
             remaining_power,
-            entry_data["device_on_state"],
-            entry_data["device_debounce_state"],
+            dict(entry_data["device_on_state"]),
+            {k: dict(v) for k, v in entry_data["device_debounce_state"].items()},
             cfg, now,
         )
 

@@ -43,7 +43,7 @@ async def test_switch_created_for_every_device_regardless_of_auto_control_flag()
     entry = _make_entry(devices)
     added: list[SunAllocatorDeviceAutoControlSwitch] = []
 
-    async def add_entities(entities):
+    def add_entities(entities):
         added.extend(entities)
 
     await async_setup_entry(hass, entry, add_entities)
@@ -63,7 +63,7 @@ async def test_devices_without_device_id_skipped():
     entry = _make_entry([{CONF_DEVICE_ID: "dev1"}, {"name": "no_id"}])
     added = []
 
-    async def add_entities(entities):
+    def add_entities(entities):
         added.extend(entities)
 
     await async_setup_entry(hass, entry, add_entities)

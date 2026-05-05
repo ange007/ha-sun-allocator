@@ -155,6 +155,7 @@ STEP_CONFIRM_REMOVE = "confirm_remove"
 
 # Configuration flow actions
 ACTION_ADD = "add"
+ACTION_ADD_DEVICE = ACTION_ADD
 ACTION_EDIT = "edit"
 ACTION_REMOVE = "remove"
 ACTION_SETTINGS = "settings"
