@@ -290,3 +290,60 @@ show:
   fill: true
   legend: true
 ```
+
+## Per-Device Examples
+
+### Pause Auto-Control at Night
+
+```yaml
+automation:
+  - alias: "Pause Heater Auto-Control at Night"
+    trigger:
+      - platform: time
+        at: "22:00:00"
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.sun_allocator_heater_auto_control
+  - alias: "Resume Heater Auto-Control"
+    trigger:
+      - platform: time
+        at: "07:00:00"
+    action:
+      - service: switch.turn_on
+        target:
+          entity_id: switch.sun_allocator_heater_auto_control
+```
+
+### Conditional Card on Device Status
+
+Show a warning card only when an allocator-controlled device is in a problematic state:
+
+```yaml
+type: conditional
+conditions:
+  - entity: sensor.sun_allocator_heater_device_status
+    state_not: active
+    state_not: insufficient_power
+    state_not: auto_control_off
+card:
+  type: markdown
+  content: |
+    ⚠️ **Heater issue:** {{ states('sensor.sun_allocator_heater_device_status') }}
+    {% if state_attr('sensor.sun_allocator_heater_device_status', 'manual_override') %}
+    Manual override active.
+    {% endif %}
+```
+
+### Per-Device Power Gauge
+
+```yaml
+type: gauge
+entity: sensor.sun_allocator_heater_power
+min: 0
+max: 2000
+severity:
+  green: 100
+  yellow: 50
+  red: 0
+```

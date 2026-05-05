@@ -240,3 +240,55 @@ async def test_proportional_distribute_strategy(mock_hass):
     # Each device has max 1000W, total 2000W. With 1000W available, each should get 50%.
     assert status1["percent_target"] == 50.0
     assert status2["percent_target"] == 50.0
+
+
+@pytest.mark.asyncio
+async def test_distribute_evenly_does_not_overspend_when_one_device_inactive(mock_hass):
+    """Regression: under DISTRIBUTE_EVENLY, a non-proportional device must not consume the whole remaining budget."""
+    config_entry = MagicMock()
+    config_entry.entry_id = "test_entry"
+    config_entry.data = {
+        CONF_DEVICE_ALLOCATION_STRATEGY: STRATEGY_DISTRIBUTE_EVENLY,
+        "devices": [
+            {
+                "device_id": "proportional",
+                "device_name": "Proportional",
+                "device_entity": "switch.proportional",
+                "device_type": DEVICE_TYPE_CUSTOM,
+                "esphome_mode_select_entity": "select.proportional_mode",
+                "priority": 80,
+                "min_expected_w": 100,
+                "max_expected_w": 500,
+                "auto_control_enabled": True,
+                "debounce_time": 0,
+            },
+            {
+                # Same custom type but in RELAY_MODE_ON — must not be treated as proportional.
+                "device_id": "on_mode",
+                "device_name": "Always On Mode",
+                "device_entity": "switch.on_mode",
+                "device_type": DEVICE_TYPE_CUSTOM,
+                "esphome_mode_select_entity": "select.on_mode",
+                "priority": 70,
+                "min_expected_w": 50,
+                "max_expected_w": 500,
+                "auto_control_enabled": True,
+                "debounce_time": 0,
+            },
+        ],
+    }
+
+    mock_hass.data[DOMAIN] = {config_entry.entry_id: {"power_allocation": {}}}
+    mock_hass.states.async_set("switch.proportional", "off")
+    mock_hass.states.async_set("select.proportional_mode", "Proportional")
+    mock_hass.states.async_set("switch.on_mode", "off")
+    mock_hass.states.async_set("select.on_mode", "On")
+
+    await process_excess_power(mock_hass, config_entry, 600)
+
+    allocation = mock_hass.data[DOMAIN][config_entry.entry_id]["power_distribution"]["allocation"]
+    # Proportional gets the full 600W (only proportional in pool); the On device must not double-spend it.
+    assert allocation["proportional"] > 0
+    assert allocation.get("on_mode", 0) <= 50  # min_expected_w upper bound for standard-style ON
+    # And the total allocated must not exceed the input budget.
+    assert allocation["proportional"] + allocation.get("on_mode", 0) <= 600

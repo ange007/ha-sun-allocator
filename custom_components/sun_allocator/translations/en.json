@@ -130,7 +130,10 @@
       }
     },
     "error": {
-      "invalid_debounce_time": "Debounce time must be between 15 and 600 seconds",
+      "invalid_debounce_time": "Debounce time must be between 5 and 600 seconds",
+      "invalid_min_on_time": "Minimum on-time must be between 0 and 3600 seconds",
+      "invalid_inverter_self_consumption": "Inverter self-consumption must be between 0 and 500 W",
+      "schedule_helper_required": "A helper entity is required when schedule mode is set to Helper",
       "device_name_required": "Device name is required",
       "invalid_priority": "Priority must be a number between 1 and 100",
       "invalid_min_expected_w": "Minimum expected load must be a non-negative number",
@@ -275,7 +278,10 @@
       }
     },
     "error": {
-      "invalid_debounce_time": "Debounce time must be between 15 and 600 seconds",
+      "invalid_debounce_time": "Debounce time must be between 5 and 600 seconds",
+      "invalid_min_on_time": "Minimum on-time must be between 0 and 3600 seconds",
+      "invalid_inverter_self_consumption": "Inverter self-consumption must be between 0 and 500 W",
+      "schedule_helper_required": "A helper entity is required when schedule mode is set to Helper",
       "device_name_required": "Device name is required",
       "invalid_priority": "Priority must be a number between 1 and 100",
       "invalid_min_expected_w": "Minimum expected load must be a non-negative number",
@@ -681,7 +687,10 @@
           "debouncing_off": "Debouncing (turning off)",
           "auto_control_off": "Auto control off",
           "manual_override": "Manual override",
-          "filtered": "Filtered"
+          "filtered": "Filtered",
+          "trying_on": "Trying to turn on",
+          "trying_off": "Trying to turn off",
+          "failed_on": "Failed to turn on"
         },
         "state_attributes": {
           "priority": {

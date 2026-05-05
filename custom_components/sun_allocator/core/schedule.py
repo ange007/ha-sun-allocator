@@ -4,6 +4,8 @@ from datetime import time
 
 import homeassistant.util.dt as dt_util
 
+from .logger import log_warning
+
 from ..const import (
     CONF_DEVICE_SCHEDULE_MODE,
     SCHEDULE_MODE_DISABLED,
@@ -17,15 +19,22 @@ from ..const import (
 
 
 def _ensure_time(value):
-    """Convert a string or time object to datetime.time safely."""
-    if isinstance(value, time):
+    """Convert a string or time object to ``datetime.time`` safely.
+
+    Returns ``None`` when the value cannot be parsed and logs a warning so the
+    user notices their schedule field is misconfigured (silently returning
+    ``None`` previously made bad input look like "no schedule = always on").
+    """
+    if value is None or isinstance(value, time):
         return value
     if isinstance(value, str):
         try:
             parts = value.split(":")
             return time(int(parts[0]), int(parts[1]))
         except (ValueError, IndexError):
+            log_warning("[schedule] Cannot parse time value %r; treating as missing", value)
             return None
+    log_warning("[schedule] Unsupported time value type %s (%r)", type(value).__name__, value)
     return None
 
 

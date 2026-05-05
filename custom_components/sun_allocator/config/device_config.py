@@ -33,6 +33,7 @@ from ..const import (
     CONF_DEVICE_MIN_EXPECTED_W,
     CONF_DEVICE_MAX_EXPECTED_W,
     CONF_DEVICE_DEBOUNCE_TIME,
+    CONF_DEVICE_MIN_ON_TIME,
     CONF_DEVICE_SCHEDULE_MODE,
     SCHEDULE_MODE_STANDARD,
     SCHEDULE_MODE_HELPER,
@@ -189,6 +190,17 @@ class DeviceConfigMixin:
                     errors[CONF_DEVICE_DEBOUNCE_TIME] = "invalid_debounce_time"
             except (ValueError, TypeError):
                 errors[CONF_DEVICE_DEBOUNCE_TIME] = "invalid_debounce_time"
+
+        if (
+            CONF_DEVICE_MIN_ON_TIME in user_input
+            and user_input[CONF_DEVICE_MIN_ON_TIME] is not None
+        ):
+            try:
+                min_on_time = int(user_input[CONF_DEVICE_MIN_ON_TIME])
+                if not 0 <= min_on_time <= 3600:
+                    errors[CONF_DEVICE_MIN_ON_TIME] = "invalid_min_on_time"
+            except (ValueError, TypeError):
+                errors[CONF_DEVICE_MIN_ON_TIME] = "invalid_min_on_time"
 
         try:
             auto_enabled = bool(user_input.get(CONF_AUTO_CONTROL_ENABLED, False))
@@ -422,12 +434,11 @@ class DeviceConfigMixin:
             if not errors:
                 self._device_config.update(user_input)
 
-                # Sync auto_control runtime state immediately (before reload)
+                # Sync the auto-control switch entity to the new config value.
                 device_id = self._device_config.get(CONF_DEVICE_ID)
                 new_enabled = self._device_config.get(CONF_AUTO_CONTROL_ENABLED, False)
                 entry_data = self._get_entry_data()
                 if device_id and entry_data is not None:
-                    entry_data.setdefault("device_auto_control_runtime", {})[device_id] = new_enabled
                     switch = entry_data.get("auto_control_switches", {}).get(device_id)
                     if switch:
                         switch.sync_state(new_enabled)
@@ -440,15 +451,15 @@ class DeviceConfigMixin:
 
                 return await self._finalize_device_config()
 
-        # Pre-fill auto_control_enabled from runtime switch state
+        # Pre-fill auto_control_enabled from the live switch state if available.
         display_defaults = dict(self._device_config)
         device_id = display_defaults.get(CONF_DEVICE_ID)
         if device_id:
             entry_data = self._get_entry_data()
             if entry_data is not None:
-                runtime = entry_data.get("device_auto_control_runtime", {}).get(device_id)
-                if runtime is not None:
-                    display_defaults[CONF_AUTO_CONTROL_ENABLED] = runtime
+                switch = entry_data.get("auto_control_switches", {}).get(device_id)
+                if switch is not None:
+                    display_defaults[CONF_AUTO_CONTROL_ENABLED] = bool(switch.is_on)
 
         schema = self._get_device_basic_settings_schema(display_defaults)
 

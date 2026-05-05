@@ -1,0 +1,96 @@
+name: Bug report
+description: Report a defect in SunAllocator
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Filling in as much of the form as possible greatly speeds up triage.
+
+  - type: input
+    id: integration_version
+    attributes:
+      label: SunAllocator version
+      description: Found in `manifest.json`, on the integration page in HA, or in HACS.
+      placeholder: "1.0.7"
+    validations:
+      required: true
+
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      description: Found under Settings → About.
+      placeholder: "2025.10.4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Installation method
+      options:
+        - HACS
+        - Manual copy of custom_components
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: device_type
+    attributes:
+      label: Affected device type
+      multiple: true
+      options:
+        - Switch / input_boolean
+        - Light (proportional or on/off)
+        - Climate / thermostat
+        - ESPHome relay (Custom mode)
+        - Automation / script
+        - Not device-specific (excess sensor, max_power, etc.)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem and the expected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Set up integration with ...
+        2. Toggle ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Enable debug logging for `custom_components.sun_allocator` and paste the relevant excerpt. Strip any tokens or sensitive data.
+      render: text
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Integration configuration (redacted)
+      description: Devices list, schedule mode, advanced settings. Hide sensitive entity IDs if needed.
+      render: yaml
+
+  - type: checkboxes
+    id: precheck
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: I searched existing issues for duplicates.
+          required: true
+        - label: I am running the latest released SunAllocator version, or I have a reason to believe the issue is in this version too.
+          required: true

@@ -2,6 +2,7 @@
 
 import uuid
 import json
+from datetime import time as dt_time
 
 import voluptuous as vol
 
@@ -35,6 +36,13 @@ from ..const import (
     ACTION_BACK,
     STEP_CONFIRM_REMOVE,
 )
+
+
+def _json_default(obj):
+    """JSON serializer for types not serializable by default (e.g. datetime.time)."""
+    if isinstance(obj, dt_time):
+        return obj.strftime("%H:%M:%S")
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 class SunAllocatorConfigFlow(
@@ -338,17 +346,8 @@ class SunAllocatorOptionsFlowHandler(
                     for d in self._devices
                     if d[CONF_DEVICE_ID] != self._device_to_remove
                 ]
-                data = dict(self._config_entry.data)
-                data.update(self._solar_config)
-                data[CONF_DEVICES] = self._devices
-
-                data["devices_str"] = json.dumps(self._devices)
-                log_debug(
-                    "--- CONFIG FLOW REMOVE ---: Saving %d devices. Data: %s",
-                    len(self._devices),
-                    data,
-                )
-                self.hass.config_entries.async_update_entry(self._config_entry, data=data)
+                log_debug("--- CONFIG FLOW REMOVE ---: Saving %d devices.", len(self._devices))
+                self._persist_config()
                 return await self.async_step_manage_devices()
 
             return await self.async_step_manage_devices()
@@ -362,6 +361,15 @@ class SunAllocatorOptionsFlowHandler(
         )
 
 
+    def _persist_config(self) -> None:
+        """Persist current solar config and device list to the config entry."""
+        data = dict(self._config_entry.data)
+        data.update(self._solar_config)
+        data[CONF_DEVICES] = self._devices
+        data["devices_str"] = json.dumps(self._devices, default=_json_default)
+        data.pop("test_array", None)
+        self.hass.config_entries.async_update_entry(self._config_entry, data=data)
+
     def _get_device_name(self, device_id):
         """Get device name by its ID."""
         for device in self._devices:
@@ -372,17 +380,8 @@ class SunAllocatorOptionsFlowHandler(
 
     async def _save_and_return(self):
         """Save configuration, reload integration and return to main menu."""
-        data = dict(self._config_entry.data)
-        data.update(self._solar_config)
-        data[CONF_DEVICES] = self._devices
-        data["devices_str"] = json.dumps(self._devices)
-        data.pop("test_array", None)
-        log_debug(
-            "--- CONFIG FLOW SAVE ---: Saving %d devices. Data: %s",
-            len(self._devices),
-            data,
-        )
-        self.hass.config_entries.async_update_entry(self._config_entry, data=data)
+        log_debug("--- CONFIG FLOW SAVE ---: Saving %d devices.", len(self._devices))
+        self._persist_config()
         await self.hass.config_entries.async_reload(self._config_entry.entry_id)
         return await self.async_step_main_menu()
 
@@ -399,17 +398,8 @@ class SunAllocatorOptionsFlowHandler(
             if self._device_index is not None:
                 self._devices[self._device_index] = self._device_config
 
-        data = dict(self._config_entry.data)
-        data.update(self._solar_config)
-        data[CONF_DEVICES] = self._devices
-        data["devices_str"] = json.dumps(self._devices)
-        data.pop("test_array", None)
-        log_debug(
-            "--- CONFIG FLOW FINALIZE ---: Saving %d devices. Data: %s",
-            len(self._devices),
-            data,
-        )
-        self.hass.config_entries.async_update_entry(self._config_entry, data=data)
+        log_debug("--- CONFIG FLOW FINALIZE ---: Saving %d devices.", len(self._devices))
+        self._persist_config()
         await self.hass.config_entries.async_reload(self._config_entry.entry_id)
         return await self.async_step_manage_devices()
 

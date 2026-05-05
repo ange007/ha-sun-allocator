@@ -17,4 +17,10 @@ RAMP_DOWN_STEP_DEFAULT = 20.0
 RAMP_DEADBAND_DEFAULT = 1.0
 DEVICE_MAX_PERCENT_DEFAULT = 90.0
 
+# Counter-debounce: when a debounced state change reverts back to the original
+# state, this fraction of the configured debounce time must pass on the reverted
+# side before the in-progress debounce is cancelled. Avoids flicker on signals
+# that keep oscillating across the threshold (e.g. kettle cycling).
+COUNTER_DEBOUNCE_FRACTION = 0.5
+
 # Other advanced settings can be added here

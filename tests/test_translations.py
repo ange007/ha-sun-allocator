@@ -43,7 +43,7 @@ from custom_components.sun_allocator.const import (
     CONF_DEVICE_MAX_EXPECTED_W,
     CONF_DEVICE_PRIORITY,
     CONF_DEVICE_DEBOUNCE_TIME,
-    CONF_DEVICE_SCHEDULE_ENABLED,
+    CONF_DEVICE_SCHEDULE_MODE,
     CONF_START_TIME,
     CONF_END_TIME,
     CONF_ACTION,
@@ -209,7 +209,7 @@ def test_step_field_translations():
             CONF_DEVICE_MAX_EXPECTED_W,
             CONF_DEVICE_PRIORITY,
             CONF_DEVICE_DEBOUNCE_TIME,
-            CONF_DEVICE_SCHEDULE_ENABLED,
+            CONF_DEVICE_SCHEDULE_MODE,
         ],
         STEP_DEVICE_SCHEDULE: [
             CONF_START_TIME,

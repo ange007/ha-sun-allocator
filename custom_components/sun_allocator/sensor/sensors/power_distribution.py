@@ -25,7 +25,7 @@ from ...const import (
     CONF_DEVICE_ENTITY,
     CONF_AUTO_CONTROL_ENABLED,
 )
-from ..utils import build_device_reason
+from ..utils import build_device_reason, is_device_auto_control_enabled
 
 
 class SunAllocatorPowerDistributionSensor(SensorEntity):
@@ -157,13 +157,12 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                 except (TypeError, ValueError):
                     allocation_percent[dev_id] = 0.0
 
-            runtime_flags = data.get("device_auto_control_runtime", {})
             reasons = {
                 dev_id: build_device_reason(
                     dev_id,
                     device_status,
                     float((allocation.get(dev_id) or 0)),
-                    runtime_flags.get(dev_id, True),
+                    is_device_auto_control_enabled(config, dev_id),
                 )
                 for dev_id in device_status
             }

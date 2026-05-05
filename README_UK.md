@@ -2,6 +2,11 @@
 
 # SunAllocator — інтеграція для Home Assistant
 
+[![hacs](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
+[![GitHub release](https://img.shields.io/github/v/release/ange007/ha-sun-allocator)](https://github.com/ange007/ha-sun-allocator/releases)
+[![License](https://img.shields.io/github/license/ange007/ha-sun-allocator)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/ange007/ha-sun-allocator/pythonpackage.yaml?branch=main)](https://github.com/ange007/ha-sun-allocator/actions)
+
 ![logo](./images/logo.png)
 
 **SunAllocator** — кастомна інтеграція для Home Assistant, яка допомагає максимально використовувати енергію сонячних панелей. Вона розраховує надлишкову потужність і автоматично розподіляє її між вашими пристроями — бойлером, зарядкою електромобіля тощо, перетворюючи ваш будинок на «сонячного вампіра», що споживає всю вільну зелену енергію.
@@ -14,10 +19,12 @@
 - Підтримка режимів вкл/викл та пропорційного (диммерного) керування.
 - Налаштовуваний дебаунс, гістерезис та мінімальний час роботи для захисту техніки від частого перемикання.
 - Температурна компенсація для точного розрахунку потужності панелей.
-- Підтримка розкладу для керування пристроями за часом.
+- Розклад: за часом або через хелпер-сутність HA (наприклад `input_boolean`, schedule helper).
+- Кліматичні пристрої: автоматичний підбір `hvac_mode` зі списку підтримуваних (`heat` → `heat_cool` → `auto`).
 - Стартовий захисний період: пристрій не вимикається одразу після ввімкнення.
+- **Сенсори та світч авто-контролю на кожен пристрій** (див. нижче).
+- **Світч паузи авто-контролю** на пристрій — миттєво вимикає авто-керування без видалення з конфігу.
 - **Повне налаштування через інтерфейс Home Assistant** — без редагування YAML.
-- Сенсори для інтеграції з Lovelace-дашбордами та автоматизаціями.
 
 ## Встановлення
 
@@ -43,16 +50,27 @@ SunAllocator налаштовується виключно через інтер
 
 ## Використання
 
+### Сенсори рівня хабу
+
 Інтеграція створює кілька сенсорів для моніторингу сонячної системи:
 
 -   `sensor.sun_allocator_excess_power` — доступна надлишкова потужність. Використовуйте для тригерів автоматизацій.
 -   `sensor.sun_allocator_current_max_power` — оцінена максимальна потужність панелей при поточній напрузі.
 -   `sensor.sun_allocator_usage_percent` — поточне навантаження у відсотках від максимально можливої потужності.
--   `sensor.sun_allocator_power_distribution` — загальна потужність, розподілена між усіма керованими пристроями.
+-   `sensor.sun_allocator_power_distribution` — загальна потужність, розподілена між усіма керованими пристроями, плюс діагностичні атрибути на кожен пристрій (`allocation_w`, `allocation_percent`, `device_meta`, `reasons`).
 
-### Приклад автоматизації
+### Сутності на кожен пристрій
 
-Проста автоматизація, яка вмикає перемикач при надлишку понад 50 Вт:
+Для кожного налаштованого пристрою додатково створюються:
+
+-   `sensor.sun_allocator_<device_name>_power` — поточна виділена потужність у Вт.
+-   `sensor.sun_allocator_<device_name>_power_percent` — пропорційне навантаження у %.
+-   `sensor.sun_allocator_<device_name>_device_status` — ENUM-сенсор зі станами: `active`, `insufficient_power`, `debouncing_on`, `debouncing_off`, `auto_control_off`, `manual_override`, `filtered`, `trying_on`, `trying_off`, `failed_on`.
+-   `switch.sun_allocator_<device_name>_auto_control` — runtime-світч авто-керування пристроєм. Стан переживає перезапуск Home Assistant (`RestoreEntity` + синхронізація з конфігом). Вимикання миттєво зупиняє авто-керування без видалення пристрою з конфігу.
+
+### Приклади автоматизацій
+
+Вмикає перемикач при надлишку понад 50 Вт:
 
 ```yaml
 automation:
@@ -67,6 +85,28 @@ automation:
           entity_id: switch.your_device
 ```
 
+Вимикає авто-керування бойлером уночі (через runtime-світч):
+
+```yaml
+automation:
+  - alias: "Пауза авто-керування бойлером на ніч"
+    trigger:
+      - platform: time
+        at: "22:00:00"
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.sun_allocator_heater_auto_control
+  - alias: "Відновити авто-керування бойлером зранку"
+    trigger:
+      - platform: time
+        at: "07:00:00"
+    action:
+      - service: switch.turn_on
+        target:
+          entity_id: switch.sun_allocator_heater_auto_control
+```
+
 Більше прикладів: [**Приклади**](./docs/examples_uk.md).
 
 ## Документація
@@ -75,3 +115,4 @@ automation:
 -   [**Технічні концепції**](./docs/concepts_uk.md) — пояснення концепцій та алгоритмів.
 -   [**Інтеграція з ESPHome**](./docs/esphome_uk.md) — налаштування та керування ESPHome-пристроями.
 -   [**Приклади**](./docs/examples_uk.md) — приклади Lovelace-карток та автоматизацій.
+-   [**Архітектура**](./docs/architecture_uk.md) — розкладка модулів, потоки даних, storage (для контрибуторів).

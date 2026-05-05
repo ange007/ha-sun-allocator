@@ -22,16 +22,18 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
 )
 
-from .core.entity_control import set_mode_for_entity
+from .core.entity_control import set_mode_for_entity, parse_relay_entity
 from .core.logger import log_info, log_debug, log_warning, log_error
 from .core.settings import LOG_STARTUP_DEVICES
 from .core.device_restore import (
     persist_device_state,
     restore_entity_state,
     restore_all_devices,
+    load_grace_state,
     _load_restore_data,
 )
-from .core.services import handle_set_relay_mode, handle_set_relay_power
+from .core.services import handle_set_relay_mode, handle_set_relay_power, rebuild_device_index
+from .core.migrations import ConfigEntryMigrator
 from .core.mode_select import mode_select_state_listener
 from .core.power_processor import process_excess_power
 from .core.watchdog import watchdog_check
@@ -62,6 +64,19 @@ from .const import (
     MAX_BRIGHTNESS,
     MAX_PERCENTAGE,
 )
+
+def _call_unsubscribers(entry_data: dict, keys: list[str]) -> None:
+    """Invoke and clear any unsubscribe callbacks stored under the given keys."""
+    for key in keys:
+        unsub = entry_data.get(key)
+        if not unsub:
+            continue
+        try:
+            unsub()
+        except Exception as exc:  # noqa: BLE001 — defensive; HA unsub never raises in practice
+            log_error("Unsubscribe %s failed: %s", key, exc)
+        entry_data[key] = None
+
 
 SET_RELAY_MODE_SCHEMA = vol.Schema(
     {
@@ -126,8 +141,8 @@ async def _setup_entity_state_listeners(hass, config_entry, entry_data):
             # Reset device_on_state and clear any manual override so that when the
             # entity recovers it starts fresh without triggering a false override.
             for dev in config_entry.data.get(CONF_DEVICES, []):
-                dev_entity = dev.get(CONF_DEVICE_ENTITY, "")
-                if dev_entity and dev_entity.split("|")[0] == entity_id:
+                dev_entity_id, _ = parse_relay_entity(dev.get(CONF_DEVICE_ENTITY))
+                if dev_entity_id and dev_entity_id == entity_id:
                     dev_id = dev.get(CONF_DEVICE_ID)
                     if dev_id:
                         entry_data.get("device_on_state", {}).pop(dev_id, None)
@@ -139,9 +154,7 @@ async def _setup_entity_state_listeners(hass, config_entry, entry_data):
     relay_entities = set()
     mode_entities = set()
     for dev in config_entry.data.get(CONF_DEVICES, []):
-        relay_entity = dev.get(CONF_DEVICE_ENTITY)
-        if relay_entity and "|" in relay_entity:
-            relay_entity = relay_entity.split("|")[0]
+        relay_entity, _ = parse_relay_entity(dev.get(CONF_DEVICE_ENTITY))
         mode_select_entity = dev.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
         if relay_entity:
             relay_entities.add(relay_entity)
@@ -242,6 +255,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
         "--- COMPONENT SETUP ---: Loading entry. Data: %s",
         config_entry.data,
     )
+    # Apply data migrations from older integration versions before anything reads
+    # config_entry.data. Each migration is documented in core/migrations.py.
+    await ConfigEntryMigrator(hass, config_entry).run()
+
     hass.data.setdefault(DOMAIN, {})
     entry_data = {
         "config": config_entry.data,
@@ -249,6 +266,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
         "unsub_auto_control": None,
     }
     hass.data[DOMAIN][config_entry.entry_id] = entry_data
+    rebuild_device_index(hass)
 
     devices = config_entry.data.get(CONF_DEVICES, [])
     if LOG_STARTUP_DEVICES:
@@ -316,17 +334,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     log_info("--- SETUP AUTO CONTROL ---")
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
 
-    if entry_data.get("unsub_auto_control"):
-        entry_data["unsub_auto_control"]()
-        entry_data["unsub_auto_control"] = None
-
-    if entry_data.get("unsub_watchdog_timer"):
-        entry_data["unsub_watchdog_timer"]()
-        entry_data["unsub_watchdog_timer"] = None
-
-    if entry_data.get("unsub_ramp_timer"):
-        entry_data["unsub_ramp_timer"]()
-        entry_data["unsub_ramp_timer"] = None
+    _call_unsubscribers(entry_data, ["unsub_auto_control", "unsub_watchdog_timer"])
 
     devices = config_entry.data.get(CONF_DEVICES, [])
     auto_control_devices = [
@@ -347,6 +355,24 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         if device_id:
             power_allocation[device_id] = 0
     entry_data[CONF_POWER_ALLOCATION] = power_allocation
+
+    # Seed device_on_time_state with persisted startup-grace deadlines so a HA
+    # restart inside the grace window doesn't accidentally turn devices off.
+    grace_state = await load_grace_state(hass, config_entry)
+    now_utc = dt_util.utcnow()
+    if grace_state:
+        device_on_time_state = entry_data.setdefault("device_on_time_state", {})
+        for device_id, deadline in grace_state.items():
+            # dt_util.utcnow() is offset-aware; deadline is also offset-aware (saved
+            # via dt_util.now() through power_processor's `now` argument). If a
+            # legacy naive datetime sneaks in, treat it as expired and skip.
+            if deadline.tzinfo is None or deadline <= now_utc:
+                continue
+            device_on_time_state.setdefault(device_id, {})["startup_until"] = deadline
+            log_info(
+                "[grace] Restored startup grace for %s until %s (%.0fs remaining)",
+                device_id, deadline, (deadline - now_utc).total_seconds(),
+            )
 
     watchdog_period = timedelta(seconds=60)
     entry_data["watchdog_last_seen"] = dt_util.utcnow()
@@ -403,6 +429,11 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
 async def update_listener(hass: HomeAssistant, config_entry: ConfigType):
     """Handle options update."""
     entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
+    # Keep cached config in sync with the latest entry data so the device index
+    # rebuild and switch-sync paths see the new values without a reload.
+    if isinstance(entry_data, dict):
+        entry_data["config"] = config_entry.data
+    rebuild_device_index(hass)
     if entry_data.pop("_skip_reload", False):
         log_debug("--- UPDATE LISTENER ---: skipping reload (switch sync)")
         return
@@ -417,29 +448,27 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigType):
 
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
 
-    if entry_data.get("unsub_update_listener"):
-        entry_data["unsub_update_listener"]()
-    if entry_data.get("unsub_auto_control"):
-        entry_data["unsub_auto_control"]()
-    if entry_data.get("unsub_mode_listener"):
-        entry_data["unsub_mode_listener"]()
-    if entry_data.get("unsub_watchdog_timer"):
-        entry_data["unsub_watchdog_timer"]()
-    if entry_data.get("unsub_ramp_timer"):
-        entry_data["unsub_ramp_timer"]()
+    _call_unsubscribers(
+        entry_data,
+        [
+            "unsub_update_listener",
+            "unsub_auto_control",
+            "unsub_mode_listener",
+            "unsub_watchdog_timer",
+            "unsub_restore_listener",
+            "unsub_ha_start",
+        ],
+    )
     if entry_data.get("initial_pass_task"):
         entry_data["initial_pass_task"].cancel()
         try:
             await entry_data["initial_pass_task"]
         except asyncio.CancelledError:
             pass
-    if entry_data.get("unsub_restore_listener"):
-        entry_data["unsub_restore_listener"]()
-    if entry_data.get("unsub_ha_start"):
-        entry_data["unsub_ha_start"]()
 
     root = hass.data.get(DOMAIN, {})
     root.pop(config_entry.entry_id, None)
+    rebuild_device_index(hass)
 
     try:
         root["_entry_count"] = max(0, int(root.get("_entry_count", 1)) - 1)

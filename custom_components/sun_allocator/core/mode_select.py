@@ -6,8 +6,10 @@ from .logger import log_debug
 from .entity_control import set_mode_for_entity
 from .device_restore import persist_mode_state
 
+from ..const import RELAY_MODE_OFF, RELAY_MODE_ON, RELAY_MODE_PROPORTIONAL
 
-VALID_MODES = {"off", "on", "proportional"}
+
+VALID_MODES = {RELAY_MODE_OFF, RELAY_MODE_ON, RELAY_MODE_PROPORTIONAL}
 
 
 async def mode_select_state_listener(

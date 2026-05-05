@@ -66,10 +66,32 @@ In this section, you can add, edit, or remove the devices (loads) that you want 
 - **Enable Schedule**: Enable or disable a schedule for this device.
 
 ### Schedule Settings
-If `Enable Schedule` is checked, you can define a time window and days of the week during which the device is allowed to be controlled by SunAllocator.
-- **Start Time**: The time when the schedule starts.
-- **End Time**: The time when the schedule ends.
-- **Days of the Week**: Select the days when the schedule is active.
+The **Schedule Mode** field selects how the device's allowed control window is determined:
+- **Disabled** — the device may be controlled at any time (default).
+- **Standard** — a built-in time window with day-of-week selection.
+- **Helper** — gate control on the state of an existing Home Assistant boolean entity (e.g. an `input_boolean`, a `schedule` helper, or any entity whose `on` / `off` state you control elsewhere).
+
+When **Standard** is selected:
+- **Start Time** / **End Time**: time window during which the device may be controlled. Overnight windows (end < start) are supported.
+- **Days of the Week**: at least one day must be ticked, otherwise the device is treated as outside the schedule.
+
+When **Helper** is selected:
+- **Helper Entity**: pick any entity whose state is `on` / `off`. Auto-control is paused whenever the helper is `off`.
+
+Note: the schedule defines *when auto-control is allowed*, while the per-device **Auto-Control switch** entity (`switch.sun_allocator_<device>_auto_control`) is the runtime kill-switch you can flip from automations or dashboards. Both must allow control for the device to be driven.
+
+### Per-device entities
+
+Once a device is added, the integration creates the following entities for it:
+
+| Entity | Purpose |
+|---|---|
+| `sensor.sun_allocator_<device>_power` | Allocated power in W. |
+| `sensor.sun_allocator_<device>_power_percent` | Proportional duty %. |
+| `sensor.sun_allocator_<device>_device_status` | ENUM status (`active`, `insufficient_power`, `debouncing_on`/`off`, `auto_control_off`, `manual_override`, `filtered`, `trying_on`/`off`, `failed_on`). |
+| `switch.sun_allocator_<device>_auto_control` | Runtime auto-control toggle. State persists across restarts. |
+
+Unique IDs follow the pattern `<entry_id>_<device_id>_<suffix>` and are stable across reloads.
 
 ---
 

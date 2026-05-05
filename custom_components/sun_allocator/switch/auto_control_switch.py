@@ -18,7 +18,12 @@ from ..sensor.utils import get_device_info
 
 
 class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
-    """Runtime toggle for auto-control of a single device."""
+    """Runtime toggle for auto-control of a single device.
+
+    State precedence on startup: RestoreEntity (last user state) > config value.
+    Toggling persists to the config entry without triggering a reload (via the
+    `_skip_reload` flag consumed by the entry update listener).
+    """
 
     _attr_has_entity_name = True
     _attr_translation_key = "auto_control"
@@ -31,7 +36,7 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
         self._device_id = device_config.get(CONF_DEVICE_ID)
         self._device_config = device_config
         self._attr_unique_id = f"{entry_id}_{self._device_id}_auto_control"
-        self._is_on = True
+        self._is_on = bool(device_config.get(CONF_AUTO_CONTROL_ENABLED, True))
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -41,34 +46,31 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
     def is_on(self) -> bool:
         return self._is_on
 
+    def _entry_data(self) -> dict | None:
+        """Return entry_data dict or None if not available."""
+        return self._hass.data.get(DOMAIN, {}).get(self._entry_id)
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
-        if last_state is not None:
+        if last_state is not None and last_state.state in ("on", STATE_OFF):
             self._is_on = last_state.state != STATE_OFF
-        self._write_runtime_flag()
-        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
+        entry_data = self._entry_data()
         if entry_data is not None:
             entry_data.setdefault("auto_control_switches", {})[self._device_id] = self
 
     async def async_will_remove_from_hass(self) -> None:
-        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
+        entry_data = self._entry_data()
         if entry_data is not None:
             entry_data.get("auto_control_switches", {}).pop(self._device_id, None)
 
-    def _write_runtime_flag(self) -> None:
-        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
-        if entry_data is not None:
-            entry_data.setdefault("device_auto_control_runtime", {})[self._device_id] = self._is_on
-
     def sync_state(self, is_on: bool) -> None:
-        """Sync state from config flow without persisting to config entry."""
+        """Sync state from config flow without persisting back to the config entry."""
         self._is_on = is_on
-        self._write_runtime_flag()
         self.async_write_ha_state()
 
     async def _persist_to_config(self, is_on: bool) -> None:
-        """Persist new auto_control state to config entry (skips reload)."""
+        """Persist new auto_control state to the config entry without reloading it."""
         config_entry = self._hass.config_entries.async_get_entry(self._entry_id)
         if config_entry is None:
             return
@@ -81,7 +83,7 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
                     changed = True
                 break
         if changed:
-            entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+            entry_data = self._entry_data() or {}
             entry_data["_skip_reload"] = True
             self._hass.config_entries.async_update_entry(
                 config_entry, data={**config_entry.data, CONF_DEVICES: devices}
@@ -89,8 +91,7 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         self._is_on = True
-        self._write_runtime_flag()
-        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
+        entry_data = self._entry_data()
         if entry_data:
             entry_data.get("manual_overrides", {}).pop(self._device_id, None)
         self.async_write_ha_state()
@@ -98,6 +99,5 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         self._is_on = False
-        self._write_runtime_flag()
         self.async_write_ha_state()
         await self._persist_to_config(False)

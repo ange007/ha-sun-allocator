@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Configuration help
+    url: https://github.com/ange007/ha-sun-allocator/blob/main/docs/configuration.md
+    about: Detailed configuration guide for all options.
+  - name: Architecture & contributor docs
+    url: https://github.com/ange007/ha-sun-allocator/blob/main/docs/architecture.md
+    about: Module layout, data flow, storage layout.
+  - name: ESPHome integration
+    url: https://github.com/ange007/ha-sun-allocator/blob/main/docs/esphome.md
+    about: How to wire and configure ESPHome relays for Proportional mode.

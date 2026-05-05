@@ -11,10 +11,12 @@ from ..core.logger import log_debug, log_error, journal_event
 
 from ..const import (
     DOMAIN,
+    CONF_DEVICES,
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
     CONF_DEVICE_ENTITY,
     CONF_DEVICE_ENTITY_FRIENDLY_NAME,
+    CONF_AUTO_CONTROL_ENABLED,
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
     CONF_TEMP_COEFFICIENT_VOC,
@@ -48,6 +50,16 @@ def get_device_entity_friendly_name(hass: HomeAssistant, device_config: Dict[str
     return None
 
 
+def is_device_auto_control_enabled(config_data: Dict[str, Any], device_id: str | None) -> bool:
+    """Return True if a device has auto-control enabled in the config entry data."""
+    if not device_id:
+        return False
+    for dev in config_data.get(CONF_DEVICES, []) or []:
+        if dev.get(CONF_DEVICE_ID) == device_id:
+            return bool(dev.get(CONF_AUTO_CONTROL_ENABLED, False))
+    return False
+
+
 def get_device_info(hass: HomeAssistant, device_config: Dict[str, Any], entry_id: str) -> DeviceInfo:
     """Shared DeviceInfo for all per-device entities."""
     return DeviceInfo(
@@ -67,6 +79,9 @@ DEVICE_STATUS_DEBOUNCING_OFF = "debouncing_off"
 DEVICE_STATUS_AUTO_CONTROL_OFF = "auto_control_off"
 DEVICE_STATUS_MANUAL_OVERRIDE = "manual_override"
 DEVICE_STATUS_FILTERED = "filtered"
+DEVICE_STATUS_TRYING_ON = "trying_on"
+DEVICE_STATUS_TRYING_OFF = "trying_off"
+DEVICE_STATUS_FAILED_ON = "failed_on"
 
 DEVICE_STATUS_OPTIONS = [
     DEVICE_STATUS_ACTIVE,
@@ -76,30 +91,22 @@ DEVICE_STATUS_OPTIONS = [
     DEVICE_STATUS_AUTO_CONTROL_OFF,
     DEVICE_STATUS_MANUAL_OVERRIDE,
     DEVICE_STATUS_FILTERED,
+    DEVICE_STATUS_TRYING_ON,
+    DEVICE_STATUS_TRYING_OFF,
+    DEVICE_STATUS_FAILED_ON,
 ]
 
 
-_STATUS_REASON_MAP = {
-    DEVICE_STATUS_ACTIVE: "Active",
-    DEVICE_STATUS_DEBOUNCING_OFF: "Debouncing (turning off)",
-    DEVICE_STATUS_DEBOUNCING_ON: "Debouncing (turning on)",
-    DEVICE_STATUS_INSUFFICIENT_POWER: "Not enough excess power",
-    DEVICE_STATUS_AUTO_CONTROL_OFF: "Auto control disabled",
-    DEVICE_STATUS_MANUAL_OVERRIDE: "Manual override",
-    DEVICE_STATUS_FILTERED: "Filtered",
-}
-
-
 def _resolve_device_status(
-    device_id: str,
-    device_status: dict,
+    device_id: str | None,
+    device_status: Dict[str, Any],
     allocated_power: float,
     auto_control_on: bool,
 ) -> tuple[str, list[str]]:
     """Core logic: return (status_key, refusal_reasons) for a device.
 
     Single source of truth used by both build_device_status (ENUM sensor)
-    and build_device_reason (human-readable text).
+    and build_device_reason (structured payload).
     """
     if not auto_control_on:
         return DEVICE_STATUS_AUTO_CONTROL_OFF, []
@@ -111,6 +118,17 @@ def _resolve_device_status(
 
     if st.get("manual_override"):
         return DEVICE_STATUS_MANUAL_OVERRIDE, []
+
+    # Retry states take priority over normal status
+    retry_count = st.get("retry_count", 0)
+    retry_failed = st.get("retry_failed", False)
+    retry_expected_on = st.get("retry_expected_on")
+
+    if retry_failed:
+        return DEVICE_STATUS_FAILED_ON, []
+    if retry_count > 0 and retry_expected_on is not None:
+        key = DEVICE_STATUS_TRYING_ON if retry_expected_on else DEVICE_STATUS_TRYING_OFF
+        return key, []
 
     is_active = allocated_power > 0
     is_candidate = st.get("is_active_candidate")
@@ -129,8 +147,8 @@ def _resolve_device_status(
 
 
 def build_device_status(
-    device_id: str,
-    device_status: dict,
+    device_id: str | None,
+    device_status: Dict[str, Any],
     allocated_power: float,
     auto_control_on: bool,
 ) -> str:
@@ -140,17 +158,20 @@ def build_device_status(
 
 
 def build_device_reason(
-    device_id: str,
-    device_status: dict,
+    device_id: str | None,
+    device_status: Dict[str, Any],
     allocated_power: float,
     auto_control_on: bool,
-) -> str:
-    """Return a human-readable reason string for display in Lovelace cards."""
+) -> Dict[str, Any]:
+    """Return a structured reason payload for display in Lovelace cards.
+
+    Shape: ``{"status": "<enum_key>", "refusals": ["..."]}``. The ENUM key
+    matches ``device_status`` sensor's native value, so Lovelace templates
+    can call ``state_translated`` for an i18n label and format ``refusals``
+    however they want.
+    """
     key, refusals = _resolve_device_status(device_id, device_status, allocated_power, auto_control_on)
-    base = _STATUS_REASON_MAP.get(key, key)
-    if refusals:
-        return f"{base}: {', '.join(refusals)}"
-    return base
+    return {"status": key, "refusals": list(refusals)}
 
 
 def get_sensor_state_safely(
@@ -402,7 +423,7 @@ def calculate_excess_power_mppt(
     return excess
 
 
-def calculate_usage_percentage(actual_power: float, max_power: float) -> float:
+def calculate_usage_percentage(actual_power: float, max_power: float) -> float:  # noqa: D401
     """Calculate usage percentage."""
     if max_power > 0:
         return round((actual_power / max_power) * 100, 1)

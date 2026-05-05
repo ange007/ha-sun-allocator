@@ -2,6 +2,9 @@
 .idea/
 .vscode/
 
+# AI assistants
+.claude/
+
 # Python
 __pycache__/
 *.py[cod]

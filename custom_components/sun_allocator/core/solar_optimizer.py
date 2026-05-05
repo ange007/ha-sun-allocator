@@ -1,5 +1,6 @@
 """MPPT (Maximum Power Point Tracking) algorithm utilities for Sun Allocator."""
 
+import math
 from typing import Tuple, Optional
 
 from .logger import log_debug, log_warning, log_error, log_info
@@ -8,6 +9,10 @@ from ..const import (
     PANEL_CONFIG_SERIES,
     PANEL_CONFIG_PARALLEL_SERIES,
 )
+
+# Default voc/vmp ratio used when vmp is unknown. Real-world panels are typically
+# 1.18-1.25; 1.2 is a safe centroid that keeps relative_voltage math stable.
+_DEFAULT_VOC_RATIO_FALLBACK = 1.2
 
 
 def calculate_current_max_power(
@@ -80,8 +85,18 @@ def calculate_current_max_power(
         pv_voltage, vmp, panel_count, panel_configuration
     )
 
-    # Calculate voc_ratio with protection against 1.0
-    voc_ratio = voc / vmp if vmp > 0 else 1.2
+    # Calculate voc_ratio with protection against 1.0 and non-finite inputs.
+    if vmp > 0:
+        voc_ratio = voc / vmp
+        if not math.isfinite(voc_ratio) or voc_ratio <= 0:
+            log_warning(
+                "voc/vmp produced non-finite ratio (voc=%s, vmp=%s); "
+                "falling back to default %.2f",
+                voc, vmp, _DEFAULT_VOC_RATIO_FALLBACK,
+            )
+            voc_ratio = _DEFAULT_VOC_RATIO_FALLBACK
+    else:
+        voc_ratio = _DEFAULT_VOC_RATIO_FALLBACK
     if abs(voc_ratio - 1.0) < 1e-6:
         voc_ratio = 1.01  # Add a small buffer
         log_debug(f"Fix applied: Adjusted voc_ratio from 1.0 to {voc_ratio:.2f}")
@@ -153,6 +168,13 @@ def calculate_current_max_power(
         # Replace light_factor in debug info with the estimated irradiance
         light_factor = light_est
 
+    if not math.isfinite(current_max_power):
+        log_warning(
+            "current_max_power computation produced non-finite value "
+            "(reason=%s); falling back to pv_power=%s",
+            calculation_reason, pv_power,
+        )
+        current_max_power = pv_power
     current_max_power = max(current_max_power, pv_power)
     current_max_power = round(current_max_power, 1)
 

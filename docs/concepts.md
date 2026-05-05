@@ -214,3 +214,27 @@ A watchdog timer monitors whether the PV power sensor is still sending updates. 
 1. All controlled devices are turned off (fail-safe).
 2. An alert is logged.
 3. Auto-control resumes automatically once the sensor starts reporting again.
+
+The default timeout is **3 minutes** (configured via `WATCHDOG_STALE_AFTER_MINUTES` in `core/settings.py`).
+
+---
+
+## Device Status States
+
+The per-device `device_status` ENUM sensor exposes the current control state. Possible values:
+
+| State | Meaning |
+|---|---|
+| `active` | Device is currently allocated power (>0 W) and considered ON. |
+| `insufficient_power` | Excess power is below the device's `min_expected_w`. |
+| `debouncing_on` | Device is candidate ON but still inside its debounce window. |
+| `debouncing_off` | Device is currently ON but candidate has dropped — turn-off pending. |
+| `auto_control_off` | The device's auto-control switch (or config flag) is OFF. |
+| `manual_override` | User manually changed the entity state; auto-control is suppressed for `MANUAL_OVERRIDE_TTL_SECONDS` (default 300 s). |
+| `filtered` | The device was excluded this cycle: outside schedule, entity unavailable, or unsupported domain. The `refusal_reasons` attribute carries the human-readable reason. |
+| `trying_on` / `trying_off` | The desired command was sent but the entity has not yet reflected it; retried every 30 s up to `RETRY_MAX_ATTEMPTS` (default 3). |
+| `failed_on` | After `RETRY_MAX_ATTEMPTS` the ON command was abandoned; the user is notified once via persistent_notification. |
+
+## Manual Override
+
+If the entity changes state outside of an allocator-issued command (e.g. you flip the switch in the Lovelace UI), the allocator opens a manual-override window. During this window auto-control is paused for that device, the `device_status` sensor reports `manual_override`, and the override expires automatically after `MANUAL_OVERRIDE_TTL_SECONDS`. Toggling the auto-control switch ON also clears any pending override immediately.

@@ -10,25 +10,17 @@ from homeassistant.const import (
 )
 
 from .logger import log_error, log_info, log_warning
+from .settings import WATCHDOG_STALE_AFTER_MINUTES
+from .entity_control import parse_relay_entity
+from .constants_internal import SUPPORTED_DOMAINS
 
 from ..const import (
     CONF_DEVICE_ENTITY,
-    DOMAIN_LIGHT,
-    DOMAIN_SWITCH,
-    DOMAIN_INPUT_BOOLEAN,
-    DOMAIN_AUTOMATION,
-    DOMAIN_SCRIPT,
     DOMAIN_CLIMATE,
 )
 
-SUPPORTED_OFF_DOMAINS = {
-    DOMAIN_LIGHT,
-    DOMAIN_SWITCH,
-    DOMAIN_INPUT_BOOLEAN,
-    DOMAIN_AUTOMATION,
-    DOMAIN_SCRIPT,
-    DOMAIN_CLIMATE,
-}
+# Backward-compatible alias for the watchdog's own usage.
+SUPPORTED_OFF_DOMAINS = SUPPORTED_DOMAINS
 
 
 async def _enforce_all_off(hass, config_entry, reason: str):
@@ -43,11 +35,9 @@ async def _enforce_all_off(hass, config_entry, reason: str):
 
     devices_cfg = config_entry.data.get("devices", [])
     for dev in devices_cfg:
-        entity_id = dev.get(CONF_DEVICE_ENTITY)
+        entity_id, _ = parse_relay_entity(dev.get(CONF_DEVICE_ENTITY))
         if not entity_id:
             continue
-        if "|" in entity_id:
-            entity_id = entity_id.split("|")[0]
 
         # Validate entity_id format
         if "." not in entity_id:
@@ -87,7 +77,7 @@ async def watchdog_check(hass, config_entry):
     entry_data = hass.data[config_entry.domain][config_entry.entry_id]
     last_seen = entry_data.get("watchdog_last_seen")
     alerted = entry_data.get("watchdog_alerted", False)
-    watchdog_stale_after = timedelta(minutes=3)
+    watchdog_stale_after = timedelta(minutes=WATCHDOG_STALE_AFTER_MINUTES)
 
     if not last_seen:
         return

@@ -285,3 +285,60 @@ show:
   fill: true
   legend: true
 ```
+
+## Приклади на пристрій
+
+### Пауза авто-керування на ніч
+
+```yaml
+automation:
+  - alias: "Пауза авто-керування бойлером на ніч"
+    trigger:
+      - platform: time
+        at: "22:00:00"
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.sun_allocator_heater_auto_control
+  - alias: "Відновити авто-керування бойлером"
+    trigger:
+      - platform: time
+        at: "07:00:00"
+    action:
+      - service: switch.turn_on
+        target:
+          entity_id: switch.sun_allocator_heater_auto_control
+```
+
+### Conditional картка на стан пристрою
+
+Показує попередження тільки коли пристрій у проблемному стані:
+
+```yaml
+type: conditional
+conditions:
+  - entity: sensor.sun_allocator_heater_device_status
+    state_not: active
+    state_not: insufficient_power
+    state_not: auto_control_off
+card:
+  type: markdown
+  content: |
+    ⚠️ **Проблема з бойлером:** {{ states('sensor.sun_allocator_heater_device_status') }}
+    {% if state_attr('sensor.sun_allocator_heater_device_status', 'manual_override') %}
+    Активне ручне перевизначення.
+    {% endif %}
+```
+
+### Gauge потужності на пристрій
+
+```yaml
+type: gauge
+entity: sensor.sun_allocator_heater_power
+min: 0
+max: 2000
+severity:
+  green: 100
+  yellow: 50
+  red: 0
+```
