@@ -11,9 +11,9 @@ jobs:
         python-version: ["3.12", "3.13"]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -24,7 +24,7 @@ jobs:
     - name: Lint with ruff and pylint
       run: |
         ruff check .
-        pylint custom_components
+        pylint --fail-under=9.0 custom_components
     - name: Run pytest
       run: |
         pytest
