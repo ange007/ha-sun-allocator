@@ -1,6 +1,6 @@
-"""Usage percentage sensor for Sun Allocator."""
+"""Usage percentage sensor for Sun Allocator (multi-MPPT)."""
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from homeassistant.core import HomeAssistant
 from homeassistant.const import PERCENTAGE
@@ -11,12 +11,6 @@ from ..utils import calculate_usage_percentage
 from ...core.logger import log_debug
 
 from ...const import (
-    CONF_PV_POWER,
-    CONF_PV_VOLTAGE,
-    CONF_PANEL_VMP,
-    CONF_PANEL_IMP,
-    CONF_PANEL_VOC,
-    CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
     SENSOR_USAGE_PERCENT_SUFFIX,
@@ -24,7 +18,7 @@ from ...const import (
 
 
 class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
-    """Sensor for usage percentage of solar panels."""
+    """Sensor for usage percentage of solar panels (aggregated across MPPTs)."""
 
     def __init__(
         self,
@@ -48,61 +42,42 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
     def _calculate_value(
         self,
         sensor_values: Dict[str, Any],
-        panel_params: Dict[str, Any],
+        mppt_readings: List[Dict[str, Any]],
         mppt_config: Dict[str, float],
         temp_compensation: Optional[Dict[str, float]],
     ) -> float:
-        """Calculate usage percentage of solar panels."""
-        pv_power = sensor_values[CONF_PV_POWER]
-        pv_voltage = sensor_values[CONF_PV_VOLTAGE]
+        """Calculate usage % as total_pv / total_pmax across all MPPTs."""
+        total_pv = sum(float(r["pv_power"]) for r in mppt_readings)
+        total_pmax = 0.0
 
-        vmp = panel_params[CONF_PANEL_VMP]
-        imp = panel_params[CONF_PANEL_IMP]
-
-        # Apply temperature compensation if provided
-        if temp_compensation:
-            temp_diff = temp_compensation["temp_diff"]
-            voc_coef = temp_compensation["voc_coef"]
-            pmax_coef = temp_compensation["pmax_coef"]
-
-            # Adjust Vmp and Imp for temperature
-            # Pmax = Vmp * Imp, so Imp_coef = Pmax_coef - Vmp_coef
-            vmp = vmp * (1 + voc_coef * temp_diff)
-            imp = imp * (1 + (pmax_coef - voc_coef) * temp_diff)
-
-            log_debug(
-                f"Temperature compensation applied: temp_diff={temp_diff}°C, "
-                f"adjusted Vmp={vmp:.2f}V, adjusted Imp={imp:.2f}A"
+        for r in mppt_readings:
+            panel_params = r["panel_params"]
+            vmp, imp = self._apply_temp_compensation_to_panel(
+                panel_params, temp_compensation
+            )
+            total_pmax += calculate_pmax(
+                vmp=vmp,
+                imp=imp,
+                panel_count=panel_params[CONF_PANEL_COUNT],
+                panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
             )
 
-        # Calculate maximum theoretical power
-        pmax = calculate_pmax(
-            vmp=vmp,
-            imp=imp,
-            panel_count=panel_params[CONF_PANEL_COUNT],
-            panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
+        usage = calculate_usage_percentage(total_pv, total_pmax)
+
+        first_voltage = (
+            float(mppt_readings[0]["pv_voltage"]) if mppt_readings else 0.0
         )
-
-        # Calculate usage percentage
-        usage = calculate_usage_percentage(pv_power, pmax)
-
-        # Update attributes with relevant information
         self._update_attributes(
-            pv_power=pv_power,
-            pv_voltage=pv_voltage,
-            vmp=vmp,
-            imp=imp,
-            voc=panel_params[CONF_PANEL_VOC],
-            isc=panel_params[CONF_PANEL_ISC],
-            panel_count=panel_params[CONF_PANEL_COUNT],
-            panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
-            pmax=pmax,
+            pv_power=round(total_pv, 1),
+            pv_voltage=round(first_voltage, 2),
+            pmax=round(total_pmax, 1),
+            mppt_count=len(mppt_readings),
             temperature_compensated=temp_compensation is not None,
         )
 
         log_debug(
-            f"Usage percentage calculation: PV Power={pv_power}W, "
-            f"Pmax={pmax:.1f}W, Usage={usage:.1f}%"
+            f"Usage % across {len(mppt_readings)} MPPT(s): "
+            f"PV={total_pv:.1f}W / Pmax={total_pmax:.1f}W = {usage:.1f}%"
         )
 
         return usage

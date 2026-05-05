@@ -15,6 +15,12 @@ RELAY_MODE_PROPORTIONAL = "Proportional"
 # These constants are used as keys in configuration dictionaries.
 
 # Solar panel configuration keys
+# CONF_PV_POWER, CONF_PV_VOLTAGE, CONF_PANEL_* live inside each mppt_inputs[i] dict
+# (post-migration). They remain top-level only on un-migrated entries; migration
+# wraps them into mppt_inputs:[{...}].
+CONF_MPPT_INPUTS = "mppt_inputs"
+CONF_MPPT_COUNT = "mppt_count"
+MPPT_MAX_COUNT = 4
 CONF_PV_POWER = "pv_power"
 CONF_PV_VOLTAGE = "pv_voltage"
 CONF_CONSUMPTION = "consumption"
@@ -152,6 +158,7 @@ STEP_MANAGE_DEVICES = "manage_devices"
 STEP_TEMPERATURE_COMPENSATION = "temperature_compensation"
 STEP_ADVANCED_SETTINGS = "advanced_settings"
 STEP_CONFIRM_REMOVE = "confirm_remove"
+STEP_MPPT_INPUT = "mppt_input"
 
 # Configuration flow actions
 ACTION_ADD = "add"

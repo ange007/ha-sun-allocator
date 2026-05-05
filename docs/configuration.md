@@ -18,25 +18,33 @@ This will open a menu with the following options:
 
 This section covers the primary sensors and the physical characteristics of your solar array.
 
-### Main Sensors
-- **PV Power Sensor**: (Required) The sensor that measures your solar panel power output in Watts (W).
-- **PV Voltage Sensor**: (Required for MPPT mode) The sensor that measures your solar panel voltage in Volts (V). This is required if you are not using a house consumption sensor.
+### Hub-level Sensors
+
+- **Number of MPPT trackers**: How many independent MPPT trackers your inverter exposes. Choose 1 for a single-tracker setup, or 2–4 for dual/multi-MPPT inverters (Deye, Growatt, Goodwe, etc.). Each tracker is configured separately on the next step.
 - **Consumption Sensor**: (Optional) The sensor that measures your total house power consumption in Watts (W). When this sensor is provided, the integration will operate in **Parallel Mode**. If not provided, it will operate in **MPPT Mode**.
-- **Battery Power Sensor**: (Optional) The sensor that measures your battery power in Watts (W). This is used to determine if the battery is charging or discharging.
+- **Battery Power Sensor**: (Optional) The sensor that measures your battery power in Watts (W). Used to determine if the battery is charging or discharging.
 - **Is Battery Power Reversed?**: (Optional) Enable this if your battery power sensor shows a positive value for discharging and a negative value for charging. By default, the integration assumes negative values for discharging and positive for charging.
 
-### Solar Panel Specifications
-These values are found on the datasheet of your solar panels.
+### Per-MPPT Settings
 
-- **Vmp (Voltage at Maximum Power)**: The voltage at which a single panel produces maximum power.
-- **Imp (Current at Maximum Power)**: The current at which a single panel produces maximum power.
-- **Voc (Open Circuit Voltage)**: The maximum voltage a single panel can produce with no load.
-- **Isc (Short Circuit Current)**: The maximum current a single panel can produce in a short-circuit condition.
-- **Panel Count**: The total number of solar panels in your array.
-- **Panel Configuration**: How the panels are wired together.
-  - **Series**: Panels are connected end-to-end. The total voltage is the sum of the individual panel voltages, while the current remains the same.
-  - **Parallel**: Panels are connected side-by-side. The total current is the sum of the individual panel currents, while the voltage remains the same.
-  - **Parallel-Series**: A combination of both.
+For each MPPT tracker you configure (one form per tracker):
+
+- **PV Power Sensor**: (Required) The sensor that measures power output of this tracker's string in Watts (W).
+- **PV Voltage Sensor**: (Required) The sensor that measures voltage of this tracker's string in Volts (V).
+- **Solar Panel Specifications** — values from the datasheet of the panels wired to this tracker. Different trackers can have different panels (different model, count, wiring).
+  - **Vmp (Voltage at Maximum Power)**: The voltage at which a single panel produces maximum power.
+  - **Imp (Current at Maximum Power)**: The current at which a single panel produces maximum power.
+  - **Voc (Open Circuit Voltage)**: The maximum voltage a single panel can produce with no load.
+  - **Isc (Short Circuit Current)**: The maximum current a single panel can produce in a short-circuit condition.
+  - **Panel Count**: The number of panels in this tracker's string.
+  - **Panel Configuration**: How the panels are wired together for this tracker.
+    - **Series**: Panels connected end-to-end. Voltage = sum, current stays the same.
+    - **Parallel**: Panels connected side-by-side. Current = sum, voltage stays the same.
+    - **Parallel-Series**: Combination of both.
+
+> **Migration note (v1.0.8):** existing single-MPPT installations are migrated automatically — your previous flat configuration becomes a single-element `mppt_inputs` list on the first launch after upgrade. No manual action required.
+
+> **Limitation:** the temperature sensor and temperature coefficients are shared across all trackers. If your strings face different directions (east vs west), the same temperature compensation is applied to both. Per-tracker temperature is on the roadmap.
 
 ---
 

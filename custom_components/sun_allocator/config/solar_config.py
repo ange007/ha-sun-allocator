@@ -4,11 +4,10 @@ from typing import Dict, Any, Optional
 
 import voluptuous as vol
 
-from ..core.logger import log_error, log_exception, audit_action
-from .solar_config_form import build_solar_config_schema
+from ..core.logger import log_error, log_exception
+from .solar_config_form import build_solar_hub_schema, build_mppt_input_schema
 
 from ..const import (
-    STEP_USER,
     CONF_CONSUMPTION,
     CONF_PANEL_VMP,
     CONF_PANEL_IMP,
@@ -19,13 +18,22 @@ from ..const import (
 )
 
 
+# pylint: disable=too-few-public-methods
 class SolarConfigMixin:
-    """Mixin for solar panel configuration steps."""
+    """Mixin for solar panel configuration validation and processing.
 
-    def _validate_solar_config(self, user_input: Dict[str, Any]) -> Dict[str, str]:
-        """Validate solar panel configuration."""
-        errors = {}
-        
+    The actual flow steps live in ``SunAllocatorConfigFlow`` and
+    ``SunAllocatorOptionsFlowHandler`` (config/__init__.py).
+    """
+
+    def _validate_panel_only(self, user_input: Dict[str, Any]) -> Dict[str, str]:
+        """Validate per-MPPT panel parameters.
+
+        Used by the mppt_input step. Does NOT validate consumption / battery
+        sensors — those are validated at the hub-level step.
+        """
+        errors: Dict[str, str] = {}
+
         if (
             user_input.get(CONF_PANEL_VOC) is not None
             and user_input.get(CONF_PANEL_VMP) is not None
@@ -43,7 +51,7 @@ class SolarConfigMixin:
                     user_input.get(CONF_PANEL_VMP),
                 )
                 log_exception("solar_config_voc_vmp", exc)
-                
+
         try:
             panel_count = int(user_input.get(CONF_PANEL_COUNT, 1))
             if panel_count <= 0:
@@ -55,61 +63,58 @@ class SolarConfigMixin:
                 user_input.get(CONF_PANEL_COUNT),
             )
             log_exception("solar_config_panel_count", exc)
-            
+
         try:
-            vmp = float(user_input.get(CONF_PANEL_VMP, 0))
-            if vmp <= 0:
+            vmp_val = float(user_input.get(CONF_PANEL_VMP, 0))
+            if vmp_val <= 0:
                 errors[CONF_PANEL_VMP] = "invalid_vmp"
         except (ValueError, TypeError) as exc:
             errors[CONF_PANEL_VMP] = "invalid_vmp"
-            log_error("[SolarConfigMixin] Invalid Vmp: %s", user_input.get(CONF_PANEL_VMP))
+            log_error(
+                "[SolarConfigMixin] Invalid Vmp: %s",
+                user_input.get(CONF_PANEL_VMP),
+            )
             log_exception("solar_config_vmp", exc)
-            
+
         try:
-            imp = float(user_input.get(CONF_PANEL_IMP, 0))
-            if imp <= 0:
+            imp_val = float(user_input.get(CONF_PANEL_IMP, 0))
+            if imp_val <= 0:
                 errors[CONF_PANEL_IMP] = "invalid_imp"
         except (ValueError, TypeError) as exc:
             errors[CONF_PANEL_IMP] = "invalid_imp"
-            log_error("[SolarConfigMixin] Invalid Imp: %s", user_input.get(CONF_PANEL_IMP))
+            log_error(
+                "[SolarConfigMixin] Invalid Imp: %s",
+                user_input.get(CONF_PANEL_IMP),
+            )
             log_exception("solar_config_imp", exc)
+
         return errors
 
+    def _process_hub_config_input(
+        self, user_input: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Process hub-level config input (consumption / battery sensors).
 
-    def _process_solar_config_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
-        """Process and clean solar configuration input."""
+        Replaces NONE_OPTION / empty string with None for optional sensor fields.
+        """
         for field in [CONF_CONSUMPTION, CONF_BATTERY_POWER]:
-            if field in user_input and (not user_input[field] or user_input[field] == NONE_OPTION or user_input[field] == ""):
+            if field in user_input and (
+                not user_input[field]
+                or user_input[field] == NONE_OPTION
+                or user_input[field] == ""
+            ):
                 user_input[field] = None
 
         return user_input
 
-
-    def _get_solar_config_schema(
+    def _get_solar_hub_schema(
         self, defaults: Optional[Dict[str, Any]] = None
     ) -> vol.Schema:
-        """Get the schema for solar panel configuration using solar_config_form.py."""
-        return build_solar_config_schema(defaults)
+        """Get the schema for the hub-level solar form."""
+        return build_solar_hub_schema(defaults)
 
-
-    async def async_step_user(self, user_input=None):
-        """Handle the initial step - solar panel configuration."""
-        errors = {}
-
-        if user_input is not None:
-            errors = self._validate_solar_config(user_input)
-
-            if not errors:
-                user_input = self._process_solar_config_input(user_input)
-                self._solar_config = user_input
-                audit_action("solar_config_saved", {"config": user_input})
-
-                return await self.async_step_devices()
-
-        schema = self._get_solar_config_schema(self._solar_config)
-
-        return self.async_show_form(
-            step_id=STEP_USER,
-            data_schema=schema,
-            errors=errors,
-        )
+    def _get_mppt_input_schema(
+        self, defaults: Optional[Dict[str, Any]] = None
+    ) -> vol.Schema:
+        """Get the schema for a single per-MPPT input form."""
+        return build_mppt_input_schema(defaults)

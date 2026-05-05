@@ -6,6 +6,7 @@ from custom_components.sun_allocator.const import (
     # Configuration steps
     STEP_USER,
     STEP_MAIN_MENU,
+    STEP_MPPT_INPUT,
     STEP_SETTINGS,
     STEP_MANAGE_DEVICES,
     STEP_TEMPERATURE_COMPENSATION,
@@ -17,6 +18,7 @@ from custom_components.sun_allocator.const import (
     STEP_CONFIRM_REMOVE,
     
     # Configuration fields
+    CONF_MPPT_COUNT,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_CONSUMPTION,
@@ -115,6 +117,7 @@ def test_required_step_translations():
     required_steps = [
         STEP_USER,
         STEP_MAIN_MENU,
+        STEP_MPPT_INPUT,
         STEP_SETTINGS,
         STEP_MANAGE_DEVICES,
         STEP_TEMPERATURE_COMPENSATION,
@@ -145,34 +148,30 @@ def test_step_field_translations():
     # Map steps to their required fields using constants
     step_fields = {
         STEP_USER: [
-            CONF_PV_POWER,
-            CONF_PV_VOLTAGE,
+            CONF_MPPT_COUNT,
             CONF_CONSUMPTION,
             CONF_BATTERY_POWER,
             CONF_BATTERY_POWER_REVERSED,
-            CONF_PANEL_VMP,
-            CONF_PANEL_IMP,
-            CONF_PANEL_VOC,
-            CONF_PANEL_ISC,
-            CONF_PANEL_COUNT,
-            CONF_PANEL_CONFIGURATION,
             CONF_TEMPERATURE_COMPENSATION_ENABLED,
             CONF_ADVANCED_SETTINGS_ENABLED,
         ],
         STEP_SETTINGS: [
-            CONF_PV_POWER,
-            CONF_PV_VOLTAGE,
+            CONF_MPPT_COUNT,
             CONF_CONSUMPTION,
             CONF_BATTERY_POWER,
             CONF_BATTERY_POWER_REVERSED,
+            CONF_TEMPERATURE_COMPENSATION_ENABLED,
+            CONF_ADVANCED_SETTINGS_ENABLED,
+        ],
+        STEP_MPPT_INPUT: [
+            CONF_PV_POWER,
+            CONF_PV_VOLTAGE,
             CONF_PANEL_VMP,
             CONF_PANEL_IMP,
             CONF_PANEL_VOC,
             CONF_PANEL_ISC,
             CONF_PANEL_COUNT,
             CONF_PANEL_CONFIGURATION,
-            CONF_TEMPERATURE_COMPENSATION_ENABLED,
-            CONF_ADVANCED_SETTINGS_ENABLED,
         ],
         STEP_MAIN_MENU: [
             CONF_ACTION,

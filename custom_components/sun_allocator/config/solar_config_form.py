@@ -1,6 +1,8 @@
-"""Solar panel configuration form schema for Sun Allocator config flow."""
+"""Solar panel configuration form schemas for Sun Allocator config flow."""
 
-from voluptuous import Schema, Required, Optional
+from typing import Any, Dict, Optional
+
+from voluptuous import Schema, Required, Optional as VolOptional
 
 from homeassistant.helpers import selector
 
@@ -11,6 +13,7 @@ from ..config.ui_helpers import (
 )
 
 from ..const import (
+    CONF_MPPT_COUNT,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_PANEL_VMP,
@@ -22,43 +25,25 @@ from ..const import (
     CONF_CONSUMPTION,
     CONF_BATTERY_POWER,
     CONF_BATTERY_POWER_REVERSED,
+    MPPT_MAX_COUNT,
     PANEL_CONFIG_SERIES,
     PANEL_CONFIG_PARALLEL,
     PANEL_CONFIG_PARALLEL_SERIES,
 )
 
 
-def build_solar_config_schema(defaults=None):
-    """Build schema for solar panel configuration."""
+def build_solar_hub_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
+    """Build schema for hub-level solar config: tracker count + shared sensors."""
     if defaults is None:
         defaults = {}
 
     return Schema({
         Required(
-            CONF_PV_POWER,
-            default=defaults.get(CONF_PV_POWER)
-        ): selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                multiple=False,
-                exclude_entities=[],
-                filter=[{"device_class": ["power"]}],
-            )
-        ),
+            CONF_MPPT_COUNT,
+            default=defaults.get(CONF_MPPT_COUNT, 1),
+        ): NumberSelectorBuilder(1, MPPT_MAX_COUNT, 1).build(),
 
-        Required(
-            CONF_PV_VOLTAGE,
-            default=defaults.get(CONF_PV_VOLTAGE)
-        ): selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                multiple=False,
-                exclude_entities=[],
-                filter=[{"device_class": ["voltage"]}],
-            )
-        ),
-
-        Optional(
+        VolOptional(
             CONF_CONSUMPTION,
             description={"suggested_value": defaults.get(CONF_CONSUMPTION)},
         ): selector.EntitySelector(
@@ -67,12 +52,12 @@ def build_solar_config_schema(defaults=None):
                 multiple=False,
                 filter=[
                     {"device_class": ["energy"]},
-                    {"device_class": ["power"]}
+                    {"device_class": ["power"]},
                 ],
             )
         ),
 
-        Optional(
+        VolOptional(
             CONF_BATTERY_POWER,
             description={"suggested_value": defaults.get(CONF_BATTERY_POWER)},
         ): selector.EntitySelector(
@@ -82,15 +67,45 @@ def build_solar_config_schema(defaults=None):
                 filter=[
                     {"device_class": ["power"]},
                     {"device_class": ["battery"]},
-                    {"device_class": ["bat"]}
+                    {"device_class": ["bat"]},
                 ],
             )
         ),
 
-        Optional(
+        VolOptional(
             CONF_BATTERY_POWER_REVERSED,
             default=defaults.get(CONF_BATTERY_POWER_REVERSED, False),
         ): BooleanSelectorBuilder().build(),
+    })
+
+
+def build_mppt_input_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
+    """Build schema for a single per-MPPT input: power/voltage sensors + panel params."""
+    if defaults is None:
+        defaults = {}
+
+    return Schema({
+        Required(
+            CONF_PV_POWER,
+            default=defaults.get(CONF_PV_POWER),
+        ): selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                multiple=False,
+                filter=[{"device_class": ["power"]}],
+            )
+        ),
+
+        Required(
+            CONF_PV_VOLTAGE,
+            default=defaults.get(CONF_PV_VOLTAGE),
+        ): selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                multiple=False,
+                filter=[{"device_class": ["voltage"]}],
+            )
+        ),
 
         Required(
             CONF_PANEL_VMP,
@@ -107,7 +122,7 @@ def build_solar_config_schema(defaults=None):
             default=defaults.get(CONF_PANEL_VOC, 52.6),
         ): NumberSelectorBuilder(0, 100, 0.1).build(),
 
-        Optional(
+        VolOptional(
             CONF_PANEL_ISC,
             default=defaults.get(CONF_PANEL_ISC, 10.71),
         ): NumberSelectorBuilder(0, 100, 0.01).build(),
@@ -129,4 +144,3 @@ def build_solar_config_schema(defaults=None):
             translation_key=CONF_PANEL_CONFIGURATION,
         ).build(),
     })
-

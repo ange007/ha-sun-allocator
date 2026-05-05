@@ -4,15 +4,22 @@
     "step": {
       "user": {
         "title": "Solar Panel Configuration",
-        "description": "Configure your solar panel parameters",
+        "description": "Configure how many MPPT trackers your inverter has and shared sensors. You will configure each tracker's panels in the next step.",
         "data": {
+          "mppt_count": "Number of MPPT trackers",
           "advanced_settings_enabled": "Enable Advanced Settings",
           "battery_power_reversed": "Reverse Battery Power Values",
           "temperature_compensation_enabled": "Enable Temperature Compensation",
+          "consumption": "Consumption Sensor",
+          "battery_power": "Battery Power Sensor"
+        }
+      },
+      "mppt_input": {
+        "title": "MPPT Tracker {index} of {total}",
+        "description": "Configure power/voltage sensors and panel parameters for tracker {index} of {total}.",
+        "data": {
           "pv_power": "PV Power Sensor",
           "pv_voltage": "PV Voltage Sensor",
-          "consumption": "Consumption Sensor",
-          "battery_power": "Battery Power Sensor",
           "vmp": "Maximum Power Voltage (Vmp)",
           "imp": "Maximum Power Current (Imp)",
           "voc": "Open Circuit Voltage (Voc)",
@@ -25,17 +32,19 @@
         "title": "SunAllocator Configuration",
         "description": "Configure solar panels and manage devices. Currently configured devices: {devices_count}",
         "data": {
-          "pv_power": "PV Power Sensor",
-          "pv_voltage": "PV Voltage Sensor",
-          "consumption": "Consumption Sensor",
-          "battery_power": "Battery Power Sensor",
+          "action": "Select action"
+        }
+      },
+      "settings": {
+        "title": "Solar Panel Settings",
+        "description": "Adjust the number of MPPT trackers and shared sensors. Each tracker will be re-asked in the next step.",
+        "data": {
+          "mppt_count": "Number of MPPT trackers",
+          "advanced_settings_enabled": "Enable Advanced Settings",
           "battery_power_reversed": "Reverse Battery Power Values",
-          "vmp": "Maximum Power Voltage (Vmp)",
-          "imp": "Maximum Power Current (Imp)",
-          "voc": "Open Circuit Voltage (Voc)",
-          "isc": "Short Circuit Current (Isc)",
-          "panel_count": "Panel Count",
-          "panel_configuration": "Panel Configuration"
+          "temperature_compensation_enabled": "Enable Temperature Compensation",
+          "consumption": "Consumption Sensor",
+          "battery_power": "Battery Power Sensor"
         }
       },
       "manage_devices": {
@@ -127,6 +136,13 @@
           "ramp_deadband": "Ramp Deadband (%)",
           "hysteresis_w": "Hysteresis (W)"
         }
+      },
+      "confirm_remove": {
+        "title": "Confirm Device Removal",
+        "description": "Are you sure you want to remove {device_name}?",
+        "data": {
+          "confirm": "Yes, remove device"
+        }
       }
     },
     "error": {
@@ -142,6 +158,8 @@
       "invalid_time_format": "Invalid time format. Please use HH:MM",
       "voc_equal_to_vmp": "Voc cannot be equal to Vmp",
       "invalid_values": "Invalid values provided",
+      "invalid_mppt_count": "MPPT trackers count must be between 1 and 4",
+      "duplicate_mppt_sensor": "This sensor is already used by another MPPT tracker",
       "invalid_panel_count": "Panel count must be a positive number",
       "invalid_vmp": "Vmp must be a positive number",
       "invalid_imp": "Imp must be a positive number",
@@ -167,15 +185,22 @@
       },
       "settings": {
         "title": "Solar Panel Settings",
-        "description": "Configure solar panel parameters and advanced settings",
+        "description": "Adjust the number of MPPT trackers and shared sensors. Each tracker will be re-asked in the next step.",
         "data": {
+          "mppt_count": "Number of MPPT trackers",
           "advanced_settings_enabled": "Enable Advanced Settings",
           "battery_power_reversed": "Reverse Battery Power Values",
           "temperature_compensation_enabled": "Enable Temperature Compensation",
+          "consumption": "Consumption Sensor",
+          "battery_power": "Battery Power Sensor"
+        }
+      },
+      "mppt_input": {
+        "title": "MPPT Tracker {index} of {total}",
+        "description": "Configure power/voltage sensors and panel parameters for tracker {index} of {total}.",
+        "data": {
           "pv_power": "PV Power Sensor",
           "pv_voltage": "PV Voltage Sensor",
-          "consumption": "Consumption Sensor",
-          "battery_power": "Battery Power Sensor",
           "vmp": "Maximum Power Voltage (Vmp)",
           "imp": "Maximum Power Current (Imp)",
           "voc": "Open Circuit Voltage (Voc)",
@@ -290,6 +315,8 @@
       "invalid_time_format": "Invalid time format. Please use HH:MM",
       "voc_equal_to_vmp": "Voc cannot be equal to Vmp",
       "invalid_values": "Invalid values provided",
+      "invalid_mppt_count": "MPPT trackers count must be between 1 and 4",
+      "duplicate_mppt_sensor": "This sensor is already used by another MPPT tracker",
       "invalid_panel_count": "Panel count must be a positive number",
       "invalid_vmp": "Vmp must be a positive number",
       "invalid_imp": "Imp must be a positive number",
@@ -324,7 +351,7 @@
     },
     "manage_devices_action": {
       "options": {
-        "add_device": "Add Device",
+        "add": "Add Device",
         "edit": "Edit Device",
         "remove": "Remove Device",
         "back": "Back to Main Menu"

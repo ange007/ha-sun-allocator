@@ -22,10 +22,16 @@ from ..const import (
     CONF_DEVICES,
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
+    CONF_MPPT_INPUTS,
+    CONF_MPPT_COUNT,
+    CONF_PV_POWER,
+    CONF_PV_VOLTAGE,
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_ADVANCED_SETTINGS_ENABLED,
     CONF_ACTION,
+    MPPT_MAX_COUNT,
     STEP_MAIN_MENU,
+    STEP_MPPT_INPUT,
     STEP_SETTINGS,
     STEP_MANAGE_DEVICES,
     ACTION_ADD,
@@ -69,32 +75,32 @@ class SunAllocatorConfigFlow(
 
 
     async def async_step_user(self, user_input=None):
-        """Handle the initial step - solar panel configuration."""
+        """Hub-level config: mppt_count + shared sensors + toggles."""
         errors = {}
 
         if user_input is not None:
-            errors = self._validate_solar_config(user_input)
+            try:
+                count = int(user_input.get(CONF_MPPT_COUNT, 0))
+            except (ValueError, TypeError):
+                count = 0
+            if not 1 <= count <= MPPT_MAX_COUNT:
+                errors[CONF_MPPT_COUNT] = "invalid_mppt_count"
 
             if not errors:
-                user_input = self._process_solar_config_input(user_input)
-                self._solar_config = user_input
-                audit_action("solar_config_saved", {"config": user_input})
-
-                self._solar_config[CONF_TEMPERATURE_COMPENSATION_ENABLED] = user_input.get(
-                    CONF_TEMPERATURE_COMPENSATION_ENABLED, False
+                user_input = self._process_hub_config_input(user_input)
+                self._solar_config = dict(user_input)
+                self._solar_config[CONF_MPPT_COUNT] = count
+                self._solar_config[CONF_MPPT_INPUTS] = []  # reset accumulator
+                self._solar_config[CONF_TEMPERATURE_COMPENSATION_ENABLED] = (
+                    user_input.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False)
                 )
                 self._solar_config[CONF_ADVANCED_SETTINGS_ENABLED] = user_input.get(
                     CONF_ADVANCED_SETTINGS_ENABLED, False
                 )
+                audit_action("solar_hub_saved", {"config": self._solar_config})
+                return await self.async_step_mppt_input()
 
-                if self._solar_config.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False):
-                    return await self.async_step_temperature_compensation()
-                if self._solar_config.get(CONF_ADVANCED_SETTINGS_ENABLED, False):
-                    return await self.async_step_advanced_settings()
-
-                return self._create_entry()
-
-        schema = self._get_solar_config_schema(self._solar_config)
+        schema = self._get_solar_hub_schema(self._solar_config)
 
         extended_schema = schema.extend(
             {
@@ -116,6 +122,46 @@ class SunAllocatorConfigFlow(
         return self.async_show_form(
             step_id="user",
             data_schema=extended_schema,
+            errors=errors,
+        )
+
+
+    async def async_step_mppt_input(self, user_input=None):
+        """Per-MPPT panel config; loops mppt_count times."""
+        errors = {}
+        existing = self._solar_config.get(CONF_MPPT_INPUTS, [])
+        idx = len(existing)
+        total = self._solar_config.get(CONF_MPPT_COUNT, 1)
+
+        if user_input is not None:
+            errors = self._validate_panel_only(user_input)
+            existing_powers = [m.get(CONF_PV_POWER) for m in existing]
+            existing_voltages = [m.get(CONF_PV_VOLTAGE) for m in existing]
+            if user_input.get(CONF_PV_POWER) in existing_powers:
+                errors[CONF_PV_POWER] = "duplicate_mppt_sensor"
+            if user_input.get(CONF_PV_VOLTAGE) in existing_voltages:
+                errors[CONF_PV_VOLTAGE] = "duplicate_mppt_sensor"
+
+            if not errors:
+                self._solar_config[CONF_MPPT_INPUTS] = existing + [dict(user_input)]
+                if len(self._solar_config[CONF_MPPT_INPUTS]) >= total:
+                    if self._solar_config.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False):
+                        return await self.async_step_temperature_compensation()
+                    if self._solar_config.get(CONF_ADVANCED_SETTINGS_ENABLED, False):
+                        return await self.async_step_advanced_settings()
+                    return self._create_entry()
+                return await self.async_step_mppt_input()
+
+        defaults = existing[idx] if idx < len(existing) else None
+        schema = self._get_mppt_input_schema(defaults)
+
+        return self.async_show_form(
+            step_id=STEP_MPPT_INPUT,
+            data_schema=schema,
+            description_placeholders={
+                "index": str(idx + 1),
+                "total": str(total),
+            },
             errors=errors,
         )
 
@@ -159,6 +205,7 @@ class SunAllocatorOptionsFlowHandler(
         self._device_index = None
         self._action = None
         self._device_to_remove = None
+        self._existing_mppt_inputs = []
 
 
     async def async_step_init(self, _user_input=None):
@@ -207,24 +254,40 @@ class SunAllocatorOptionsFlowHandler(
 
 
     async def async_step_settings(self, user_input=None):
-        """Handle the settings step."""
+        """Hub-level reconfigure: mppt_count + shared sensors + toggles."""
         errors = {}
 
         if user_input is not None:
-            errors = self._validate_solar_config(user_input)
+            try:
+                count = int(user_input.get(CONF_MPPT_COUNT, 0))
+            except (ValueError, TypeError):
+                count = 0
+            if not 1 <= count <= MPPT_MAX_COUNT:
+                errors[CONF_MPPT_COUNT] = "invalid_mppt_count"
 
             if not errors:
-                user_input = self._process_solar_config_input(user_input)
+                user_input = self._process_hub_config_input(user_input)
+                # Stash existing trackers for prefill on the per-MPPT step.
+                self._existing_mppt_inputs = list(
+                    self._solar_config.get(CONF_MPPT_INPUTS, [])
+                )
                 self._solar_config.update(user_input)
+                self._solar_config[CONF_MPPT_COUNT] = count
+                self._solar_config[CONF_MPPT_INPUTS] = []  # accumulator reset
+                self._solar_config[CONF_TEMPERATURE_COMPENSATION_ENABLED] = (
+                    user_input.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False)
+                )
+                self._solar_config[CONF_ADVANCED_SETTINGS_ENABLED] = user_input.get(
+                    CONF_ADVANCED_SETTINGS_ENABLED, False
+                )
+                return await self.async_step_mppt_input()
 
-                if user_input.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False):
-                    return await self.async_step_temperature_compensation()
-                if user_input.get(CONF_ADVANCED_SETTINGS_ENABLED, False):
-                    return await self.async_step_advanced_settings()
-
-                return await self._save_and_return()
-
-        schema = self._get_solar_config_schema(self._solar_config)
+        defaults = dict(self._solar_config)
+        defaults.setdefault(
+            CONF_MPPT_COUNT,
+            len(self._solar_config.get(CONF_MPPT_INPUTS, [])) or 1,
+        )
+        schema = self._get_solar_hub_schema(defaults)
 
         extended_schema = schema.extend(
             {
@@ -246,6 +309,51 @@ class SunAllocatorOptionsFlowHandler(
         return self.async_show_form(
             step_id=STEP_SETTINGS,
             data_schema=extended_schema,
+            errors=errors,
+        )
+
+
+    async def async_step_mppt_input(self, user_input=None):
+        """Per-MPPT panel config for reconfigure flow."""
+        errors = {}
+        existing_collected = self._solar_config.get(CONF_MPPT_INPUTS, [])
+        idx = len(existing_collected)
+        total = self._solar_config.get(CONF_MPPT_COUNT, 1)
+        prior = getattr(self, "_existing_mppt_inputs", [])
+
+        if user_input is not None:
+            errors = self._validate_panel_only(user_input)
+            existing_powers = [m.get(CONF_PV_POWER) for m in existing_collected]
+            existing_voltages = [m.get(CONF_PV_VOLTAGE) for m in existing_collected]
+            if user_input.get(CONF_PV_POWER) in existing_powers:
+                errors[CONF_PV_POWER] = "duplicate_mppt_sensor"
+            if user_input.get(CONF_PV_VOLTAGE) in existing_voltages:
+                errors[CONF_PV_VOLTAGE] = "duplicate_mppt_sensor"
+
+            if not errors:
+                self._solar_config[CONF_MPPT_INPUTS] = existing_collected + [
+                    dict(user_input)
+                ]
+                if len(self._solar_config[CONF_MPPT_INPUTS]) >= total:
+                    if self._solar_config.get(
+                        CONF_TEMPERATURE_COMPENSATION_ENABLED, False
+                    ):
+                        return await self.async_step_temperature_compensation()
+                    if self._solar_config.get(CONF_ADVANCED_SETTINGS_ENABLED, False):
+                        return await self.async_step_advanced_settings()
+                    return await self._save_and_return()
+                return await self.async_step_mppt_input()
+
+        defaults = prior[idx] if idx < len(prior) else None
+        schema = self._get_mppt_input_schema(defaults)
+
+        return self.async_show_form(
+            step_id=STEP_MPPT_INPUT,
+            data_schema=schema,
+            description_placeholders={
+                "index": str(idx + 1),
+                "total": str(total),
+            },
             errors=errors,
         )
 

@@ -356,12 +356,18 @@ def calculate_excess_power_mppt(
     inverter_self_consumption: float = 0.0,
     relative_voltage: float | None = None,
     energy_harvesting_possible: bool | None = None,
+    untapped_power_override: float | None = None,
     **kwargs,  # Catch-all for future compatibility
 ) -> float:
     """
     Calculate excess power with proper accounting for battery charge and consumption.
     This function uses a unified MPPT approach, leveraging consumption data if available
     to provide a more accurate calculation of available excess power.
+
+    For multi-MPPT setups, ``untapped_power_override`` can supply a pre-computed
+    sum of per-tracker untapped power (with each tracker's own relative_voltage
+    gating already applied). When provided, ``relative_voltage`` is bypassed for
+    the untapped calculation but still used as a guard.
     """
     # 1. Discharge Guard: If the battery is discharging, there's no excess power.
     is_discharging = (battery_power > 0) if battery_power_reversed else (battery_power < 0)
@@ -376,7 +382,9 @@ def calculate_excess_power_mppt(
     battery_charge_w = max(-battery_power if battery_power_reversed else battery_power, 0.0)
 
     # 4. Calculate untapped power based on voltage relative to MPP
-    if relative_voltage is not None and relative_voltage <= 1.0:
+    if untapped_power_override is not None:
+        untapped_power = max(0.0, float(untapped_power_override))
+    elif relative_voltage is not None and relative_voltage <= 1.0:
         # If voltage is at or below MPP, there is no untapped power from the panels.
         # Excess can only come from battery budget spillover in this state.
         untapped_power = 0.0

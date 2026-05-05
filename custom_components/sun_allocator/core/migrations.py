@@ -22,6 +22,15 @@ from ..const import (
     CONF_DEVICES,
     CONF_DEVICE_ID,
     CONF_DEVICE_SCHEDULE_MODE,
+    CONF_MPPT_INPUTS,
+    CONF_PV_POWER,
+    CONF_PV_VOLTAGE,
+    CONF_PANEL_VMP,
+    CONF_PANEL_IMP,
+    CONF_PANEL_VOC,
+    CONF_PANEL_ISC,
+    CONF_PANEL_COUNT,
+    CONF_PANEL_CONFIGURATION,
     SCHEDULE_MODE_DISABLED,
     SCHEDULE_MODE_STANDARD,
 )
@@ -47,6 +56,7 @@ class ConfigEntryMigrator:
         # it was introduced in via its docstring; remove once that version is
         # below the integration's minimum supported install age.
         data = self._migrate_schedule_enabled_to_mode(data)
+        data = self._migrate_flat_solar_to_mppt_inputs(data)
 
         if self.changed:
             self.hass.config_entries.async_update_entry(self.entry, data=data)
@@ -92,3 +102,42 @@ class ConfigEntryMigrator:
                 new_dev[CONF_DEVICE_SCHEDULE_MODE],
             )
         return {**data, CONF_DEVICES: new_devices}
+
+    def _migrate_flat_solar_to_mppt_inputs(self, data: dict) -> dict:
+        """Added in v1.0.8.
+
+        Flat solar keys (``pv_power``, ``vmp``, ``imp``, ...) are wrapped into
+        a single-element list under ``mppt_inputs`` to enable multi-MPPT
+        support. The flat keys are removed from top level afterwards.
+
+        - ``mppt_inputs`` already present → no-op (already migrated).
+        - ``pv_power`` missing or empty string → no-op (entry has no solar
+          config; defensive — should not happen for fully-configured entries).
+        """
+        if CONF_MPPT_INPUTS in data:
+            return data
+        if not data.get(CONF_PV_POWER):
+            return data
+
+        flat_keys = [
+            CONF_PV_POWER,
+            CONF_PV_VOLTAGE,
+            CONF_PANEL_VMP,
+            CONF_PANEL_IMP,
+            CONF_PANEL_VOC,
+            CONF_PANEL_ISC,
+            CONF_PANEL_COUNT,
+            CONF_PANEL_CONFIGURATION,
+        ]
+        mppt_entry = {k: data[k] for k in flat_keys if k in data}
+
+        new_data = {k: v for k, v in data.items() if k not in flat_keys}
+        new_data[CONF_MPPT_INPUTS] = [mppt_entry]
+        self.changed = True
+        log_info(
+            "[migrate v1.0.8] flat solar keys -> mppt_inputs[0]: pv_power=%s, vmp=%s, panel_count=%s",
+            mppt_entry.get(CONF_PV_POWER),
+            mppt_entry.get(CONF_PANEL_VMP),
+            mppt_entry.get(CONF_PANEL_COUNT),
+        )
+        return new_data
