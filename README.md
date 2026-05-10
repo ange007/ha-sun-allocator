@@ -13,11 +13,13 @@
 
 ## Features
 
-- Calculates untapped potential solar energy (excess) and panel usage percentage.
-- Estimates maximum possible power at the current voltage based on MPPT principles.
+- Calculates available excess solar power and panel usage percentage.
+- Estimates maximum possible power at the current voltage based on MPPT principles, including optional dual-MPPT aggregation.
 - Automatic, priority-based control of multiple loads (switches, lights, climate entities, ESPHome relays).
 - Supports both on/off and proportional (dimmer-style) device control.
 - Configurable debounce, hysteresis, and minimum on-time to protect appliances from rapid cycling.
+- Optional per-device actual-power or active-feedback inputs keep standard loads accounted correctly even when enabled but idle.
+- Optional per-device minimum battery SOC thresholds block new starts for selected loads.
 - Temperature compensation for accurate panel output estimation.
 - Scheduling support: time-based windows or a Home Assistant helper entity (e.g. `input_boolean`, schedule helper).
 - Climate devices: auto-detects `hvac_mode` from the entity's supported modes (`heat` → `heat_cool` → `auto`).
@@ -54,8 +56,8 @@ For a detailed guide on all configuration options, please see the [**Detailed Co
 
 The integration creates several sensors to monitor your solar array:
 
--   `sensor.sun_allocator_excess_power`: The untapped potential power available. Use this to trigger your automations.
--   `sensor.sun_allocator_current_max_power`: The estimated maximum power your panels could produce at the current voltage.
+-   `sensor.sun_allocator_excess_power`: The currently available solar headroom. In MPPT-only mode this is mainly untapped panel potential; with a consumption sensor it also reflects PV power that is already being produced but is not needed by the current loads.
+-   `sensor.sun_allocator_current_max_power`: The estimated maximum power your panels could produce at the current voltage. When PV1/PV2 are configured, this aggregates both MPPT inputs.
 -   `sensor.sun_allocator_usage_percent`: The current power usage as a percentage of the maximum possible power.
 -   `sensor.sun_allocator_power_distribution`: The total power currently allocated to all your controlled devices, plus per-device diagnostic attributes (`allocation_w`, `allocation_percent`, `device_meta`, `reasons`).
 
@@ -65,8 +67,10 @@ For every configured device the integration also creates:
 
 -   `sensor.sun_allocator_<device_name>_power` — current allocated power in W.
 -   `sensor.sun_allocator_<device_name>_power_percent` — proportional duty as %.
--   `sensor.sun_allocator_<device_name>_device_status` — ENUM sensor with one of: `active`, `insufficient_power`, `debouncing_on`, `debouncing_off`, `auto_control_off`, `manual_override`, `filtered`, `trying_on`, `trying_off`, `failed_on`.
--   `switch.sun_allocator_<device_name>_auto_control` — runtime toggle for that device's auto-control. State persists across Home Assistant restarts (`RestoreEntity` + config sync). Turning it off immediately stops auto-control without removing the device from the config.
+-   `sensor.sun_allocator_<device_name>_device_status` — ENUM sensor with one of: `active`, `idle`, `insufficient_power`, `debouncing_on`, `debouncing_off`, `auto_control_off`, `manual_override`, `filtered`, `trying_on`, `trying_off`, `failed_on`.
+-   `switch.sun_allocator_<device_name>_auto_control` — runtime toggle for that device's auto-control. State persists across Home Assistant restarts (`RestoreEntity` + config sync). Turning it off immediately stops auto-control without removing the device from the config, and can optionally send an immediate `off` command to the underlying entity.
+
+When `Actual Power Sensor`, `Active Feedback Binary Sensor`, or `Minimum Battery SOC` are configured, the per-device power and status sensors also expose extra diagnostic attributes for measured draw, feedback source, and battery gating.
 
 ### Example Automations
 

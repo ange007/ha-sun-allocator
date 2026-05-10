@@ -1,7 +1,7 @@
 """Tests for power distribution strategies."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import HomeAssistant, State
 
@@ -11,6 +11,8 @@ from custom_components.sun_allocator.const import (
     DEVICE_TYPE_STANDARD,
     DEVICE_TYPE_CUSTOM,
     CONF_DEVICE_ALLOCATION_STRATEGY,
+    CONF_DEVICE_ACTUAL_POWER_SENSOR,
+    CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
     STRATEGY_FILL_ONE_BY_ONE,
     STRATEGY_DISTRIBUTE_EVENLY,
 )
@@ -35,6 +37,12 @@ def mock_hass():
     hass.states.async_set = set_state
     hass.services = MagicMock()
     hass.services.async_call = AsyncMock()
+
+    def create_task(coro, *_args, **_kwargs):
+        coro.close()
+        return None
+
+    hass.async_create_task = create_task
     return hass
 
 
@@ -292,3 +300,121 @@ async def test_distribute_evenly_does_not_overspend_when_one_device_inactive(moc
     assert allocation.get("on_mode", 0) <= 50  # min_expected_w upper bound for standard-style ON
     # And the total allocated must not exceed the input budget.
     assert allocation["proportional"] + allocation.get("on_mode", 0) <= 600
+
+
+@pytest.mark.asyncio
+async def test_partial_recompute_updates_changed_device_and_downstream(mock_hass):
+    """Feedback-triggered recompute should update the changed device and lower priorities."""
+    config_entry = MagicMock()
+    config_entry.entry_id = "test_entry"
+    config_entry.data = {
+        "devices": [
+            {
+                "device_id": "high_priority",
+                "device_name": "High Priority",
+                "device_entity": "switch.high_priority",
+                "device_type": DEVICE_TYPE_STANDARD,
+                "priority": 90,
+                "min_expected_w": 100,
+                "auto_control_enabled": True,
+                "debounce_time": 0,
+            },
+            {
+                "device_id": "measured_device",
+                "device_name": "Measured Device",
+                "device_entity": "switch.measured_device",
+                "device_type": DEVICE_TYPE_STANDARD,
+                "priority": 80,
+                "min_expected_w": 150,
+                "auto_control_enabled": True,
+                "debounce_time": 0,
+                CONF_DEVICE_ACTUAL_POWER_SENSOR: "sensor.measured_device_power",
+                CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W: 10,
+            },
+            {
+                "device_id": "low_priority",
+                "device_name": "Low Priority",
+                "device_entity": "switch.low_priority",
+                "device_type": DEVICE_TYPE_STANDARD,
+                "priority": 70,
+                "min_expected_w": 100,
+                "auto_control_enabled": True,
+                "debounce_time": 0,
+            },
+        ]
+    }
+
+    mock_hass.data[DOMAIN] = {config_entry.entry_id: {"power_allocation": {}}}
+    mock_hass.states.async_set("switch.high_priority", "off")
+    mock_hass.states.async_set("switch.measured_device", "off")
+    mock_hass.states.async_set("switch.low_priority", "off")
+    mock_hass.states.async_set("sensor.measured_device_power", "150")
+
+    await process_excess_power(mock_hass, config_entry, 250)
+
+    entry_data = mock_hass.data[DOMAIN][config_entry.entry_id]
+    entry_data["device_on_time_state"]["measured_device"].pop("startup_until", None)
+
+    mock_hass.states.async_set("switch.high_priority", "on")
+    mock_hass.states.async_set("switch.measured_device", "on")
+    mock_hass.states.async_set("sensor.measured_device_power", "0")
+
+    await process_excess_power(
+        mock_hass,
+        config_entry,
+        250,
+        start_from_device_id="measured_device",
+    )
+
+    power_dist = mock_hass.data[DOMAIN][config_entry.entry_id]["power_distribution"]
+
+    assert power_dist["allocation"]["high_priority"] == 100
+    assert power_dist["allocation"]["measured_device"] == 0.0
+    assert power_dist["allocation"]["low_priority"] == 100
+
+
+@pytest.mark.asyncio
+async def test_outside_schedule_off_is_not_repeated_without_state_change(mock_hass):
+    """Outside-schedule enforcement should not spam repeated off commands."""
+    config_entry = MagicMock()
+    config_entry.entry_id = "test_entry"
+    config_entry.data = {
+        "devices": [
+            {
+                "device_id": "scheduled_device",
+                "device_name": "Scheduled Device",
+                "device_entity": "switch.scheduled_device",
+                "device_type": DEVICE_TYPE_STANDARD,
+                "priority": 80,
+                "min_expected_w": 150,
+                "auto_control_enabled": True,
+                "debounce_time": 0,
+            }
+        ]
+    }
+
+    mock_hass.data[DOMAIN] = {config_entry.entry_id: {"power_allocation": {}}}
+    mock_hass.states.async_set("switch.scheduled_device", "on")
+
+    with (
+        patch(
+            "custom_components.sun_allocator.core.power_processor.is_device_in_schedule",
+            return_value=False,
+        ),
+        patch(
+            "custom_components.sun_allocator.core.power_processor.async_turn_off_entity",
+            new_callable=AsyncMock,
+        ) as mock_turn_off_entity,
+    ):
+        await process_excess_power(mock_hass, config_entry, 200)
+        await process_excess_power(mock_hass, config_entry, 200)
+
+        assert mock_turn_off_entity.await_count == 1
+
+        mock_hass.states.async_set("switch.scheduled_device", "off")
+        await process_excess_power(mock_hass, config_entry, 200)
+
+        mock_hass.states.async_set("switch.scheduled_device", "on")
+        await process_excess_power(mock_hass, config_entry, 200)
+
+        assert mock_turn_off_entity.await_count == 2

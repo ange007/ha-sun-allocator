@@ -3,16 +3,24 @@
 from __future__ import annotations
 from typing import Any
 
+import homeassistant.util.dt as dt_util
+
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import STATE_OFF
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
 
+from ..core.entity_control import async_turn_off_entity
+from ..core.logger import log_error
 from ..const import (
     DOMAIN,
     CONF_DEVICE_ID,
+    CONF_DEVICE_ENTITY,
     CONF_DEVICES,
     CONF_AUTO_CONTROL_ENABLED,
+    CONF_POWER_ALLOCATION,
+    CONF_POWER_DISTRIBUTION,
+    CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
 )
 from ..sensor.utils import get_device_info
 
@@ -69,8 +77,55 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
         self._is_on = is_on
         self.async_write_ha_state()
 
+    async def _turn_off_device_on_disable(self) -> None:
+        """Immediately turn off the managed entity when the device opts into it."""
+        if not self._device_config.get(CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE):
+            return
+
+        relay_entity = self._device_config.get(CONF_DEVICE_ENTITY)
+        if not relay_entity:
+            return
+
+        try:
+            await async_turn_off_entity(self._hass, relay_entity, blocking=True)
+        except Exception as exc:
+            log_error(
+                "Failed to force turn off %s when disabling auto-control: %s",
+                relay_entity,
+                exc,
+            )
+
+        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
+        if entry_data is None:
+            return
+
+        now = dt_util.now()
+        entry_data.setdefault("device_on_state", {})[self._device_id] = False
+        entry_data.get("manual_overrides", {}).pop(self._device_id, None)
+        entry_data.setdefault("last_controlled_at", {})[self._device_id] = now
+
+        device_on_time_state = entry_data.setdefault("device_on_time_state", {})
+        timing = device_on_time_state.setdefault(self._device_id, {})
+        timing.pop("last_on_time", None)
+        timing.pop("startup_until", None)
+        timing["last_off_time"] = now
+
+        power_allocation = entry_data.get(CONF_POWER_ALLOCATION, {})
+        if self._device_id in power_allocation:
+            power_allocation[self._device_id] = 0.0
+
+        power_distribution = entry_data.get(CONF_POWER_DISTRIBUTION, {})
+        allocation = power_distribution.get("allocation")
+        if isinstance(allocation, dict):
+            allocation[self._device_id] = 0.0
+
+        status_entry = entry_data.get("device_status", {}).get(self._device_id)
+        if status_entry is not None:
+            status_entry["is_enabled"] = False
+            status_entry["last_off_time"] = now
+
     async def _persist_to_config(self, is_on: bool) -> None:
-        """Persist new auto_control state to the config entry without reloading it."""
+        """Persist new auto-control state and refresh listeners without reloading."""
         config_entry = self._hass.config_entries.async_get_entry(self._entry_id)
         if config_entry is None:
             return
@@ -80,6 +135,7 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
             if dev.get(CONF_DEVICE_ID) == self._device_id:
                 if dev.get(CONF_AUTO_CONTROL_ENABLED) != is_on:
                     devices[i] = {**dev, CONF_AUTO_CONTROL_ENABLED: is_on}
+                    self._device_config = devices[i]
                     changed = True
                 break
         if changed:
@@ -88,6 +144,9 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
             self._hass.config_entries.async_update_entry(
                 config_entry, data={**config_entry.data, CONF_DEVICES: devices}
             )
+            from .. import setup_auto_control
+
+            await setup_auto_control(self._hass, config_entry)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         self._is_on = True
@@ -99,5 +158,6 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         self._is_on = False
+        await self._turn_off_device_on_disable()
         self.async_write_ha_state()
         await self._persist_to_config(False)

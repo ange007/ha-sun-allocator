@@ -6,15 +6,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import PERCENTAGE
 
 from .base import BaseSunAllocatorSensor
-from ...core.solar_optimizer import calculate_pmax
 from ..utils import calculate_usage_percentage
 from ...core.logger import log_debug
 
 from ...const import (
-    CONF_PV_POWER,
     CONF_PV_VOLTAGE,
-    CONF_PANEL_VMP,
-    CONF_PANEL_IMP,
+    CONF_PV_CURRENT,
     CONF_PANEL_VOC,
     CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
@@ -53,35 +50,21 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
         temp_compensation: Optional[Dict[str, float]],
     ) -> float:
         """Calculate usage percentage of solar panels."""
-        pv_power = sensor_values[CONF_PV_POWER]
+        snapshot = self._get_shared_calculation_snapshot()
+        mppt_summary = self._get_shared_mppt_summary(snapshot)
+        pv_power = mppt_summary["pv_power"]
         pv_voltage = sensor_values[CONF_PV_VOLTAGE]
-
-        vmp = panel_params[CONF_PANEL_VMP]
-        imp = panel_params[CONF_PANEL_IMP]
-
-        # Apply temperature compensation if provided
-        if temp_compensation:
-            temp_diff = temp_compensation["temp_diff"]
-            voc_coef = temp_compensation["voc_coef"]
-            pmax_coef = temp_compensation["pmax_coef"]
-
-            # Adjust Vmp and Imp for temperature
-            # Pmax = Vmp * Imp, so Imp_coef = Pmax_coef - Vmp_coef
-            vmp = vmp * (1 + voc_coef * temp_diff)
-            imp = imp * (1 + (pmax_coef - voc_coef) * temp_diff)
-
-            log_debug(
-                f"Temperature compensation applied: temp_diff={temp_diff}°C, "
-                f"adjusted Vmp={vmp:.2f}V, adjusted Imp={imp:.2f}A"
-            )
-
-        # Calculate maximum theoretical power
-        pmax = calculate_pmax(
-            vmp=vmp,
-            imp=imp,
-            panel_count=panel_params[CONF_PANEL_COUNT],
-            panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
-        )
+        panel_summary = self._get_theoretical_panel_summary(snapshot)
+        pmax = panel_summary["pmax"]
+        mppt_inputs = [
+            {
+                "id": panel_input["id"],
+                "name": panel_input["name"],
+                "pmax": panel_input["pmax"],
+            }
+            for panel_input in panel_summary["mppt_inputs"]
+        ]
+        primary_input = mppt_summary["mppt_inputs"][0]
 
         # Calculate usage percentage
         usage = calculate_usage_percentage(pv_power, pmax)
@@ -90,13 +73,18 @@ class SunAllocatorUsagePercentSensor(BaseSunAllocatorSensor):
         self._update_attributes(
             pv_power=pv_power,
             pv_voltage=pv_voltage,
-            vmp=vmp,
-            imp=imp,
+            pv_current=sensor_values.get(CONF_PV_CURRENT),
+            vmp=primary_input["vmp"],
+            imp=primary_input["imp"],
             voc=panel_params[CONF_PANEL_VOC],
             isc=panel_params[CONF_PANEL_ISC],
             panel_count=panel_params[CONF_PANEL_COUNT],
             panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
             pmax=pmax,
+            current_max_power=mppt_summary["current_max_power"],
+            mppt_count=mppt_summary["mppt_count"],
+            mppt_inputs=mppt_summary["mppt_inputs"],
+            theoretical_mppt_inputs=mppt_inputs,
             temperature_compensated=temp_compensation is not None,
         )
 

@@ -8,9 +8,14 @@
 
 from voluptuous import Schema, Required, Optional
 
+from homeassistant.helpers import selector as ha_selector
 from homeassistant.helpers.selector import selector
 
-from ..config.ui_helpers import SelectSelectorBuilder, NumberSelectorBuilder
+from ..config.ui_helpers import (
+    SelectSelectorBuilder,
+    NumberSelectorBuilder,
+    BooleanSelectorBuilder,
+)
 
 from ..const import (
     CONF_DEVICE_NAME,
@@ -23,6 +28,11 @@ from ..const import (
     CONF_AUTO_CONTROL_ENABLED,
     CONF_DEVICE_MIN_EXPECTED_W,
     CONF_DEVICE_MAX_EXPECTED_W,
+    CONF_DEVICE_ACTUAL_POWER_SENSOR,
+    CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR,
+    CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
+    CONF_DEVICE_MIN_BATTERY_SOC,
+    CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
     CONF_DEVICE_PRIORITY,
     CONF_DEVICE_SCHEDULE_MODE,
     SCHEDULE_MODE_DISABLED,
@@ -35,6 +45,7 @@ from ..const import (
     CONF_DAYS_OF_WEEK,
     CONF_DEVICE_DEBOUNCE_TIME,
     DEFAULT_DEBOUNCE_TIME,
+    DEFAULT_DEVICE_ACTUAL_POWER_THRESHOLD_W,
     CONF_DEVICE_MIN_ON_TIME,
 )
 
@@ -113,6 +124,42 @@ def build_device_basic_settings_schema(defaults=None):
             default=defaults.get(CONF_DEVICE_MIN_EXPECTED_W, 10.0),
         ): NumberSelectorBuilder(5, 10000, 1, unit="W").build(),
 
+        Optional(
+            CONF_DEVICE_ACTUAL_POWER_SENSOR,
+            description={"suggested_value": defaults.get(CONF_DEVICE_ACTUAL_POWER_SENSOR)},
+        ): ha_selector.EntitySelector(
+            ha_selector.EntitySelectorConfig(
+                domain="sensor",
+                multiple=False,
+                exclude_entities=[],
+                filter=[{"device_class": ["power"]}],
+            )
+        ),
+
+        Optional(
+            CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR,
+            description={"suggested_value": defaults.get(CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR)},
+        ): ha_selector.EntitySelector(
+            ha_selector.EntitySelectorConfig(
+                domain="binary_sensor",
+                multiple=False,
+                exclude_entities=[],
+            )
+        ),
+
+        Optional(
+            CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
+            default=defaults.get(
+                CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
+                DEFAULT_DEVICE_ACTUAL_POWER_THRESHOLD_W,
+            ),
+        ): NumberSelectorBuilder(0, 1000, 1, unit="W").build(),
+
+        Optional(
+            CONF_DEVICE_MIN_BATTERY_SOC,
+            description={"suggested_value": defaults.get(CONF_DEVICE_MIN_BATTERY_SOC)},
+        ): NumberSelectorBuilder(0, 100, 1, unit="%").build(),
+
         Required(
             CONF_DEVICE_PRIORITY,
             default=str(defaults.get(CONF_DEVICE_PRIORITY, 50)),
@@ -135,6 +182,14 @@ def build_device_basic_settings_schema(defaults=None):
             CONF_AUTO_CONTROL_ENABLED,
             default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
         ): selector({"boolean": {}}),
+
+        Optional(
+            CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
+            default=defaults.get(
+                CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
+                False,
+            ),
+        ): BooleanSelectorBuilder().build(),
 
         Required(
             CONF_DEVICE_SCHEDULE_MODE,

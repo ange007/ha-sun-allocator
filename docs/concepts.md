@@ -6,13 +6,29 @@ This document explains the core concepts and calculations used by the SunAllocat
 
 ## Excess Power Calculation
 
-The `sun_allocator_excess_power` sensor calculates the untapped potential power that could be extracted from your solar panel. It is calculated as:
+The `sun_allocator_excess_power` sensor represents the solar headroom currently available for controlled loads. Depending on your configuration, that headroom can come from three places:
+
+1. Untapped panel potential above the current operating point.
+2. PV power that is already being produced but is not needed by current house loads.
+3. Battery charge power above the configured reserve in budget mode.
+
+In **MPPT Mode** (no consumption sensor), the sensor is based mainly on untapped panel headroom:
 
 ```
-excess_power = estimated_max_power_at_current_voltage - current_pv_power_output
+untapped_power = max(0, estimated_max_power_at_current_voltage - current_pv_power_output)
+excess_power = untapped_power - inverter_self_consumption + battery_budget_spillover
 ```
 
-This value represents how many additional watts could be extracted from the panel at its current operating voltage. When this value is high, it indicates that your panel has significant untapped potential that could be utilized with additional loads.
+In **Parallel Mode** (with a consumption sensor), the sensor represents the total currently available solar headroom:
+
+```
+excess_power = estimated_max_power_at_current_voltage
+             - house_consumption
+             - inverter_self_consumption
+             - battery_charge_load
+```
+
+This means `sun_allocator_excess_power` is not limited to "above-Vmp untapped potential". With a consumption sensor configured, excess can stay positive even when the array is already operating at or below Vmp, because existing PV production above current loads is still available to be reallocated.
 
 ## Understanding MPPT and Solar Panel Operation
 
@@ -94,20 +110,23 @@ Each time the PV power sensor updates, SunAllocator calculates how much power is
 
 ```
 # MPPT Mode (no house consumption sensor — default):
-excess_power_W = estimated_max_power_at_current_voltage_W
+untapped_power_W = max(0, current_max_power_W - current_pv_power_W)
+excess_power_W = untapped_power_W
               - inverter_self_consumption_W   # power the inverter itself uses (from settings)
-              - reserved_battery_power_W      # power kept for battery charging (from settings)
+              + battery_budget_spillover_W    # only when battery charge exceeds configured reserve
 ```
 
 In **Parallel Mode** (when a house consumption sensor is configured), the excess is:
 
 ```
-# Parallel Mode — direct measurement of what is truly "spare":
-excess_power_W = solar_panel_output_W
+# Parallel Mode — total solar headroom available at the current operating point:
+excess_power_W = current_max_power_W
               - total_house_consumption_W     # everything the house is currently using
-              - battery_charging_power_W      # positive = charging, negative = discharging
+              - battery_charge_load_W         # positive charging load still reserved for the battery
               - inverter_self_consumption_W   # inverter idle draw (from settings)
 ```
+
+In dual-MPPT setups, `current_max_power_W` and `untapped_power_W` are summed per MPPT input before the excess calculation is performed.
 
 A negative excess means the house is drawing from the grid; no devices are turned on.
 
@@ -119,6 +138,7 @@ Before any device is considered for allocation, it must pass several checks:
 - **Entity exists**: The controlled HA entity must be available in Home Assistant.
 - **Schedule check**: If the device has a schedule, the current time must be within the allowed window. If the device is currently on but outside its schedule, it is turned off immediately.
 - **Manual override**: If the device mode was manually set to `Off` or `On`, the allocator respects that and skips automatic control.
+- **Battery SOC gate**: If the device has a minimum battery SOC configured and the current SOC is below that threshold, new starts are blocked. A small recovery hysteresis prevents chatter around the threshold.
 
 Devices that fail any check are skipped and their filter reason is stored for diagnostics.
 
@@ -156,13 +176,17 @@ Devices are sorted by **priority** (highest first). The allocator iterates over 
 
 #### Standard devices (On/Off)
 
-Each active standard device is allocated exactly `min_expected_w` from the budget:
+Standard devices still use `min_expected_w` as the turn-on threshold, but their live accounting depends on whether per-device feedback is configured.
 
 ```
-# Device gets exactly its configured minimum rated draw
+# Without per-device feedback, an enabled device is accounted as its configured minimum draw
 power_allocated_to_device_W  = device_min_expected_W    # e.g. 500 W
 remaining_solar_budget_W    -= power_allocated_to_device_W
 ```
+
+If an `Actual Power Sensor` or `Active Feedback Binary Sensor` is configured, the device may remain enabled while its allocated power follows the measured draw instead of the fixed minimum. After startup grace, a device that is enabled but not consuming is reported as `idle` and can contribute `0 W` to the live allocation.
+
+For binary feedback specifically, `on` is treated as `min_expected_w` and `off` as `0 W` once the startup grace period expires.
 
 If there is not enough remaining power for a device, it is turned off.
 
@@ -217,6 +241,8 @@ A watchdog timer monitors whether the PV power sensor is still sending updates. 
 
 The default timeout is **3 minutes** (configured via `WATCHDOG_STALE_AFTER_MINUTES` in `core/settings.py`).
 
+Relay-state, actual-power, active-feedback, and battery-SOC changes can still trigger partial recomputes, but only a confirmed excess-sensor update refreshes watchdog freshness. This prevents noisy auxiliary sensors from masking a stale solar signal.
+
 ---
 
 ## Device Status States
@@ -226,6 +252,7 @@ The per-device `device_status` ENUM sensor exposes the current control state. Po
 | State | Meaning |
 |---|---|
 | `active` | Device is currently allocated power (>0 W) and considered ON. |
+| `idle` | Device is enabled, but measured or feedback-based accounting shows no current load after startup grace. |
 | `insufficient_power` | Excess power is below the device's `min_expected_w`. |
 | `debouncing_on` | Device is candidate ON but still inside its debounce window. |
 | `debouncing_off` | Device is currently ON but candidate has dropped — turn-off pending. |
@@ -237,4 +264,4 @@ The per-device `device_status` ENUM sensor exposes the current control state. Po
 
 ## Manual Override
 
-If the entity changes state outside of an allocator-issued command (e.g. you flip the switch in the Lovelace UI), the allocator opens a manual-override window. During this window auto-control is paused for that device, the `device_status` sensor reports `manual_override`, and the override expires automatically after `MANUAL_OVERRIDE_TTL_SECONDS`. Toggling the auto-control switch ON also clears any pending override immediately.
+If the entity changes state outside of an allocator-issued command (e.g. you flip the switch in the Lovelace UI), the allocator opens a manual-override window. During this window auto-control is paused for that device, the `device_status` sensor reports `manual_override`, and the override expires automatically after `MANUAL_OVERRIDE_TTL_SECONDS`. Toggling the auto-control switch ON also clears any pending override immediately; toggling it OFF may optionally send an immediate OFF command if the device is configured for that behavior.

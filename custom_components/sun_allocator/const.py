@@ -17,8 +17,14 @@ RELAY_MODE_PROPORTIONAL = "Proportional"
 # Solar panel configuration keys
 CONF_PV_POWER = "pv_power"
 CONF_PV_VOLTAGE = "pv_voltage"
+CONF_PV_CURRENT = "pv_current"
+CONF_MPPT2_ENABLED = "mppt2_enabled"
+CONF_PV2_POWER = "pv2_power"
+CONF_PV2_VOLTAGE = "pv2_voltage"
+CONF_PV2_CURRENT = "pv2_current"
 CONF_CONSUMPTION = "consumption"
 CONF_BATTERY_POWER = "battery_power"
+CONF_BATTERY_SOC_SENSOR = "battery_soc_sensor"
 CONF_BATTERY_POWER_REVERSED = "battery_power_reversed"
 CONF_PANEL_VMP = "vmp"
 CONF_PANEL_IMP = "imp"
@@ -26,6 +32,12 @@ CONF_PANEL_VOC = "voc"
 CONF_PANEL_ISC = "isc"
 CONF_PANEL_COUNT = "panel_count"
 CONF_PANEL_CONFIGURATION = "panel_configuration"
+CONF_PANEL2_VMP = "mppt2_vmp"
+CONF_PANEL2_IMP = "mppt2_imp"
+CONF_PANEL2_VOC = "mppt2_voc"
+CONF_PANEL2_ISC = "mppt2_isc"
+CONF_PANEL2_COUNT = "mppt2_panel_count"
+CONF_PANEL2_CONFIGURATION = "mppt2_panel_configuration"
 
 # Device configuration keys
 CONF_DEVICES = "devices"
@@ -40,6 +52,11 @@ CONF_DEVICE_MIN_ON_TIME = "min_on_time"
 CONF_DEVICE_TYPE = "device_type"
 CONF_DEVICE_MIN_EXPECTED_W = "min_expected_w"
 CONF_DEVICE_MAX_EXPECTED_W = "max_expected_w"
+CONF_DEVICE_ACTUAL_POWER_SENSOR = "actual_power_sensor"
+CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR = "active_feedback_sensor"
+CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W = "actual_power_threshold_w"
+CONF_DEVICE_MIN_BATTERY_SOC = "min_battery_soc"
+CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE = "turn_off_on_auto_control_disable"
 CONF_DEVICE_DEBOUNCE_TIME = "debounce_time"
 CONF_DEVICE_PRIORITY = "priority"
 
@@ -77,6 +94,8 @@ CONF_TEMP_COEFFICIENT_PMAX = "temp_coefficient_pmax"
 DEFAULT_STARTUP_GRACE_PERIOD = 90
 DEFAULT_DEBOUNCE_TIME = 15
 DEFAULT_HYSTERESIS_W = 40.0
+DEFAULT_DEVICE_ACTUAL_POWER_THRESHOLD_W = 10.0
+DEFAULT_BATTERY_SOC_HYSTERESIS = 2.0
 
 # Internal MPPT algorithm constants (not user-configurable)
 INTERNAL_CURVE_FACTOR_K = 0.2

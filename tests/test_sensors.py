@@ -4,11 +4,13 @@ import pytest
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from conftest import create_test_config_entry
 from tests.const import MOCK_CONFIG
 
 from custom_components.sun_allocator.const import (
+    DOMAIN,
     DOMAIN_SWITCH,
     CONF_DEVICES,
     CONF_DEVICE_ID,
@@ -42,6 +44,15 @@ from custom_components.sun_allocator.const import (
 from custom_components.sun_allocator.sensor.sensors.excess import (
     SunAllocatorExcessSensor,
 )
+from custom_components.sun_allocator.sensor.sensors.base import BaseSunAllocatorSensor
+
+
+def _get_main_sensor_entity_id(
+    hass: HomeAssistant, entry_id: str, sensor_suffix: str
+) -> str | None:
+    """Resolve a main sensor entity id from its stable unique id."""
+    registry = er.async_get(hass)
+    return registry.async_get_entity_id("sensor", DOMAIN, f"{entry_id}_{sensor_suffix}")
 
 
 @pytest.mark.asyncio
@@ -63,22 +74,10 @@ async def test_sensors_are_created(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     # Check that the sensors have been created
-    assert (
-        hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_excess")
-        is not None
-    )
-    assert (
-        hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_max_power")
-        is not None
-    )
-    assert (
-        hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_current_max_power")
-        is not None
-    )
-    assert (
-        hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_usage_percent")
-        is not None
-    )
+    assert hass.states.get(_get_main_sensor_entity_id(hass, config_entry.entry_id, "excess")) is not None
+    assert hass.states.get(_get_main_sensor_entity_id(hass, config_entry.entry_id, "max_power")) is not None
+    assert hass.states.get(_get_main_sensor_entity_id(hass, config_entry.entry_id, "current_max_power")) is not None
+    assert hass.states.get(_get_main_sensor_entity_id(hass, config_entry.entry_id, "usage_percent")) is not None
 
 
 @pytest.mark.asyncio
@@ -131,7 +130,7 @@ async def _test_sensor_configuration_update(
     await hass.async_block_till_done()  # Ensure dummy sensors are processed
 
     # Check initial state
-    sensor_entity_id = f"sensor.sun_allocator_{config_entry.entry_id}_{sensor_suffix}"
+    sensor_entity_id = _get_main_sensor_entity_id(hass, config_entry.entry_id, sensor_suffix)
     state = hass.states.get(sensor_entity_id)
     assert state is not None
     # The panel_configuration attribute is not always present, so we check only if it exists
@@ -203,11 +202,19 @@ async def test_mppt_with_consumption_budget_mode(hass: HomeAssistant, mock_confi
     hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
 
-    with patch(
-        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
-        return_value=(3500.0, complete_mock_debug_info),
+    with patch.object(
+        BaseSunAllocatorSensor,
+        "_get_shared_mppt_summary",
+        return_value={
+            "pv_power": 3000.0,
+            "current_max_power": 3500.0,
+            "untapped_power": 500.0,
+            "mppt_count": 1,
+            "mppt_inputs": [],
+            "debug_info": complete_mock_debug_info,
+        },
     ):
-        assert sensor.native_value == 500
+        assert sensor.native_value == 3200
 
 
 @pytest.mark.asyncio
@@ -224,11 +231,19 @@ async def test_mppt_with_consumption_priority_mode(hass: HomeAssistant, mock_con
     hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
 
-    with patch(
-        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
-        return_value=(3500.0, complete_mock_debug_info),
+    with patch.object(
+        BaseSunAllocatorSensor,
+        "_get_shared_mppt_summary",
+        return_value={
+            "pv_power": 3000.0,
+            "current_max_power": 3500.0,
+            "untapped_power": 500.0,
+            "mppt_count": 1,
+            "mppt_inputs": [],
+            "debug_info": complete_mock_debug_info,
+        },
     ):
-        assert sensor.native_value == 500
+        assert sensor.native_value == 2900
 
 
 @pytest.mark.asyncio
@@ -248,11 +263,19 @@ async def test_mppt_with_consumption_and_self_consumption(
     hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
 
-    with patch(
-        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
-        return_value=(3500.0, complete_mock_debug_info),
+    with patch.object(
+        BaseSunAllocatorSensor,
+        "_get_shared_mppt_summary",
+        return_value={
+            "pv_power": 3000.0,
+            "current_max_power": 3500.0,
+            "untapped_power": 500.0,
+            "mppt_count": 1,
+            "mppt_inputs": [],
+            "debug_info": complete_mock_debug_info,
+        },
     ):
-        assert sensor.native_value == 350
+        assert sensor.native_value == 2750
 
 
 # --- MPPT MODE TESTS (without consumption sensor) ---
@@ -267,9 +290,17 @@ async def test_mppt_budget_mode(hass: HomeAssistant, mock_config_excess):
     hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
 
-    with patch(
-        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
-        return_value=(3000.0, complete_mock_debug_info),
+    with patch.object(
+        BaseSunAllocatorSensor,
+        "_get_shared_mppt_summary",
+        return_value={
+            "pv_power": 2500.0,
+            "current_max_power": 3000.0,
+            "untapped_power": 500.0,
+            "mppt_count": 1,
+            "mppt_inputs": [],
+            "debug_info": complete_mock_debug_info,
+        },
     ):
         assert sensor.native_value == 900
 
@@ -283,9 +314,17 @@ async def test_mppt_priority_mode(hass: HomeAssistant, mock_config_excess):
     hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
 
-    with patch(
-        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
-        return_value=(3000.0, complete_mock_debug_info),
+    with patch.object(
+        BaseSunAllocatorSensor,
+        "_get_shared_mppt_summary",
+        return_value={
+            "pv_power": 2500.0,
+            "current_max_power": 3000.0,
+            "untapped_power": 500.0,
+            "mppt_count": 1,
+            "mppt_inputs": [],
+            "debug_info": complete_mock_debug_info,
+        },
     ):
         assert sensor.native_value == 500
 
@@ -303,9 +342,17 @@ async def test_mppt_mode_with_self_consumption(hass: HomeAssistant, mock_config_
     hass.states.async_set("sensor.pv_voltage", "40")
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
 
-    with patch(
-        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
-        return_value=(3000.0, complete_mock_debug_info),
+    with patch.object(
+        BaseSunAllocatorSensor,
+        "_get_shared_mppt_summary",
+        return_value={
+            "pv_power": 2500.0,
+            "current_max_power": 3000.0,
+            "untapped_power": 500.0,
+            "mppt_count": 1,
+            "mppt_inputs": [],
+            "debug_info": complete_mock_debug_info,
+        },
     ):
         assert sensor.native_value == 450
 
@@ -320,9 +367,17 @@ async def test_mppt_mode_is_called_correctly(hass: HomeAssistant, mock_config_ex
     sensor = SunAllocatorExcessSensor(hass, config, "test_entry", 1)
 
     with (
-        patch(
-            "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
-            return_value=(3000.0, complete_mock_debug_info),
+        patch.object(
+            BaseSunAllocatorSensor,
+            "_get_shared_mppt_summary",
+            return_value={
+                "pv_power": 2000.0,
+                "current_max_power": 3000.0,
+                "untapped_power": 1000.0,
+                "mppt_count": 1,
+                "mppt_inputs": [],
+                "debug_info": complete_mock_debug_info,
+            },
         ),
         patch(
             "custom_components.sun_allocator.sensor.sensors.excess.calculate_excess_power_mppt",

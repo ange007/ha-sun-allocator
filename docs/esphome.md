@@ -2,7 +2,7 @@
 
 # ESPHome Integration
 
-SunAllocator can directly control multiple ESPHome devices to utilize excess solar energy. This integration allows you to automatically adjust the power of solid-state relays based on the available untapped potential, with priority-based power distribution.
+SunAllocator can directly control multiple ESPHome devices to utilize excess solar energy. This integration allows you to automatically adjust the power of solid-state relays based on the available excess solar headroom, with priority-based power distribution.
 
 ## Multiple Device Support
 

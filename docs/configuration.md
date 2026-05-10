@@ -21,9 +21,18 @@ This section covers the primary sensors and the physical characteristics of your
 ### Main Sensors
 - **PV Power Sensor**: (Required) The sensor that measures your solar panel power output in Watts (W).
 - **PV Voltage Sensor**: (Required for MPPT mode) The sensor that measures your solar panel voltage in Volts (V). This is required if you are not using a house consumption sensor.
+- **PV Current Sensor**: (Optional) The sensor that measures PV current in Amps (A). It is used for diagnostics and can help verify MPPT behavior.
 - **Consumption Sensor**: (Optional) The sensor that measures your total house power consumption in Watts (W). When this sensor is provided, the integration will operate in **Parallel Mode**. If not provided, it will operate in **MPPT Mode**.
 - **Battery Power Sensor**: (Optional) The sensor that measures your battery power in Watts (W). This is used to determine if the battery is charging or discharging.
+- **Battery SOC Sensor**: (Optional) A battery percentage sensor. When configured, you can set a per-device minimum SOC threshold so SunAllocator will not start selected loads below that charge level.
 - **Is Battery Power Reversed?**: (Optional) Enable this if your battery power sensor shows a positive value for discharging and a negative value for charging. By default, the integration assumes negative values for discharging and positive for charging.
+
+### Multiple MPPT Controllers
+If your inverter exposes separate PV1 and PV2 measurements, enable the second MPPT input and select the PV2 power and voltage sensors. PV2 current is optional; if no PV2 power sensor is available, the integration can estimate PV2 power from PV2 voltage and current.
+
+Each MPPT input is calculated independently using its own voltage, power, and optional panel specification overrides. The integration then sums the per-MPPT current maximum power and untapped power before calculating excess power. This is important for dual-MPPT inverters because one string can be below MPP while the other still has usable headroom.
+
+If both MPPT inputs use the same panels and string layout, you can leave the MPPT2 panel fields at their defaults. Override them only when PV2 has a different panel count, wiring, or panel type.
 
 ### Solar Panel Specifications
 These values are found on the datasheet of your solar panels.
@@ -59,9 +68,14 @@ In this section, you can add, edit, or remove the devices (loads) that you want 
 - **Device Entity**: The Home Assistant entity that represents your device.
 - **Min Expected (W)**: (Required) The minimum power in Watts the device consumes when it's on. This is used to determine if the device is actually running.
 - **Max Expected (W)**: (Required for Custom devices) The maximum power in Watts the device consumes at 100% load. This is used for proportional control.
+- **Actual Power Sensor**: (Optional) A per-device power sensor in Watts. For standard on/off devices, SunAllocator still uses **Min Expected (W)** as the threshold for enabling the device, but once the device is enabled it accounts for the measured power instead of assuming the device always consumes the configured minimum. This is useful for thermostats, floor heating, boilers, and other loads that can be enabled but temporarily idle.
+- **Active Feedback Binary Sensor**: (Optional) A `binary_sensor` that indicates whether the load is physically active right now. When this sensor is `on`, SunAllocator assumes the device is using **Min Expected (W)**. When it is `off`, the device is treated as idle and allocated `0 W` after the startup grace period. This is useful for floor heating valves, thermostats, and similar devices that either draw their normal fixed power or nothing at all.
+- **Actual Power Threshold (W)**: The noise floor for the actual power sensor. Values at or below this threshold are treated as idle/no measured load. During the startup grace period, SunAllocator keeps reserving **Min Expected (W)** until the sensor reports real consumption or the grace period expires.
+- **Minimum Battery SOC (%)**: (Optional) Prevents this device from starting when the configured battery SOC is below the threshold. This gate only blocks new starts; it does not force an already-running device off.
 - **Priority**: A number from 1 to 100 that determines the order in which devices are turned on. Devices with higher priority are turned on first.
 - **Debounce Time (s)**: The time in seconds the system will wait before turning a device on or off. This prevents the device from rapidly switching on and off.
 - **Min On-Time (s)**: The minimum time in seconds that the device must remain on before it can be turned off. This is useful for appliances like compressors or pumps that should not be cycled on and off rapidly. When a device is turned on, a **startup grace period** is also applied (configurable in Advanced Settings), during which the device will not be turned off even if solar power drops below the threshold.
+- **Turn Off Device When Auto Control Is Disabled**: (Optional) If enabled, turning off the device's auto-control switch will immediately send an `off` command to the underlying Home Assistant entity. This bypasses minimum on-time and startup grace because it is treated as an explicit user action.
 - **Auto-Control**: Enable or disable automatic control for this device.
 - **Enable Schedule**: Enable or disable a schedule for this device.
 
@@ -88,10 +102,12 @@ Once a device is added, the integration creates the following entities for it:
 |---|---|
 | `sensor.sun_allocator_<device>_power` | Allocated power in W. |
 | `sensor.sun_allocator_<device>_power_percent` | Proportional duty %. |
-| `sensor.sun_allocator_<device>_device_status` | ENUM status (`active`, `insufficient_power`, `debouncing_on`/`off`, `auto_control_off`, `manual_override`, `filtered`, `trying_on`/`off`, `failed_on`). |
+| `sensor.sun_allocator_<device>_device_status` | ENUM status (`active`, `idle`, `insufficient_power`, `debouncing_on`/`off`, `auto_control_off`, `manual_override`, `filtered`, `trying_on`/`off`, `failed_on`). |
 | `switch.sun_allocator_<device>_auto_control` | Runtime auto-control toggle. State persists across restarts. |
 
 Unique IDs follow the pattern `<entry_id>_<device_id>_<suffix>` and are stable across reloads.
+
+When `Actual Power Sensor`, `Active Feedback Binary Sensor`, or `Minimum Battery SOC (%)` are configured, the per-device power and status sensors also expose additional diagnostics such as `actual_power_w`, `actual_power_source`, `is_consuming`, `battery_soc`, and `battery_soc_blocked`.
 
 ---
 

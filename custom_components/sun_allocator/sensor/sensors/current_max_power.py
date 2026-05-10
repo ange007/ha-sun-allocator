@@ -6,21 +6,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfPower
 
 from .base import BaseSunAllocatorSensor
-from ...core.solar_optimizer import calculate_current_max_power
 from ...core.logger import log_debug
 
 from ...const import (
-    CONF_CURVE_FACTOR_K,
-    CONF_EFFICIENCY_CORRECTION_FACTOR,
-    CONF_MIN_INVERTER_VOLTAGE,
-    CONF_PV_POWER,
     CONF_PV_VOLTAGE,
-    CONF_PANEL_VMP,
-    CONF_PANEL_IMP,
-    CONF_PANEL_VOC,
-    CONF_PANEL_ISC,
-    CONF_PANEL_COUNT,
-    CONF_PANEL_CONFIGURATION,
+    CONF_PV_CURRENT,
     KEY_ENERGY_HARVESTING_POSSIBLE,
     KEY_RELATIVE_VOLTAGE,
     KEY_CALCULATION_REASON,
@@ -58,24 +48,12 @@ class SunAllocatorCurrentMaxPowerSensor(BaseSunAllocatorSensor):
         temp_compensation: Optional[Dict[str, float]],
     ) -> float:
         """Calculate current maximum power at current conditions."""
-        pv_power = sensor_values[CONF_PV_POWER]
+        snapshot = self._get_shared_calculation_snapshot()
+        mppt_summary = self._get_shared_mppt_summary(snapshot)
+        pv_power = mppt_summary["pv_power"]
         pv_voltage = sensor_values[CONF_PV_VOLTAGE]
-
-        # Calculate current maximum power using MPPT algorithm
-        current_max_power, debug_info = calculate_current_max_power(
-            pv_voltage=pv_voltage,
-            pv_power=pv_power,
-            vmp=panel_params[CONF_PANEL_VMP],
-            imp=panel_params[CONF_PANEL_IMP],
-            voc=panel_params[CONF_PANEL_VOC],
-            isc=panel_params[CONF_PANEL_ISC],
-            panel_count=panel_params[CONF_PANEL_COUNT],
-            panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
-            curve_factor_k=mppt_config[CONF_CURVE_FACTOR_K],
-            efficiency_correction_factor=mppt_config[CONF_EFFICIENCY_CORRECTION_FACTOR],
-            min_inverter_voltage=mppt_config[CONF_MIN_INVERTER_VOLTAGE],
-            temperature_compensation=temp_compensation,
-        )
+        current_max_power = mppt_summary["current_max_power"]
+        debug_info = mppt_summary["debug_info"]
 
         # Update attributes with detailed information
         common_attrs = self._get_common_attributes(
@@ -87,10 +65,16 @@ class SunAllocatorCurrentMaxPowerSensor(BaseSunAllocatorSensor):
         )
         self._update_attributes(
             **common_attrs,
+            pv_current=sensor_values.get(CONF_PV_CURRENT),
+            consumption=mppt_summary.get("consumption"),
+            battery_power=mppt_summary.get("battery_power"),
             excess_possible=(
                 debug_info[KEY_RELATIVE_VOLTAGE] > 1.0
                 and debug_info[KEY_ENERGY_HARVESTING_POSSIBLE]
             ),
+            untapped_power=mppt_summary["untapped_power"],
+            mppt_count=mppt_summary["mppt_count"],
+            mppt_inputs=mppt_summary["mppt_inputs"],
         )
 
         log_debug(

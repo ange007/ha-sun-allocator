@@ -82,9 +82,11 @@ DEVICE_STATUS_FILTERED = "filtered"
 DEVICE_STATUS_TRYING_ON = "trying_on"
 DEVICE_STATUS_TRYING_OFF = "trying_off"
 DEVICE_STATUS_FAILED_ON = "failed_on"
+DEVICE_STATUS_IDLE = "idle"
 
 DEVICE_STATUS_OPTIONS = [
     DEVICE_STATUS_ACTIVE,
+    DEVICE_STATUS_IDLE,
     DEVICE_STATUS_INSUFFICIENT_POWER,
     DEVICE_STATUS_DEBOUNCING_ON,
     DEVICE_STATUS_DEBOUNCING_OFF,
@@ -131,8 +133,12 @@ def _resolve_device_status(
         return key, []
 
     is_active = allocated_power > 0
+    is_enabled = bool(st.get("is_enabled"))
     is_candidate = st.get("is_active_candidate")
     refusals: list[str] = st.get("refusal_reasons") or []
+
+    if is_enabled and not is_active and st.get("actual_power_valid") and not st.get("is_consuming"):
+        return DEVICE_STATUS_IDLE, []
 
     if is_active:
         key = DEVICE_STATUS_DEBOUNCING_OFF if is_candidate is False else DEVICE_STATUS_ACTIVE
@@ -354,6 +360,7 @@ def calculate_excess_power_mppt(
     consumption: float | None = None,
     configured_reserve: float = 0.0,
     inverter_self_consumption: float = 0.0,
+    untapped_power: float | None = None,
     relative_voltage: float | None = None,
     energy_harvesting_possible: bool | None = None,
     **kwargs,  # Catch-all for future compatibility
@@ -375,8 +382,12 @@ def calculate_excess_power_mppt(
     # 3. Normalize battery power (positive for charging, 0 otherwise).
     battery_charge_w = max(-battery_power if battery_power_reversed else battery_power, 0.0)
 
-    # 4. Calculate untapped power based on voltage relative to MPP
-    if relative_voltage is not None and relative_voltage <= 1.0:
+    # 4. Calculate untapped power based on voltage relative to MPP.
+    # Multi-MPPT callers can pass a pre-summed untapped_power because each MPPT
+    # input may sit on a different side of its own maximum-power point.
+    if untapped_power is not None:
+        untapped_power = max(0.0, float(untapped_power))
+    elif relative_voltage is not None and relative_voltage <= 1.0:
         # If voltage is at or below MPP, there is no untapped power from the panels.
         # Excess can only come from battery budget spillover in this state.
         untapped_power = 0.0
@@ -406,15 +417,11 @@ def calculate_excess_power_mppt(
         if inverter_self_consumption > 0:
             excess = max(0.0, excess - inverter_self_consumption)
     else:
-        # With consumption sensor: self_consumption reduces effective untapped directly.
-        # real_excess uses only consumption + battery (not self_consumption) to avoid
-        # double-counting when untapped < real_excess.
-        effective_untapped = max(0.0, untapped_power - inverter_self_consumption)
-        real_excess = current_max_power - float(consumption) - battery_load
-        if configured_reserve > 0:
-            excess = min(effective_untapped, max(0, real_excess)) + battery_excess
-        else:
-            excess = min(effective_untapped, max(0, real_excess))
+        # With a consumption sensor, current_max_power already represents the total
+        # PV headroom available at current conditions. That available headroom must
+        # not be clamped to untapped panel power, because the system may already be
+        # producing more power than the base loads are consuming.
+        excess = max(0.0, current_max_power - base_loads - battery_load)
 
     log_debug(
         f"MPPT: PV={pv_power}W, Loads={base_loads}W, BatteryLoad={battery_load}W, BatteryExcess={battery_excess}W, Untapped={untapped_power}W -> Excess={excess}W"

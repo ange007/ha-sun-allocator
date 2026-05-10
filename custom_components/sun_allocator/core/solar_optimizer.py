@@ -1,11 +1,18 @@
 """MPPT (Maximum Power Point Tracking) algorithm utilities for Sun Allocator."""
 
 import math
-from typing import Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 
 from .logger import log_debug, log_warning, log_error, log_info
 
 from ..const import (
+    KEY_CALCULATION_REASON,
+    KEY_ENERGY_HARVESTING_POSSIBLE,
+    KEY_LIGHT_FACTOR,
+    KEY_MIN_SYSTEM_VOLTAGE,
+    KEY_PMAX,
+    KEY_RELATIVE_VOLTAGE,
+    KEY_VOC_RATIO,
     PANEL_CONFIG_SERIES,
     PANEL_CONFIG_PARALLEL_SERIES,
 )
@@ -190,6 +197,240 @@ def calculate_current_max_power(
     }
 
     return current_max_power, debug_info
+
+
+def _calculate_voltage_position(relative_voltage: float, voc_ratio: float) -> float:
+    """Return the normalized position between Vmp (0) and Voc (1)."""
+    if abs(voc_ratio - 1.0) < 0.001:
+        position = (relative_voltage - 1.0) * 10
+    else:
+        position = (
+            (relative_voltage - 1.0) / (voc_ratio - 1.0)
+            if (voc_ratio - 1.0) > 0
+            else 0.0
+        )
+
+    return max(0.0, min(1.0, position))
+
+
+def _maybe_apply_curtailment_floor(
+    input_results: List[Dict[str, Any]],
+    total_pv_power: float,
+    total_current_max_power: float,
+    total_untapped_power: float,
+    total_pmax: float,
+    relative_voltage: float,
+    voc_ratio: float,
+    consumption: Optional[float],
+    battery_power: Optional[float],
+    efficiency_correction_factor: float,
+) -> tuple[float, float, float, str]:
+    """Lift current_max when a load-limited inverter is likely curtailing PV output."""
+    if len(input_results) != 1 or consumption is None or total_pmax <= 0 or total_pv_power <= 0:
+        return (
+            total_current_max_power,
+            total_untapped_power,
+            input_results[0][KEY_LIGHT_FACTOR] if input_results else 0.0,
+            input_results[0][KEY_CALCULATION_REASON] if input_results else "",
+        )
+
+    input_result = input_results[0]
+    if input_result[KEY_CALCULATION_REASON] != "Between Vmp and Voc (back-estimated irradiance)":
+        return (
+            total_current_max_power,
+            total_untapped_power,
+            input_result[KEY_LIGHT_FACTOR],
+            input_result[KEY_CALCULATION_REASON],
+        )
+
+    try:
+        consumption_value = float(consumption)
+    except (TypeError, ValueError):
+        return (
+            total_current_max_power,
+            total_untapped_power,
+            input_result[KEY_LIGHT_FACTOR],
+            input_result[KEY_CALCULATION_REASON],
+        )
+
+    try:
+        battery_power_value = float(battery_power or 0.0)
+    except (TypeError, ValueError):
+        battery_power_value = 0.0
+
+    if consumption_value <= 0 or abs(battery_power_value) > 20.0 or relative_voltage <= 1.0:
+        return (
+            total_current_max_power,
+            total_untapped_power,
+            input_result[KEY_LIGHT_FACTOR],
+            input_result[KEY_CALCULATION_REASON],
+        )
+
+    if total_pv_power > consumption_value * 1.25:
+        return (
+            total_current_max_power,
+            total_untapped_power,
+            input_result[KEY_LIGHT_FACTOR],
+            input_result[KEY_CALCULATION_REASON],
+        )
+
+    position = _calculate_voltage_position(relative_voltage, voc_ratio)
+    if position <= 0.2:
+        return (
+            total_current_max_power,
+            total_untapped_power,
+            input_result[KEY_LIGHT_FACTOR],
+            input_result[KEY_CALCULATION_REASON],
+        )
+
+    estimated_light_factor = max(0.01, min(1.0, float(input_result[KEY_LIGHT_FACTOR] or 0.0)))
+    curtailment_floor_light = max(estimated_light_factor, math.sqrt(estimated_light_factor))
+    curtailment_floor_power = round(
+        total_pmax * curtailment_floor_light * efficiency_correction_factor,
+        1,
+    )
+
+    if curtailment_floor_power <= total_current_max_power:
+        return (
+            total_current_max_power,
+            total_untapped_power,
+            input_result[KEY_LIGHT_FACTOR],
+            input_result[KEY_CALCULATION_REASON],
+        )
+
+    untapped_power = round(max(0.0, curtailment_floor_power - total_pv_power), 1)
+    calculation_reason = "Between Vmp and Voc (curtailment-aware floor)"
+    input_result["current_max_power"] = curtailment_floor_power
+    input_result["untapped_power"] = untapped_power
+    input_result[KEY_LIGHT_FACTOR] = round(curtailment_floor_light, 4)
+    input_result[KEY_CALCULATION_REASON] = calculation_reason
+
+    return curtailment_floor_power, untapped_power, curtailment_floor_light, calculation_reason
+
+
+def calculate_multi_mppt_power(
+    mppt_inputs: List[Dict[str, Any]],
+    curve_factor_k: float = 0.2,
+    efficiency_correction_factor: float = 1.05,
+    min_inverter_voltage: float = 100.0,
+    temperature_compensation: Optional[dict] = None,
+    consumption: Optional[float] = None,
+    battery_power: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Calculate aggregate PV power data across one or more independent MPPT inputs."""
+    input_results = []
+
+    for index, mppt_input in enumerate(mppt_inputs, start=1):
+        pv_power = float(mppt_input.get("pv_power", 0.0) or 0.0)
+        pv_voltage = float(mppt_input.get("pv_voltage", 0.0) or 0.0)
+        pv_current = mppt_input.get("pv_current")
+        pv_current_value = None if pv_current is None else float(pv_current or 0.0)
+
+        current_max_power, debug_info = calculate_current_max_power(
+            pv_voltage=pv_voltage,
+            pv_power=pv_power,
+            vmp=float(mppt_input.get("vmp", 0.0) or 0.0),
+            imp=float(mppt_input.get("imp", 0.0) or 0.0),
+            voc=float(mppt_input.get("voc", 0.0) or 0.0),
+            isc=float(mppt_input.get("isc", 0.0) or 0.0),
+            panel_count=int(mppt_input.get("panel_count", 1) or 1),
+            panel_configuration=mppt_input.get("panel_configuration", PANEL_CONFIG_SERIES),
+            curve_factor_k=curve_factor_k,
+            efficiency_correction_factor=efficiency_correction_factor,
+            min_inverter_voltage=min_inverter_voltage,
+            temperature_compensation=temperature_compensation,
+        )
+
+        energy_harvesting_possible = debug_info[KEY_ENERGY_HARVESTING_POSSIBLE]
+        relative_voltage = debug_info[KEY_RELATIVE_VOLTAGE]
+        untapped_power = 0.0
+        if energy_harvesting_possible and relative_voltage > 1.0:
+            untapped_power = max(0.0, current_max_power - pv_power)
+
+        input_results.append(
+            {
+                "id": mppt_input.get("id", f"mppt{index}"),
+                "name": mppt_input.get("name", f"MPPT {index}"),
+                "pv_power": round(pv_power, 1),
+                "pv_voltage": round(pv_voltage, 2),
+                "pv_current": None if pv_current_value is None else round(pv_current_value, 3),
+                "current_max_power": round(current_max_power, 1),
+                "untapped_power": round(untapped_power, 1),
+                "vmp": round(float(mppt_input.get("vmp", 0.0) or 0.0), 3),
+                "imp": round(float(mppt_input.get("imp", 0.0) or 0.0), 3),
+                "voc": round(float(mppt_input.get("voc", 0.0) or 0.0), 3),
+                "isc": round(float(mppt_input.get("isc", 0.0) or 0.0), 3),
+                "panel_count": int(mppt_input.get("panel_count", 1) or 1),
+                "panel_configuration": mppt_input.get("panel_configuration", PANEL_CONFIG_SERIES),
+                **debug_info,
+            }
+        )
+
+    total_pv_power = sum(item["pv_power"] for item in input_results)
+    total_current_max_power = sum(item["current_max_power"] for item in input_results)
+    total_untapped_power = sum(item["untapped_power"] for item in input_results)
+    total_pmax = sum(item[KEY_PMAX] for item in input_results)
+    energy_harvesting_possible = any(
+        item[KEY_ENERGY_HARVESTING_POSSIBLE] for item in input_results
+    )
+    relative_voltage = max(
+        (item[KEY_RELATIVE_VOLTAGE] for item in input_results), default=0.0
+    )
+    voc_ratio = max((item[KEY_VOC_RATIO] for item in input_results), default=0.0)
+    min_system_voltage = max(
+        (item[KEY_MIN_SYSTEM_VOLTAGE] for item in input_results), default=0.0
+    )
+    if total_pmax > 0:
+        light_factor = sum(
+            item[KEY_LIGHT_FACTOR] * item[KEY_PMAX] for item in input_results
+        ) / total_pmax
+    else:
+        light_factor = 0.0
+
+    (
+        total_current_max_power,
+        total_untapped_power,
+        light_factor,
+        _,
+    ) = _maybe_apply_curtailment_floor(
+        input_results=input_results,
+        total_pv_power=total_pv_power,
+        total_current_max_power=total_current_max_power,
+        total_untapped_power=total_untapped_power,
+        total_pmax=total_pmax,
+        relative_voltage=relative_voltage,
+        voc_ratio=voc_ratio,
+        consumption=consumption,
+        battery_power=battery_power,
+        efficiency_correction_factor=efficiency_correction_factor,
+    )
+
+    calculation_reason = (
+        input_results[0][KEY_CALCULATION_REASON]
+        if len(input_results) == 1
+        else f"Aggregated {len(input_results)} MPPT inputs"
+    )
+
+    debug_info = {
+        KEY_PMAX: round(total_pmax, 1),
+        KEY_LIGHT_FACTOR: round(light_factor, 4),
+        KEY_MIN_SYSTEM_VOLTAGE: round(min_system_voltage, 1),
+        KEY_ENERGY_HARVESTING_POSSIBLE: energy_harvesting_possible,
+        KEY_RELATIVE_VOLTAGE: round(relative_voltage, 4),
+        KEY_VOC_RATIO: round(voc_ratio, 4),
+        KEY_CALCULATION_REASON: calculation_reason,
+    }
+
+    return {
+        "pv_power": round(total_pv_power, 1),
+        "consumption": None if consumption is None else round(float(consumption), 1),
+        "battery_power": None if battery_power is None else round(float(battery_power), 1),
+        "current_max_power": round(total_current_max_power, 1),
+        "untapped_power": round(total_untapped_power, 1),
+        "mppt_count": len(input_results),
+        "mppt_inputs": input_results,
+        "debug_info": debug_info,
+    }
 
 
 def calculate_pmax(

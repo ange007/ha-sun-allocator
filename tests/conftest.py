@@ -58,6 +58,21 @@ def create_test_config_entry(extra_data=None, **kwargs):
     return MockConfigEntry(**config)
 
 
+async def async_setup_test_entry(hass, config_entry):
+    """Set up a Sun Allocator config entry through Home Assistant's manager."""
+    if hass.config_entries.async_get_entry(config_entry.entry_id) is None:
+        config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def async_unload_test_entry(hass, config_entry):
+    """Unload a Sun Allocator config entry through Home Assistant's manager."""
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+
 def create_test_device(device_name, extra_data=None):
     """Create a test device configuration."""
     data = {

@@ -9,7 +9,11 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.typing import StateType
 
 from ...core.logger import log_error, journal_event
-from ...core.solar_optimizer import get_panel_parameters_with_fallbacks
+from ...core.solar_optimizer import (
+    calculate_pmax,
+    calculate_multi_mppt_power,
+    get_panel_parameters_with_fallbacks,
+)
 from ..utils import (
     get_sensor_state_safely,
     get_temperature_compensation_data,
@@ -23,6 +27,11 @@ from ...const import (
     DOMAIN,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
+    CONF_PV_CURRENT,
+    CONF_MPPT2_ENABLED,
+    CONF_PV2_POWER,
+    CONF_PV2_VOLTAGE,
+    CONF_PV2_CURRENT,
     CONF_CONSUMPTION,
     CONF_BATTERY_POWER,
     CONF_PANEL_VMP,
@@ -31,6 +40,15 @@ from ...const import (
     CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
+    CONF_PANEL2_VMP,
+    CONF_PANEL2_IMP,
+    CONF_PANEL2_VOC,
+    CONF_PANEL2_ISC,
+    CONF_PANEL2_COUNT,
+    CONF_PANEL2_CONFIGURATION,
+    CONF_CURVE_FACTOR_K,
+    CONF_EFFICIENCY_CORRECTION_FACTOR,
+    CONF_MIN_INVERTER_VOLTAGE,
     PANEL_CONFIG_SERIES,
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
@@ -74,6 +92,10 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         # Configuration values
         self._pv_power = config.get(CONF_PV_POWER)
         self._pv_voltage = config.get(CONF_PV_VOLTAGE)
+        self._pv_current = config.get(CONF_PV_CURRENT)
+        self._pv2_power = config.get(CONF_PV2_POWER)
+        self._pv2_voltage = config.get(CONF_PV2_VOLTAGE)
+        self._pv2_current = config.get(CONF_PV2_CURRENT)
         self._consumption = config.get(CONF_CONSUMPTION)
         self._battery_power = config.get(CONF_BATTERY_POWER)
         self._vmp = config.get(CONF_PANEL_VMP)
@@ -98,12 +120,16 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         return create_sensor_attributes(
             pv_power=0.0,
             pv_voltage=0.0,
+            pv_current=0.0,
             consumption=0.0,
             battery_power=0.0,
             excess_possible=False,
             energy_harvesting_possible=False,
             current_max_power=0.0,
+            untapped_power=0.0,
             usage_percent=0.0,
+            mppt_count=1,
+            mppt_inputs=[],
         )
 
 
@@ -133,6 +159,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         @callback
         def _update_sensor(*_):
             """Update the sensor when underlying data changes."""
+            self._invalidate_entry_sensor_cache()
             self.async_schedule_update_ha_state(True)
 
         setup_sensor_listeners(
@@ -159,6 +186,18 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         # Listen to PV voltage if configured
         if self._pv_voltage:
             entity_ids.append(self._pv_voltage)
+
+        if self._pv_current:
+            entity_ids.append(self._pv_current)
+
+        if self._pv2_power:
+            entity_ids.append(self._pv2_power)
+
+        if self._pv2_voltage:
+            entity_ids.append(self._pv2_voltage)
+
+        if self._pv2_current:
+            entity_ids.append(self._pv2_current)
 
         # Listen to consumption if configured
         if self._consumption:
@@ -189,6 +228,33 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
                 self._hass, self._pv_voltage, "PV Voltage"
             )
 
+        pv_current = None
+        if self._pv_current:
+            pv_current, _ = get_sensor_state_safely(
+                self._hass, self._pv_current, "PV Current"
+            )
+
+        pv2_power = 0.0
+        if self._pv2_power:
+            pv2_power, _ = get_sensor_state_safely(
+                self._hass, self._pv2_power, "PV2 Power"
+            )
+
+        pv2_voltage = 0.0
+        if self._pv2_voltage:
+            pv2_voltage, _ = get_sensor_state_safely(
+                self._hass, self._pv2_voltage, "PV2 Voltage"
+            )
+
+        pv2_current = None
+        if self._pv2_current:
+            pv2_current, _ = get_sensor_state_safely(
+                self._hass, self._pv2_current, "PV2 Current"
+            )
+
+        if not self._pv2_power and pv2_current is not None and pv2_voltage:
+            pv2_power = pv2_voltage * pv2_current
+
         # Get consumption (optional)
         consumption = 0.0
         if self._consumption:
@@ -206,9 +272,46 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         return {
             "pv_power": pv_power,
             "pv_voltage": pv_voltage,
+            "pv_current": pv_current,
+            "pv2_power": pv2_power,
+            "pv2_voltage": pv2_voltage,
+            "pv2_current": pv2_current,
             "consumption": consumption,
             "battery_power": battery_power,
         }
+
+
+    def _get_entry_data(self) -> Dict[str, Any]:
+        """Return per-entry runtime storage for shared sensor calculations."""
+        return self._hass.data.setdefault(DOMAIN, {}).setdefault(self._entry_id, {})
+
+
+    def _get_entry_sensor_cache(self) -> Dict[str, Any]:
+        """Return the shared sensor cache for this config entry."""
+        return self._get_entry_data().setdefault("sensor_calc_cache", {})
+
+
+    def _invalidate_entry_sensor_cache(self) -> None:
+        """Invalidate cached shared sensor calculations for this entry."""
+        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
+        if entry_data is None:
+            return
+        entry_data.pop("sensor_calc_cache", None)
+
+
+    def _get_shared_calculation_snapshot(self) -> Dict[str, Any]:
+        """Get or build the shared calculation snapshot for this entry."""
+        cache = self._get_entry_sensor_cache()
+        snapshot = cache.get("shared_snapshot")
+        if snapshot is None:
+            snapshot = {
+                "sensor_values": self._get_sensor_values(),
+                "panel_params": self._get_panel_parameters(),
+                "mppt_config": self._get_mppt_config(),
+                "temp_compensation": self._get_temperature_compensation(),
+            }
+            cache["shared_snapshot"] = snapshot
+        return snapshot
 
 
     def _get_panel_parameters(self) -> Dict[str, Any]:
@@ -225,6 +328,175 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             "panel_count": panel_count,
             "panel_configuration": self._panel_configuration,
         }
+
+
+    def _is_mppt2_enabled(self) -> bool:
+        """Return whether the config includes a second MPPT input."""
+        if CONF_MPPT2_ENABLED in self._config:
+            return bool(self._config.get(CONF_MPPT2_ENABLED))
+
+        return bool(
+            self._pv2_power
+            or self._pv2_voltage
+            or self._pv2_current
+        )
+
+
+    def _config_or_fallback(self, key: str, fallback: Any) -> Any:
+        """Return a config value, treating empty optional fields as missing."""
+        value = self._config.get(key)
+        return fallback if value in (None, "") else value
+
+
+    def _get_mppt_panel_configs(self, panel_params: Dict[str, Any]) -> list[Dict[str, Any]]:
+        """Build panel parameter configs for all active MPPT inputs."""
+        panel_configs = [
+            {
+                "id": "mppt1",
+                "name": "MPPT 1",
+                **panel_params,
+            }
+        ]
+
+        if self._is_mppt2_enabled():
+            vmp, imp, voc, isc, panel_count = get_panel_parameters_with_fallbacks(
+                self._config_or_fallback(CONF_PANEL2_VMP, panel_params[CONF_PANEL_VMP]),
+                self._config_or_fallback(CONF_PANEL2_IMP, panel_params[CONF_PANEL_IMP]),
+                self._config_or_fallback(CONF_PANEL2_VOC, panel_params[CONF_PANEL_VOC]),
+                self._config_or_fallback(CONF_PANEL2_ISC, panel_params[CONF_PANEL_ISC]),
+                self._config_or_fallback(CONF_PANEL2_COUNT, panel_params[CONF_PANEL_COUNT]),
+            )
+            panel_configs.append(
+                {
+                    "id": "mppt2",
+                    "name": "MPPT 2",
+                    CONF_PANEL_VMP: vmp,
+                    CONF_PANEL_IMP: imp,
+                    CONF_PANEL_VOC: voc,
+                    CONF_PANEL_ISC: isc,
+                    CONF_PANEL_COUNT: panel_count,
+                    CONF_PANEL_CONFIGURATION: self._config_or_fallback(
+                        CONF_PANEL2_CONFIGURATION,
+                        panel_params[CONF_PANEL_CONFIGURATION],
+                    ),
+                }
+            )
+
+        return panel_configs
+
+
+    def _get_mppt_inputs(
+        self,
+        sensor_values: Dict[str, Any],
+        panel_params: Dict[str, Any],
+    ) -> list[Dict[str, Any]]:
+        """Build current operating data for all active MPPT inputs."""
+        panel_configs = self._get_mppt_panel_configs(panel_params)
+        mppt_inputs = [
+            {
+                **panel_configs[0],
+                "pv_power": sensor_values.get(CONF_PV_POWER, 0.0),
+                "pv_voltage": sensor_values.get(CONF_PV_VOLTAGE, 0.0),
+                "pv_current": sensor_values.get(CONF_PV_CURRENT),
+            }
+        ]
+
+        if len(panel_configs) > 1:
+            mppt_inputs.append(
+                {
+                    **panel_configs[1],
+                    "pv_power": sensor_values.get(CONF_PV2_POWER, 0.0),
+                    "pv_voltage": sensor_values.get(CONF_PV2_VOLTAGE, 0.0),
+                    "pv_current": sensor_values.get(CONF_PV2_CURRENT),
+                }
+            )
+
+        return mppt_inputs
+
+
+    def _calculate_mppt_summary(
+        self,
+        sensor_values: Dict[str, Any],
+        panel_params: Dict[str, Any],
+        mppt_config: Dict[str, float],
+        temp_compensation: Optional[Dict[str, float]],
+    ) -> Dict[str, Any]:
+        """Calculate aggregate current power data for all MPPT inputs."""
+        return calculate_multi_mppt_power(
+            self._get_mppt_inputs(sensor_values, panel_params),
+            curve_factor_k=mppt_config[CONF_CURVE_FACTOR_K],
+            efficiency_correction_factor=mppt_config[CONF_EFFICIENCY_CORRECTION_FACTOR],
+            min_inverter_voltage=mppt_config[CONF_MIN_INVERTER_VOLTAGE],
+            temperature_compensation=temp_compensation,
+            consumption=sensor_values.get(CONF_CONSUMPTION),
+            battery_power=sensor_values.get(CONF_BATTERY_POWER),
+        )
+
+
+    def _get_shared_mppt_summary(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        """Get or build the shared MPPT summary for this entry snapshot."""
+        mppt_summary = snapshot.get("mppt_summary")
+        if mppt_summary is None:
+            mppt_summary = self._calculate_mppt_summary(
+                sensor_values=snapshot["sensor_values"],
+                panel_params=snapshot["panel_params"],
+                mppt_config=snapshot["mppt_config"],
+                temp_compensation=snapshot["temp_compensation"],
+            )
+            snapshot["mppt_summary"] = mppt_summary
+        return mppt_summary
+
+
+    def _get_theoretical_panel_summary(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        """Get or build the temperature-adjusted theoretical panel summary."""
+        panel_summary = snapshot.get("theoretical_panel_summary")
+        if panel_summary is not None:
+            return panel_summary
+
+        panel_params = snapshot["panel_params"]
+        temp_compensation = snapshot["temp_compensation"]
+        mppt_inputs = []
+        pmax = 0.0
+
+        for panel_config in self._get_mppt_panel_configs(panel_params):
+            vmp = panel_config[CONF_PANEL_VMP]
+            imp = panel_config[CONF_PANEL_IMP]
+
+            if temp_compensation:
+                temp_diff = temp_compensation["temp_diff"]
+                voc_coef = temp_compensation["voc_coef"]
+                pmax_coef = temp_compensation["pmax_coef"]
+
+                vmp = vmp * (1 + voc_coef * temp_diff)
+                imp = imp * (1 + (pmax_coef - voc_coef) * temp_diff)
+
+            input_pmax = calculate_pmax(
+                vmp=vmp,
+                imp=imp,
+                panel_count=panel_config[CONF_PANEL_COUNT],
+                panel_configuration=panel_config[CONF_PANEL_CONFIGURATION],
+            )
+            pmax += input_pmax
+            mppt_inputs.append(
+                {
+                    "id": panel_config["id"],
+                    "name": panel_config["name"],
+                    "vmp": round(vmp, 3),
+                    "imp": round(imp, 3),
+                    "voc": panel_config[CONF_PANEL_VOC],
+                    "isc": panel_config[CONF_PANEL_ISC],
+                    "panel_count": panel_config[CONF_PANEL_COUNT],
+                    "panel_configuration": panel_config[CONF_PANEL_CONFIGURATION],
+                    "pmax": round(input_pmax, 1),
+                }
+            )
+
+        panel_summary = {
+            "pmax": round(pmax, 1),
+            "mppt_inputs": mppt_inputs,
+        }
+        snapshot["theoretical_panel_summary"] = panel_summary
+        return panel_summary
 
 
     def _get_mppt_config(self) -> Dict[str, float]:
@@ -275,24 +547,14 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
     def native_value(self) -> StateType:
         """Return the state of the sensor."""
         try:
-            # Get current sensor values
-            sensor_values = self._get_sensor_values()
-
-            # Get panel parameters
-            panel_params = self._get_panel_parameters()
-
-            # Get MPPT configuration
-            mppt_config = self._get_mppt_config()
-
-            # Get temperature compensation
-            temp_compensation = self._get_temperature_compensation()
+            snapshot = self._get_shared_calculation_snapshot()
 
             # Calculate sensor-specific value
             value = self._calculate_value(
-                sensor_values=sensor_values,
-                panel_params=panel_params,
-                mppt_config=mppt_config,
-                temp_compensation=temp_compensation,
+                sensor_values=snapshot["sensor_values"],
+                panel_params=snapshot["panel_params"],
+                mppt_config=snapshot["mppt_config"],
+                temp_compensation=snapshot["temp_compensation"],
             )
 
             # Update state and attributes

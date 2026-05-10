@@ -38,7 +38,7 @@ automation:
 
 ### Enable Load Based on Current Max Power
 
-Create an automation that activates when there's significant untapped power potential:
+Create an automation that activates when there's significant solar headroom available:
 
 ```yaml
 automation:
@@ -170,7 +170,7 @@ cards:
     title: SunAllocator Status
     entities:
       - entity: sensor.sun_allocator_excess_power
-        name: Untapped Potential (W)
+        name: Available Excess (W)
       - entity: sensor.sun_allocator_current_max_power
         name: Current Max Power (W)
       - entity: sensor.sun_allocator_usage_percent
@@ -201,7 +201,7 @@ cards:
         name: Power
   
   - type: gauge
-    name: Untapped Potential
+    name: Available Excess
     entity: sensor.sun_allocator_excess_power
     min: 0
     max: 500

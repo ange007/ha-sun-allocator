@@ -1,5 +1,6 @@
 """Tests for the per-device auto-control switch entity."""
 
+from datetime import datetime
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
@@ -9,6 +10,10 @@ from custom_components.sun_allocator.const import (
     CONF_DEVICES,
     CONF_DEVICE_ID,
     CONF_AUTO_CONTROL_ENABLED,
+    CONF_DEVICE_ENTITY,
+    CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
+    CONF_POWER_ALLOCATION,
+    CONF_POWER_DISTRIBUTION,
 )
 from custom_components.sun_allocator.switch import async_setup_entry
 from custom_components.sun_allocator.switch.auto_control_switch import (
@@ -77,12 +82,17 @@ async def test_turn_off_persists_to_config_without_reload():
     hass = _make_hass()
     devices = [{CONF_DEVICE_ID: "dev1", CONF_AUTO_CONTROL_ENABLED: True}]
     hass.data[DOMAIN]["entry_x"] = {"manual_overrides": {}}
-    hass.config_entries.async_get_entry.return_value = MagicMock(data={CONF_DEVICES: devices})
+    config_entry = MagicMock(entry_id="entry_x", data={CONF_DEVICES: devices})
+    hass.config_entries.async_get_entry.return_value = config_entry
 
     sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
     sw.async_write_ha_state = MagicMock()
 
-    await sw.async_turn_off()
+    with patch(
+        "custom_components.sun_allocator.setup_auto_control",
+        new_callable=AsyncMock,
+    ):
+        await sw.async_turn_off()
 
     assert sw.is_on is False
     # _skip_reload guards against the listener triggering a full reload mid-toggle.
@@ -98,12 +108,17 @@ async def test_turn_on_clears_pending_manual_override():
     devices = [{CONF_DEVICE_ID: "dev1", CONF_AUTO_CONTROL_ENABLED: False}]
     entry_data = {"manual_overrides": {"dev1": {"since": 1, "state": False}}}
     hass.data[DOMAIN]["entry_x"] = entry_data
-    hass.config_entries.async_get_entry.return_value = MagicMock(data={CONF_DEVICES: devices})
+    config_entry = MagicMock(entry_id="entry_x", data={CONF_DEVICES: devices})
+    hass.config_entries.async_get_entry.return_value = config_entry
 
     sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
     sw.async_write_ha_state = MagicMock()
 
-    await sw.async_turn_on()
+    with patch(
+        "custom_components.sun_allocator.setup_auto_control",
+        new_callable=AsyncMock,
+    ):
+        await sw.async_turn_on()
 
     assert sw.is_on is True
     assert "dev1" not in entry_data["manual_overrides"]
@@ -141,3 +156,97 @@ async def test_sync_state_does_not_persist_to_config():
 
     assert sw.is_on is False
     hass.config_entries.async_update_entry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_toggle_updates_config_and_refreshes_listeners():
+    """Switch toggles should persist to config and refresh auto-control listeners."""
+    hass = _make_hass()
+    devices = [{CONF_DEVICE_ID: "dev1", CONF_AUTO_CONTROL_ENABLED: True}]
+    config_entry = MagicMock()
+    config_entry.data = {CONF_DEVICES: devices}
+    hass.data[DOMAIN]["entry_x"] = {"manual_overrides": {}}
+    hass.config_entries.async_get_entry.return_value = config_entry
+
+    sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
+    sw.async_write_ha_state = MagicMock()
+
+    with patch(
+        "custom_components.sun_allocator.setup_auto_control",
+        new_callable=AsyncMock,
+    ) as mock_setup_auto_control:
+        await sw.async_turn_off()
+
+        off_data = hass.config_entries.async_update_entry.call_args.kwargs["data"]
+        assert off_data[CONF_DEVICES][0][CONF_AUTO_CONTROL_ENABLED] is False
+        mock_setup_auto_control.assert_awaited_once_with(hass, config_entry)
+
+        config_entry.data = off_data
+        hass.config_entries.async_update_entry.reset_mock()
+        mock_setup_auto_control.reset_mock()
+
+        await sw.async_turn_on()
+
+        on_data = hass.config_entries.async_update_entry.call_args.kwargs["data"]
+        assert on_data[CONF_DEVICES][0][CONF_AUTO_CONTROL_ENABLED] is True
+        mock_setup_auto_control.assert_awaited_once_with(hass, config_entry)
+
+
+@pytest.mark.asyncio
+async def test_turn_off_can_turn_device_off_immediately():
+    """Devices can opt into an immediate off command when auto-control is disabled."""
+    hass = _make_hass()
+    devices = [
+        {
+            CONF_DEVICE_ID: "dev1",
+            CONF_DEVICE_ENTITY: "switch.dev1",
+            CONF_AUTO_CONTROL_ENABLED: True,
+            CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE: True,
+        }
+    ]
+    config_entry = MagicMock()
+    config_entry.data = {CONF_DEVICES: devices}
+    hass.config_entries.async_get_entry.return_value = config_entry
+    hass.data[DOMAIN]["entry_x"] = {
+        "device_on_state": {"dev1": True},
+        "device_on_time_state": {
+            "dev1": {
+                "last_on_time": datetime(2026, 1, 1, 12, 0, 0),
+                "startup_until": datetime(2026, 1, 1, 12, 5, 0),
+            }
+        },
+        "manual_overrides": {"dev1": {"since": 1, "state": True}},
+        CONF_POWER_ALLOCATION: {"dev1": 150.0},
+        CONF_POWER_DISTRIBUTION: {"allocation": {"dev1": 150.0}},
+    }
+
+    sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
+    sw.async_write_ha_state = MagicMock()
+
+    with (
+        patch(
+            "custom_components.sun_allocator.switch.auto_control_switch.async_turn_off_entity",
+            new_callable=AsyncMock,
+        ) as mock_turn_off_entity,
+        patch(
+            "custom_components.sun_allocator.setup_auto_control",
+            new_callable=AsyncMock,
+        ),
+    ):
+        await sw.async_turn_off()
+
+    entry_data = hass.data[DOMAIN]["entry_x"]
+    timing = entry_data["device_on_time_state"]["dev1"]
+
+    mock_turn_off_entity.assert_awaited_once_with(
+        hass,
+        "switch.dev1",
+        blocking=True,
+    )
+    assert entry_data["device_on_state"]["dev1"] is False
+    assert "dev1" not in entry_data.get("manual_overrides", {})
+    assert timing["last_off_time"] is not None
+    assert "last_on_time" not in timing
+    assert "startup_until" not in timing
+    assert entry_data[CONF_POWER_ALLOCATION]["dev1"] == 0.0
+    assert entry_data[CONF_POWER_DISTRIBUTION]["allocation"]["dev1"] == 0.0

@@ -32,6 +32,11 @@ from ..const import (
     DEVICE_TYPE_CUSTOM,
     CONF_DEVICE_MIN_EXPECTED_W,
     CONF_DEVICE_MAX_EXPECTED_W,
+    CONF_DEVICE_ACTUAL_POWER_SENSOR,
+    CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR,
+    CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
+    CONF_DEVICE_MIN_BATTERY_SOC,
+    CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
     CONF_DEVICE_DEBOUNCE_TIME,
     CONF_DEVICE_MIN_ON_TIME,
     CONF_DEVICE_SCHEDULE_MODE,
@@ -181,6 +186,28 @@ class DeviceConfigMixin:
             errors[CONF_DEVICE_MAX_EXPECTED_W] = "invalid_max_expected_w"
 
         if (
+            CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W in user_input
+            and user_input[CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W] is not None
+        ):
+            try:
+                threshold_w = float(user_input[CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W])
+                if not 0 <= threshold_w <= 1000:
+                    errors[CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W] = "invalid_actual_power_threshold_w"
+            except (ValueError, TypeError):
+                errors[CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W] = "invalid_actual_power_threshold_w"
+
+        if (
+            CONF_DEVICE_MIN_BATTERY_SOC in user_input
+            and user_input[CONF_DEVICE_MIN_BATTERY_SOC] not in (None, "")
+        ):
+            try:
+                min_battery_soc = float(user_input[CONF_DEVICE_MIN_BATTERY_SOC])
+                if not 0 <= min_battery_soc <= 100:
+                    errors[CONF_DEVICE_MIN_BATTERY_SOC] = "invalid_min_battery_soc"
+            except (ValueError, TypeError):
+                errors[CONF_DEVICE_MIN_BATTERY_SOC] = "invalid_min_battery_soc"
+
+        if (
             CONF_DEVICE_DEBOUNCE_TIME in user_input
             and user_input[CONF_DEVICE_DEBOUNCE_TIME] is not None
         ):
@@ -222,6 +249,47 @@ class DeviceConfigMixin:
                     break
 
         return errors
+
+
+    def _process_basic_settings_input(self, user_input: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize optional basic settings fields before persisting."""
+        if (
+            CONF_DEVICE_ACTUAL_POWER_SENSOR in user_input
+            and (
+                not user_input[CONF_DEVICE_ACTUAL_POWER_SENSOR]
+                or user_input[CONF_DEVICE_ACTUAL_POWER_SENSOR] == NONE_OPTION
+                or user_input[CONF_DEVICE_ACTUAL_POWER_SENSOR] == ""
+            )
+        ):
+            user_input[CONF_DEVICE_ACTUAL_POWER_SENSOR] = None
+
+        if (
+            CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR in user_input
+            and (
+                not user_input[CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR]
+                or user_input[CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR] == NONE_OPTION
+                or user_input[CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR] == ""
+            )
+        ):
+            user_input[CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR] = None
+
+        if (
+            CONF_DEVICE_MIN_BATTERY_SOC in user_input
+            and user_input[CONF_DEVICE_MIN_BATTERY_SOC] in (None, "")
+        ):
+            user_input[CONF_DEVICE_MIN_BATTERY_SOC] = None
+
+        if user_input.get(CONF_DEVICE_MIN_BATTERY_SOC) is not None:
+            user_input[CONF_DEVICE_MIN_BATTERY_SOC] = float(
+                user_input[CONF_DEVICE_MIN_BATTERY_SOC]
+            )
+
+        if CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE in user_input:
+            user_input[CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE] = bool(
+                user_input[CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE]
+            )
+
+        return user_input
 
 
     def _validate_schedule_config(self, user_input: Dict[str, Any]) -> Dict[str, str]:
@@ -432,6 +500,7 @@ class DeviceConfigMixin:
             errors = self._validate_basic_settings(user_input)
 
             if not errors:
+                user_input = self._process_basic_settings_input(user_input)
                 self._device_config.update(user_input)
 
                 # Sync the auto-control switch entity to the new config value.

@@ -4,6 +4,7 @@ import pytest
 
 from custom_components.sun_allocator.core.solar_optimizer import (
     calculate_current_max_power,
+    calculate_multi_mppt_power,
     calculate_pmax,
 )
 from custom_components.sun_allocator.sensor.utils import calculate_excess_power_mppt
@@ -73,7 +74,7 @@ async def test_panel_configuration_calculations(
                 "battery_power": 500,
                 "configured_reserve": 0,
             },
-            1000,
+            1100,
         ),
         (
             "Scenario 2: Battery charging exceeds reserve",
@@ -84,7 +85,7 @@ async def test_panel_configuration_calculations(
                 "battery_power": 700,
                 "configured_reserve": 500,
             },
-            1200,
+            1100,
         ),
         (
             "Scenario 3a: Battery charging equals reserve",
@@ -95,7 +96,7 @@ async def test_panel_configuration_calculations(
                 "battery_power": 500,
                 "configured_reserve": 500,
             },
-            1000,
+            1100,
         ),
         (
             "Scenario 3b: Battery is full (not charging)",
@@ -106,7 +107,7 @@ async def test_panel_configuration_calculations(
                 "battery_power": 0,
                 "configured_reserve": 500,
             },
-            1000,
+            1600,
         ),
         (
             "No Consumption Sensor: Excess is just untapped power",
@@ -131,7 +132,7 @@ async def test_panel_configuration_calculations(
             0,
         ),
         (
-            "High PV, Low Consumption: Untapped is the limit",
+            "High PV, Low Consumption: Existing generation above loads counts as excess",
             {
                 "current_max_power": 2500,
                 "pv_power": 2400,  # Near max
@@ -139,10 +140,10 @@ async def test_panel_configuration_calculations(
                 "battery_power": 100,
                 "configured_reserve": 0,
             },
-            100,  # min(untapped=100, real_excess=2300)
+            2300,
         ),
         (
-            "Budget Mode with Voltage Below MPP: Should have excess from battery only",
+            "Budget Mode with Voltage Below MPP: Current headroom is still available",
             {
                 "current_max_power": 500,
                 "pv_power": 450,
@@ -153,7 +154,7 @@ async def test_panel_configuration_calculations(
                 "energy_harvesting_possible": True,
                 "battery_power_reversed": True,
             },
-            100,  # untapped (0) + battery_excess (100)
+            350,
         ),
     ],
 )
@@ -198,3 +199,91 @@ async def test_temperature_compensation(
     expected_power = base_power * expected_factor
     # Increase tolerance to account for the MPPT algorithm complexity
     assert abs(current_max_power - expected_power) < 100  # 100W tolerance
+
+
+def test_multi_mppt_power_sums_independent_inputs():
+    """Test aggregate MPPT calculation keeps each MPPT input independent."""
+    mppt1_current_max, _ = calculate_current_max_power(
+        pv_voltage=35.0,
+        pv_power=200.0,
+        vmp=30.0,
+        imp=8.0,
+        voc=36.0,
+        isc=8.5,
+        panel_count=1,
+        panel_configuration=PANEL_CONFIG_SERIES,
+    )
+    mppt2_current_max, _ = calculate_current_max_power(
+        pv_voltage=30.0,
+        pv_power=240.0,
+        vmp=30.0,
+        imp=8.0,
+        voc=36.0,
+        isc=8.5,
+        panel_count=1,
+        panel_configuration=PANEL_CONFIG_SERIES,
+    )
+
+    summary = calculate_multi_mppt_power(
+        [
+            {
+                "id": "mppt1",
+                "pv_voltage": 35.0,
+                "pv_power": 200.0,
+                "vmp": 30.0,
+                "imp": 8.0,
+                "voc": 36.0,
+                "isc": 8.5,
+                "panel_count": 1,
+                "panel_configuration": PANEL_CONFIG_SERIES,
+            },
+            {
+                "id": "mppt2",
+                "pv_voltage": 30.0,
+                "pv_power": 240.0,
+                "vmp": 30.0,
+                "imp": 8.0,
+                "voc": 36.0,
+                "isc": 8.5,
+                "panel_count": 1,
+                "panel_configuration": PANEL_CONFIG_SERIES,
+            },
+        ]
+    )
+
+    assert summary["mppt_count"] == 2
+    assert summary["pv_power"] == pytest.approx(440.0)
+    assert summary["current_max_power"] == pytest.approx(
+        mppt1_current_max + mppt2_current_max
+    )
+    assert summary["untapped_power"] == pytest.approx(
+        max(0.0, mppt1_current_max - 200.0)
+    )
+
+
+def test_single_mppt_uses_curtailment_floor_when_load_limited_above_vmp():
+    summary = calculate_multi_mppt_power(
+        [
+            {
+                "id": "mppt1",
+                "pv_voltage": 181.1,
+                "pv_power": 514.0,
+                "pv_current": 2.8,
+                "vmp": 42.42,
+                "imp": 13.3,
+                "voc": 50.28,
+                "isc": 14.21,
+                "panel_count": 4,
+                "panel_configuration": PANEL_CONFIG_SERIES,
+            }
+        ],
+        consumption=438.0,
+        battery_power=0.0,
+    )
+
+    assert summary["current_max_power"] == pytest.approx(1369.6, abs=0.2)
+    assert summary["untapped_power"] == pytest.approx(
+        summary["current_max_power"] - 514.0,
+        abs=0.1,
+    )
+    assert summary["debug_info"]["calculation_reason"] == "Between Vmp and Voc (curtailment-aware floor)"

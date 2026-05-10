@@ -8,7 +8,6 @@ import homeassistant.util.dt as dt_util
 
 from .base import BaseSunAllocatorSensor
 from ...core.logger import journal_event, log_error, log_info
-from ...core.solar_optimizer import calculate_current_max_power
 from ..utils import (
     calculate_excess_power_mppt,
     calculate_usage_percentage,
@@ -22,6 +21,7 @@ from ...const import (
     CONF_INVERTER_SELF_CONSUMPTION,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
+    CONF_PV_CURRENT,
     CONF_BATTERY_POWER,
     CONF_PANEL_VMP,
     CONF_PANEL_IMP,
@@ -31,6 +31,29 @@ from ...const import (
 
 class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
     """Sensor for excess power (untapped potential)."""
+
+    def _journal_excess_if_changed(self, mode, excess, debug_info):
+        """Emit excess journal only when the effective payload changes."""
+        entry_data = self._hass.data.setdefault(DOMAIN, {}).setdefault(self._entry_id, {})
+        journal_state = {
+            "mode": mode,
+            "excess": round(float(excess), 1),
+            "calculation_reason": debug_info.get("calculation_reason"),
+            "energy_harvesting_possible": debug_info.get("energy_harvesting_possible"),
+            "relative_voltage": round(float(debug_info.get("relative_voltage", 0.0)), 4),
+        }
+        if entry_data.get("last_excess_journal") == journal_state:
+            return
+
+        entry_data["last_excess_journal"] = journal_state
+        journal_event(
+            "excess_power_calc",
+            {
+                "mode": mode,
+                "excess": excess,
+                **debug_info,
+            },
+        )
 
     def __init__(
         self,
@@ -63,6 +86,7 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         # Get common sensor values
         pv_power = sensor_values.get(CONF_PV_POWER, 0)
         pv_voltage = sensor_values.get(CONF_PV_VOLTAGE, 0)
+        pv_current = sensor_values.get(CONF_PV_CURRENT)
         consumption = sensor_values.get(CONF_CONSUMPTION, 0)
         battery_power = sensor_values.get(CONF_BATTERY_POWER, 0)
         battery_power_reversed = self._config.get(CONF_BATTERY_POWER_REVERSED, False)
@@ -91,14 +115,11 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             )
             return 0.0
 
-        # Always calculate current_max_power
-        current_max_power, debug_info = calculate_current_max_power(
-            pv_voltage=pv_voltage,
-            pv_power=pv_power,
-            **panel_params,
-            **mppt_config,
-            temperature_compensation=temp_compensation,
-        )
+        snapshot = self._get_shared_calculation_snapshot()
+        mppt_summary = self._get_shared_mppt_summary(snapshot)
+        pv_power = mppt_summary["pv_power"]
+        current_max_power = mppt_summary["current_max_power"]
+        debug_info = mppt_summary["debug_info"]
 
         # Determine if consumption sensor is used for the calculation
         has_consumption_sensor = self._config.get(CONF_CONSUMPTION) is not None
@@ -112,6 +133,7 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             battery_power_reversed=battery_power_reversed,
             configured_reserve=configured_reserve,
             inverter_self_consumption=inverter_self_consumption,
+            untapped_power=mppt_summary["untapped_power"],
             **debug_info,
         )
 
@@ -124,28 +146,29 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         self._update_attributes(
             pv_power=pv_power,
             pv_voltage=pv_voltage,
+            pv_current=pv_current,
             consumption=consumption if has_consumption_sensor else None,
             battery_power=battery_power,
             battery_discharging=battery_discharging,
             excess_possible=excess > 5.0,
             current_max_power=current_max_power,
+            untapped_power=mppt_summary["untapped_power"],
             usage_percent=usage,
+            mppt_count=mppt_summary["mppt_count"],
+            mppt_inputs=mppt_summary["mppt_inputs"],
             **debug_info,
         )
 
-        journal_event(
-            "excess_power_calc",
-            {
-                "mode": "mppt_with_consumption" if has_consumption_sensor else "mppt",
-                "excess": excess,
-                **debug_info,
-            },
+        self._journal_excess_if_changed(
+            "mppt_with_consumption" if has_consumption_sensor else "mppt",
+            excess,
+            debug_info,
         )
 
         # Update watchdog timestamp to indicate the sensor is alive
-        if self.hass and self._entry_id and DOMAIN in self.hass.data and self._entry_id in self.hass.data[DOMAIN]:
+        if self._hass and self._entry_id and DOMAIN in self._hass.data and self._entry_id in self._hass.data[DOMAIN]:
             try:
-                entry_data = self.hass.data[DOMAIN][self._entry_id]
+                entry_data = self._hass.data[DOMAIN][self._entry_id]
                 entry_data["watchdog_last_seen"] = dt_util.utcnow()
                 if entry_data.get("watchdog_alerted"):
                     entry_data["watchdog_alerted"] = False

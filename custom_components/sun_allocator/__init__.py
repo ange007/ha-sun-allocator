@@ -53,7 +53,11 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_DEVICE_PRIORITY,
     CONF_DEVICE_TYPE,
+    CONF_DEVICE_ACTUAL_POWER_SENSOR,
+    CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR,
+    CONF_BATTERY_SOC_SENSOR,
     CONF_POWER_ALLOCATION,
+    NONE_OPTION,
     STATE_ON,
     DOMAIN_LIGHT,
     DOMAIN_SWITCH,
@@ -95,6 +99,136 @@ SET_RELAY_POWER_SCHEMA = vol.Schema(
         vol.Required("power"): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
     }
 )
+
+
+def _mark_watchdog_fresh(entry_data):
+    """Refresh watchdog freshness from a confirmed excess-sensor update."""
+    entry_data["watchdog_last_seen"] = dt_util.utcnow()
+    entry_data["watchdog_alerted"] = False
+
+
+def _choose_earliest_recompute_start(entry_data, first_device_id, second_device_id):
+    """Return the earliest device in priority order for partial recompute."""
+    if first_device_id is None or second_device_id is None:
+        return None
+
+    device_order = entry_data.get("auto_control_device_order", [])
+    try:
+        first_index = device_order.index(first_device_id)
+        second_index = device_order.index(second_device_id)
+    except ValueError:
+        return None
+
+    return first_device_id if first_index <= second_index else second_device_id
+
+
+def _merge_process_request(entry_data, queued_request, incoming_request):
+    """Merge overlapping allocator requests into the smallest safe rerun."""
+    if queued_request is None:
+        return incoming_request
+
+    if (
+        queued_request.get("start_from_device_id") is None
+        or incoming_request.get("start_from_device_id") is None
+    ):
+        start_from_device_id = None
+    else:
+        start_from_device_id = _choose_earliest_recompute_start(
+            entry_data,
+            queued_request.get("start_from_device_id"),
+            incoming_request.get("start_from_device_id"),
+        )
+
+    return {
+        "excess_power": incoming_request["excess_power"],
+        "start_from_device_id": start_from_device_id,
+    }
+
+
+async def _queue_process_excess_power(
+    hass,
+    config_entry,
+    entry_data,
+    excess_power,
+    *,
+    start_from_device_id=None,
+    processor=process_excess_power,
+):
+    """Serialize allocator runs and coalesce overlapping triggers."""
+    process_lock = entry_data.setdefault("process_excess_power_lock", asyncio.Lock())
+    request = {
+        "excess_power": excess_power,
+        "start_from_device_id": start_from_device_id,
+    }
+
+    if process_lock.locked():
+        entry_data["pending_process_request"] = _merge_process_request(
+            entry_data,
+            entry_data.get("pending_process_request"),
+            request,
+        )
+        return
+
+    next_request = request
+    while True:
+        async with process_lock:
+            await processor(
+                hass,
+                config_entry,
+                next_request["excess_power"],
+                start_from_device_id=next_request.get("start_from_device_id"),
+            )
+
+        queued_request = entry_data.pop("pending_process_request", None)
+        if queued_request is None:
+            return
+        next_request = queued_request
+
+
+async def _handle_auto_control_state_change(
+    hass,
+    config_entry,
+    entry_data,
+    excess_sensor_id,
+    changed_entity_id,
+    new_state,
+    *,
+    processor=process_excess_power,
+):
+    """Handle tracked auto-control updates with correct watchdog semantics."""
+    if changed_entity_id == excess_sensor_id:
+        excess_state = new_state
+    else:
+        excess_state = hass.states.get(excess_sensor_id)
+
+    if not excess_state or excess_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        return
+
+    if changed_entity_id == excess_sensor_id:
+        _mark_watchdog_fresh(entry_data)
+
+    start_from_device_id = None
+    if changed_entity_id != excess_sensor_id:
+        battery_soc_sensor = entry_data.get("tracked_battery_soc_sensor")
+        if changed_entity_id != battery_soc_sensor:
+            start_from_device_id = entry_data.get("tracked_device_sensor_map", {}).get(
+                changed_entity_id
+            )
+
+    try:
+        excess_power = float(excess_state.state)
+        await _queue_process_excess_power(
+            hass,
+            config_entry,
+            entry_data,
+            excess_power,
+            start_from_device_id=start_from_device_id,
+            processor=processor,
+        )
+    except (ValueError, TypeError) as exc:
+        log_error(f"Error processing excess power value: {exc}")
+    except Exception as exc:
+        log_error(f"Unexpected error in process_excess_power: {exc}")
 
 
 async def _setup_entity_state_listeners(hass, config_entry, entry_data):
@@ -229,9 +363,13 @@ async def _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor
         if initial_state and initial_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try:
                 excess_power = float(initial_state.state)
-                entry_data["watchdog_last_seen"] = dt_util.utcnow()
-                entry_data["watchdog_alerted"] = False
-                await process_excess_power(hass, config_entry, excess_power)
+                _mark_watchdog_fresh(entry_data)
+                await _queue_process_excess_power(
+                    hass,
+                    config_entry,
+                    entry_data,
+                    excess_power,
+                )
                 log_info(
                     "Initial pass successful for %s: %sW",
                     initial_state.entity_id,
@@ -348,6 +486,11 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         key=lambda dev: int(dev.get(CONF_DEVICE_PRIORITY, 50)), reverse=True
     )
     log_debug(f"Setting up auto-control for {len(auto_control_devices)} devices")
+    entry_data["auto_control_device_order"] = [
+        device.get(CONF_DEVICE_ID)
+        for device in auto_control_devices
+        if device.get(CONF_DEVICE_ID)
+    ]
 
     power_allocation = {}
     for device in auto_control_devices:
@@ -388,18 +531,17 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     entry_data["process_excess_power"] = process_excess_power
 
     async def handle_state_change(event):
-        new_state = event.data.get("new_state") if hasattr(event, "data") else None
-        if not new_state or new_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            return
-        entry_data["watchdog_last_seen"] = dt_util.utcnow()
-        entry_data["watchdog_alerted"] = False
-        try:
-            excess_power = float(new_state.state)
-            await process_excess_power(hass, config_entry, excess_power)
-        except (ValueError, TypeError) as exc:
-            log_error(f"Error processing excess power value: {exc}")
-        except Exception as exc:
-            log_error(f"Unexpected error in process_excess_power: {exc}")
+        event_data = event.data if hasattr(event, "data") else {}
+        changed_entity_id = event_data.get("entity_id")
+        new_state = event_data.get("new_state")
+        await _handle_auto_control_state_change(
+            hass,
+            config_entry,
+            entry_data,
+            excess_sensor_id,
+            changed_entity_id,
+            new_state,
+        )
 
     registry = er.async_get(hass)
     excess_sensor_id = registry.async_get_entity_id(
@@ -414,9 +556,68 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         )
         return
 
-    log_info("Tracking excess sensor: %s", excess_sensor_id)
+    actual_power_sensors = {
+        sensor_entity
+        for sensor_entity in (
+            dev.get(CONF_DEVICE_ACTUAL_POWER_SENSOR) for dev in auto_control_devices
+        )
+        if sensor_entity and sensor_entity != NONE_OPTION
+    }
+    relay_entities = set()
+    for device in auto_control_devices:
+        relay_entity = device.get(CONF_DEVICE_ENTITY)
+        if not relay_entity or relay_entity == NONE_OPTION:
+            continue
+        relay_entities.add(relay_entity.split("|")[0])
+
+    active_feedback_sensors = {
+        sensor_entity
+        for sensor_entity in (
+            dev.get(CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR) for dev in auto_control_devices
+        )
+        if sensor_entity and sensor_entity != NONE_OPTION
+    }
+    tracked_device_sensor_map = {}
+    for device in auto_control_devices:
+        device_id = device.get(CONF_DEVICE_ID)
+        if not device_id:
+            continue
+        relay_entity = device.get(CONF_DEVICE_ENTITY)
+        if relay_entity and relay_entity != NONE_OPTION:
+            tracked_device_sensor_map[relay_entity.split("|")[0]] = device_id
+        actual_power_sensor = device.get(CONF_DEVICE_ACTUAL_POWER_SENSOR)
+        if actual_power_sensor and actual_power_sensor != NONE_OPTION:
+            tracked_device_sensor_map[actual_power_sensor] = device_id
+        active_feedback_sensor = device.get(CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR)
+        if active_feedback_sensor and active_feedback_sensor != NONE_OPTION:
+            tracked_device_sensor_map[active_feedback_sensor] = device_id
+
+    battery_soc_sensor = config_entry.data.get(CONF_BATTERY_SOC_SENSOR)
+    tracked_entities = sorted(
+        {
+            excess_sensor_id,
+            *relay_entities,
+            *actual_power_sensors,
+            *active_feedback_sensors,
+            *([battery_soc_sensor] if battery_soc_sensor and battery_soc_sensor != NONE_OPTION else []),
+        }
+    )
+    entry_data["tracked_auto_control_entities"] = tracked_entities
+    entry_data["tracked_device_sensor_map"] = tracked_device_sensor_map
+    entry_data["tracked_battery_soc_sensor"] = (
+        battery_soc_sensor if battery_soc_sensor and battery_soc_sensor != NONE_OPTION else None
+    )
+
+    log_info(
+        "Tracking auto-control sensors: excess=%s, relay=%s, actual_power=%s, active_feedback=%s, battery_soc=%s",
+        excess_sensor_id,
+        sorted(relay_entities),
+        sorted(actual_power_sensors),
+        sorted(active_feedback_sensors),
+        battery_soc_sensor,
+    )
     entry_data["unsub_auto_control"] = async_track_state_change_event(
-        hass, [excess_sensor_id], handle_state_change
+        hass, tracked_entities, handle_state_change
     )
 
     entry_data["initial_pass_task"] = hass.async_create_task(

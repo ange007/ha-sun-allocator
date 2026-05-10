@@ -8,7 +8,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 import homeassistant.util.dt as dt_util
 
-from conftest import create_test_config_entry
+from conftest import (
+    async_setup_test_entry,
+    async_unload_test_entry,
+    create_test_config_entry,
+)
 
 from custom_components.sun_allocator.const import (
     DOMAIN,
@@ -29,7 +33,6 @@ from custom_components.sun_allocator.const import (
     CONF_HYSTERESIS_W,
     SENSOR_EXCESS_SUFFIX,
 )
-from custom_components.sun_allocator import async_setup_entry, async_unload_entry
 from custom_components.sun_allocator.core.watchdog import watchdog_check
 
 
@@ -75,14 +78,12 @@ async def setup_watchdog_test(hass: HomeAssistant):
     hass.states.async_set("sensor.test_pv_voltage", "35")
     hass.states.async_set("switch.test_switch", "on")  # Ensure it's on initially
 
-    await async_setup_entry(hass, config_entry)
-    await hass.async_block_till_done()
+    await async_setup_test_entry(hass, config_entry)
 
     yield config_entry
 
     # Cleanup
-    await async_unload_entry(hass, config_entry)
-    await hass.async_block_till_done()
+    await async_unload_test_entry(hass, config_entry)
 
 
 @pytest.mark.asyncio
@@ -187,4 +188,5 @@ async def test_watchdog_resets_on_sensor_update(
         await watchdog_check(hass, config_entry)
         await hass.async_block_till_done()
 
-        mock_async_call.assert_not_called()
+        for recorded_call in mock_async_call.call_args_list:
+            assert recorded_call.args[1] != "turn_off"

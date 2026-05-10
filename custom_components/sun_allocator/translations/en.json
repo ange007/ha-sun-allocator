@@ -11,31 +11,87 @@
           "temperature_compensation_enabled": "Enable Temperature Compensation",
           "pv_power": "PV Power Sensor",
           "pv_voltage": "PV Voltage Sensor",
+          "pv_current": "PV Current Sensor",
+          "mppt2_enabled": "Enable Second MPPT Input",
+          "pv2_power": "PV2 Power Sensor",
+          "pv2_voltage": "PV2 Voltage Sensor",
+          "pv2_current": "PV2 Current Sensor",
           "consumption": "Consumption Sensor",
           "battery_power": "Battery Power Sensor",
+          "battery_soc_sensor": "Battery SOC Sensor",
           "vmp": "Maximum Power Voltage (Vmp)",
           "imp": "Maximum Power Current (Imp)",
           "voc": "Open Circuit Voltage (Voc)",
           "isc": "Short Circuit Current (Isc)",
           "panel_count": "Panel Count",
-          "panel_configuration": "Panel Configuration"
+          "panel_configuration": "Panel Configuration",
+          "mppt2_vmp": "MPPT2 Panel Maximum Power Voltage (Vmp)",
+          "mppt2_imp": "MPPT2 Panel Maximum Power Current (Imp)",
+          "mppt2_voc": "MPPT2 Panel Open Circuit Voltage (Voc)",
+          "mppt2_isc": "MPPT2 Panel Short Circuit Current (Isc)",
+          "mppt2_panel_count": "MPPT2 Panel Count",
+          "mppt2_panel_configuration": "MPPT2 Panel Wiring"
         }
       },
       "main_menu": {
         "title": "SunAllocator Configuration",
         "description": "Configure solar panels and manage devices. Currently configured devices: {devices_count}",
         "data": {
+          "action": "Select action",
           "pv_power": "PV Power Sensor",
           "pv_voltage": "PV Voltage Sensor",
+          "pv_current": "PV Current Sensor",
+          "mppt2_enabled": "Enable Second MPPT Input",
+          "pv2_power": "PV2 Power Sensor",
+          "pv2_voltage": "PV2 Voltage Sensor",
+          "pv2_current": "PV2 Current Sensor",
           "consumption": "Consumption Sensor",
           "battery_power": "Battery Power Sensor",
+          "battery_soc_sensor": "Battery SOC Sensor",
           "battery_power_reversed": "Reverse Battery Power Values",
           "vmp": "Maximum Power Voltage (Vmp)",
           "imp": "Maximum Power Current (Imp)",
           "voc": "Open Circuit Voltage (Voc)",
           "isc": "Short Circuit Current (Isc)",
           "panel_count": "Panel Count",
-          "panel_configuration": "Panel Configuration"
+          "panel_configuration": "Panel Configuration",
+          "mppt2_vmp": "MPPT2 Panel Maximum Power Voltage (Vmp)",
+          "mppt2_imp": "MPPT2 Panel Maximum Power Current (Imp)",
+          "mppt2_voc": "MPPT2 Panel Open Circuit Voltage (Voc)",
+          "mppt2_isc": "MPPT2 Panel Short Circuit Current (Isc)",
+          "mppt2_panel_count": "MPPT2 Panel Count",
+          "mppt2_panel_configuration": "MPPT2 Panel Wiring"
+        }
+      },
+      "settings": {
+        "title": "Solar Panel Settings",
+        "description": "Configure solar panel parameters and advanced settings",
+        "data": {
+          "advanced_settings_enabled": "Enable Advanced Settings",
+          "battery_power_reversed": "Reverse Battery Power Values",
+          "temperature_compensation_enabled": "Enable Temperature Compensation",
+          "pv_power": "PV Power Sensor",
+          "pv_voltage": "PV Voltage Sensor",
+          "pv_current": "PV Current Sensor",
+          "mppt2_enabled": "Enable Second MPPT Input",
+          "pv2_power": "PV2 Power Sensor",
+          "pv2_voltage": "PV2 Voltage Sensor",
+          "pv2_current": "PV2 Current Sensor",
+          "consumption": "Consumption Sensor",
+          "battery_power": "Battery Power Sensor",
+          "battery_soc_sensor": "Battery SOC Sensor",
+          "vmp": "Maximum Power Voltage (Vmp)",
+          "imp": "Maximum Power Current (Imp)",
+          "voc": "Open Circuit Voltage (Voc)",
+          "isc": "Short Circuit Current (Isc)",
+          "panel_count": "Panel Count",
+          "panel_configuration": "Panel Configuration",
+          "mppt2_vmp": "MPPT2 Panel Maximum Power Voltage (Vmp)",
+          "mppt2_imp": "MPPT2 Panel Maximum Power Current (Imp)",
+          "mppt2_voc": "MPPT2 Panel Open Circuit Voltage (Voc)",
+          "mppt2_isc": "MPPT2 Panel Short Circuit Current (Isc)",
+          "mppt2_panel_count": "MPPT2 Panel Count",
+          "mppt2_panel_configuration": "MPPT2 Panel Wiring"
         }
       },
       "manage_devices": {
@@ -78,8 +134,13 @@
           "min_excess_power": "Minimum Excess Power",
           "min_expected_w": "Minimum Expected Load (W)",
           "max_expected_w": "Maximum Expected Load (W)",
+          "actual_power_sensor": "Actual Power Sensor",
+          "active_feedback_sensor": "Active Feedback Binary Sensor",
+          "actual_power_threshold_w": "Actual Power Threshold (W)",
+          "min_battery_soc": "Minimum Battery SOC (%)",
           "priority": "Device Priority",
           "debounce_time": "Debounce Time (s)",
+          "turn_off_on_auto_control_disable": "Turn Off Device When Auto Control Is Disabled",
           "schedule_mode": "Schedule Mode"
         }
       },
@@ -127,6 +188,13 @@
           "ramp_deadband": "Ramp Deadband (%)",
           "hysteresis_w": "Hysteresis (W)"
         }
+      },
+      "confirm_remove": {
+        "title": "Confirm Device Removal",
+        "description": "Are you sure you want to remove {device_name}?",
+        "data": {
+          "confirm": "Yes, remove device"
+        }
       }
     },
     "error": {
@@ -138,6 +206,8 @@
       "invalid_priority": "Priority must be a number between 1 and 100",
       "invalid_min_expected_w": "Minimum expected load must be a non-negative number",
       "invalid_max_expected_w": "Maximum expected load must be a non-negative number",
+      "invalid_actual_power_threshold_w": "Actual power threshold must be between 0 and 1000 W",
+      "invalid_min_battery_soc": "Minimum battery SOC must be between 0 and 100%",
       "duplicate_entity_id": "This entity is already used by another device",
       "invalid_time_format": "Invalid time format. Please use HH:MM",
       "voc_equal_to_vmp": "Voc cannot be equal to Vmp",
@@ -153,7 +223,9 @@
       "invalid_ramp_deadband": "Ramp deadband must be between 0 and 10",
       "invalid_default_min_start_w": "Default min start must be between 0 and 5000",
       "invalid_hysteresis_w": "Hysteresis must be between 0 and 5000",
-      "temperature_sensor_required": "Temperature sensor is required when compensation is enabled"
+      "temperature_sensor_required": "Temperature sensor is required when compensation is enabled",
+      "pv2_voltage_required": "PV2 voltage sensor is required when the second MPPT input is enabled",
+      "pv2_power_or_current_required": "Select either a PV2 power sensor or a PV2 current sensor when the second MPPT input is enabled"
     }
   },
   "options": {
@@ -174,14 +246,26 @@
           "temperature_compensation_enabled": "Enable Temperature Compensation",
           "pv_power": "PV Power Sensor",
           "pv_voltage": "PV Voltage Sensor",
+          "pv_current": "PV Current Sensor",
+          "mppt2_enabled": "Enable Second MPPT Input",
+          "pv2_power": "PV2 Power Sensor",
+          "pv2_voltage": "PV2 Voltage Sensor",
+          "pv2_current": "PV2 Current Sensor",
           "consumption": "Consumption Sensor",
           "battery_power": "Battery Power Sensor",
+          "battery_soc_sensor": "Battery SOC Sensor",
           "vmp": "Maximum Power Voltage (Vmp)",
           "imp": "Maximum Power Current (Imp)",
           "voc": "Open Circuit Voltage (Voc)",
           "isc": "Short Circuit Current (Isc)",
           "panel_count": "Panel Count",
-          "panel_configuration": "Panel Configuration"
+          "panel_configuration": "Panel Configuration",
+          "mppt2_vmp": "MPPT2 Panel Maximum Power Voltage (Vmp)",
+          "mppt2_imp": "MPPT2 Panel Maximum Power Current (Imp)",
+          "mppt2_voc": "MPPT2 Panel Open Circuit Voltage (Voc)",
+          "mppt2_isc": "MPPT2 Panel Short Circuit Current (Isc)",
+          "mppt2_panel_count": "MPPT2 Panel Count",
+          "mppt2_panel_configuration": "MPPT2 Panel Wiring"
         }
       },
       "manage_devices": {
@@ -224,9 +308,14 @@
           "min_excess_power": "Minimum Excess Power",
           "min_expected_w": "Minimum Expected Load (W)",
           "max_expected_w": "Maximum Expected Load (W)",
+          "actual_power_sensor": "Actual Power Sensor",
+          "active_feedback_sensor": "Active Feedback Binary Sensor",
+          "actual_power_threshold_w": "Actual Power Threshold (W)",
+          "min_battery_soc": "Minimum Battery SOC (%)",
           "priority": "Device Priority",
           "debounce_time": "Debounce Time (s)",
           "min_on_time": "Minimum on-time (s)",
+          "turn_off_on_auto_control_disable": "Turn Off Device When Auto Control Is Disabled",
           "schedule_mode": "Schedule Mode"
         }
       },
@@ -286,6 +375,8 @@
       "invalid_priority": "Priority must be a number between 1 and 100",
       "invalid_min_expected_w": "Minimum expected load must be a non-negative number",
       "invalid_max_expected_w": "Maximum expected load must be a non-negative number",
+      "invalid_actual_power_threshold_w": "Actual power threshold must be between 0 and 1000 W",
+      "invalid_min_battery_soc": "Minimum battery SOC must be between 0 and 100%",
       "duplicate_entity_id": "This entity is already used by another device",
       "invalid_time_format": "Invalid time format. Please use HH:MM",
       "voc_equal_to_vmp": "Voc cannot be equal to Vmp",
@@ -300,7 +391,9 @@
       "invalid_ramp_down_step": "Ramp down step must be between 0 and 100",
       "invalid_ramp_deadband": "Ramp deadband must be between 0 and 10",
       "invalid_hysteresis_w": "Hysteresis must be between 0 and 5000",
-      "temperature_sensor_required": "Temperature sensor is required when compensation is enabled"
+      "temperature_sensor_required": "Temperature sensor is required when compensation is enabled",
+      "pv2_voltage_required": "PV2 voltage sensor is required when the second MPPT input is enabled",
+      "pv2_power_or_current_required": "Select either a PV2 power sensor or a PV2 current sensor when the second MPPT input is enabled"
     }
   },
   "selector": {
@@ -324,6 +417,7 @@
     },
     "manage_devices_action": {
       "options": {
+        "add": "Add Device",
         "add_device": "Add Device",
         "edit": "Edit Device",
         "remove": "Remove Device",
@@ -434,6 +528,9 @@
           "pv_voltage": {
             "name": "PV Voltage"
           },
+          "pv_current": {
+            "name": "PV Current"
+          },
           "energy_harvesting_possible": {
             "name": "Energy Harvesting Possible"
           },
@@ -464,6 +561,9 @@
           "current_max_power": {
             "name": "Current Max Power"
           },
+          "untapped_power": {
+            "name": "Untapped Power"
+          },
           "light_factor": {
             "name": "Light Factor"
           },
@@ -475,6 +575,12 @@
           },
           "calculation_reason": {
             "name": "Calculation Reason"
+          },
+          "mppt_count": {
+            "name": "MPPT Input Count"
+          },
+          "mppt_inputs": {
+            "name": "MPPT Input Details"
           }
         }
       },
@@ -520,6 +626,12 @@
           "pmax": {
             "name": "Pmax"
           },
+          "mppt_count": {
+            "name": "MPPT Input Count"
+          },
+          "mppt_inputs": {
+            "name": "MPPT Input Details"
+          },
           "current_max_power": {
             "name": "Current Max Power"
           },
@@ -539,6 +651,9 @@
           },
           "pv_voltage": {
             "name": "PV Voltage"
+          },
+          "pv_current": {
+            "name": "PV Current"
           },
           "energy_harvesting_possible": {
             "name": "Energy Harvesting Possible"
@@ -569,6 +684,9 @@
           },
           "current_max_power": {
             "name": "Current Max Power"
+          },
+          "untapped_power": {
+            "name": "Untapped Power"
           },
           "light_factor": {
             "name": "Light Factor"
@@ -590,6 +708,12 @@
           },
           "usage_percent": {
             "name": "Usage Percent"
+          },
+          "mppt_count": {
+            "name": "MPPT Input Count"
+          },
+          "mppt_inputs": {
+            "name": "MPPT Input Details"
           }
         }
       },
@@ -601,6 +725,9 @@
           },
           "pv_voltage": {
             "name": "PV Voltage"
+          },
+          "pv_current": {
+            "name": "PV Current"
           },
           "consumption": {
             "name": "Consumption"
@@ -638,6 +765,15 @@
           "current_max_power": {
             "name": "Current Max Power"
           },
+          "mppt_count": {
+            "name": "MPPT Input Count"
+          },
+          "mppt_inputs": {
+            "name": "MPPT Input Details"
+          },
+          "theoretical_mppt_inputs": {
+            "name": "Theoretical MPPT Input Details"
+          },
           "usage_percent": {
             "name": "Usage Percent"
           },
@@ -657,6 +793,30 @@
           },
           "max_expected_w": {
             "name": "Max Expected (W)"
+          },
+          "actual_power_w": {
+            "name": "Actual Power (W)"
+          },
+          "actual_power_sensor": {
+            "name": "Actual Power Sensor"
+          },
+          "active_feedback_sensor": {
+            "name": "Active Feedback Binary Sensor"
+          },
+          "actual_power_valid": {
+            "name": "Actual Power Valid"
+          },
+          "actual_power_source": {
+            "name": "Power Accounting Source"
+          },
+          "actual_power_threshold_w": {
+            "name": "Actual Power Threshold (W)"
+          },
+          "reserved_w": {
+            "name": "Reserved Power (W)"
+          },
+          "is_consuming": {
+            "name": "Consuming Power"
           },
           "priority": {
             "name": "Priority"
@@ -682,6 +842,7 @@
         "name": "Status",
         "state": {
           "active": "Active",
+          "idle": "Enabled, no measured load",
           "insufficient_power": "Insufficient power",
           "debouncing_on": "Debouncing (turning on)",
           "debouncing_off": "Debouncing (turning off)",
@@ -705,8 +866,41 @@
           "is_active": {
             "name": "Active"
           },
+          "is_enabled": {
+            "name": "Enabled"
+          },
           "is_candidate": {
             "name": "Is Candidate"
+          },
+          "actual_power_w": {
+            "name": "Actual Power (W)"
+          },
+          "active_feedback_sensor": {
+            "name": "Active Feedback Binary Sensor"
+          },
+          "actual_power_valid": {
+            "name": "Actual Power Valid"
+          },
+          "actual_power_source": {
+            "name": "Power Accounting Source"
+          },
+          "is_consuming": {
+            "name": "Consuming Power"
+          },
+          "battery_soc": {
+            "name": "Battery SOC (%)"
+          },
+          "battery_soc_sensor": {
+            "name": "Battery SOC Sensor"
+          },
+          "battery_soc_valid": {
+            "name": "Battery SOC Valid"
+          },
+          "min_battery_soc": {
+            "name": "Minimum Battery SOC (%)"
+          },
+          "battery_soc_blocked": {
+            "name": "Blocked By Battery SOC"
           },
           "mode": {
             "name": "Mode"

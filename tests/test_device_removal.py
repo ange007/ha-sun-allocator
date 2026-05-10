@@ -4,7 +4,6 @@ from unittest.mock import patch
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from custom_components.sun_allocator import async_setup_entry, async_unload_entry
 from custom_components.sun_allocator.const import (
     DOMAIN,
     CONF_DEVICES,
@@ -14,7 +13,11 @@ from custom_components.sun_allocator.const import (
     CONF_CONFIRM,
 )
 
-from conftest import create_test_config_entry
+from conftest import (
+    async_setup_test_entry,
+    async_unload_test_entry,
+    create_test_config_entry,
+)
 from tests.const import MOCK_DEVICES
 
 
@@ -28,10 +31,7 @@ async def test_device_removal(hass: HomeAssistant):
         }
     )
 
-    hass.config_entries._entries[config_entry.entry_id] = config_entry
-
-    await async_setup_entry(hass, config_entry)
-    await hass.async_block_till_done()
+    await async_setup_test_entry(hass, config_entry)
 
     # Get the device registry
     device_registry = dr.async_get(hass)
@@ -74,5 +74,4 @@ async def test_device_removal(hass: HomeAssistant):
     assert device_entry is None
 
     # Unload the config entry
-    await async_unload_entry(hass, config_entry)
-    await hass.async_block_till_done()
+    await async_unload_test_entry(hass, config_entry)

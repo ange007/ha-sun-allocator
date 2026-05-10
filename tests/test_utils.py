@@ -9,8 +9,7 @@ def test_calculate_excess_power_mppt_with_consumption_unified():
 
     # --- Priority Mode (reserve = 0) ---
 
-    # Scenario 1: Untapped power is the limiting factor.
-    # Real excess is high, but we can only use the untapped potential.
+    # Scenario 1: With a consumption sensor, all modeled PV headroom is available.
     excess = calculate_excess_power_mppt(
         current_max_power=2000,
         pv_power=1800,          # -> untapped = 200
@@ -18,12 +17,10 @@ def test_calculate_excess_power_mppt_with_consumption_unified():
         battery_power=100,      # -> battery_load = 100
         configured_reserve=0,
     )
-    # real_excess = 2000 - 500 - 100 = 1400
-    # excess = min(untapped, real_excess) = min(200, 1400) = 200
-    assert excess == 200
+    assert excess == 1400
 
     # Scenario 2: Real excess is the limiting factor.
-    # High home consumption limits the available excess, even with high untapped potential.
+    # High home consumption limits the available excess.
     excess = calculate_excess_power_mppt(
         current_max_power=2000,
         pv_power=1000,          # -> untapped = 1000
@@ -31,13 +28,11 @@ def test_calculate_excess_power_mppt_with_consumption_unified():
         battery_power=100,      # -> battery_load = 100
         configured_reserve=0,
     )
-    # real_excess = 2000 - 1600 - 100 = 300
-    # excess = min(untapped, real_excess) = min(1000, 300) = 300
     assert excess == 300
 
     # --- Budget Mode (reserve > 0) ---
 
-    # Scenario 3: Budgeting adds power from the battery.
+    # Scenario 3: Budgeting preserves only the configured reserve for the battery.
     excess = calculate_excess_power_mppt(
         current_max_power=2000,
         pv_power=1800,          # -> untapped = 200
@@ -45,12 +40,23 @@ def test_calculate_excess_power_mppt_with_consumption_unified():
         battery_power=300,      # -> battery_charge_w = 300
         configured_reserve=100,
     )
-    # In budget mode, battery_load is 0 for real_excess calculation.
-    # real_excess = 2000 - 500 - 0 = 1500
-    # excess = min(untapped, real_excess) = min(200, 1500) = 200
-    # excess_from_battery = 300 - 100 = 200
-    # total_excess = 200 + 200 = 400
-    assert excess == 400
+    assert excess == 1400
+
+
+def test_calculate_excess_power_mppt_below_mpp_still_uses_available_headroom():
+    """At or below MPP, existing PV generation above base loads still counts as excess."""
+    excess = calculate_excess_power_mppt(
+        current_max_power=1620,
+        pv_power=1620,
+        battery_power=0,
+        consumption=169,
+        configured_reserve=0,
+        relative_voltage=0.98,
+        energy_harvesting_possible=True,
+        untapped_power=0,
+    )
+
+    assert excess == 1451
 
 
 def test_calculate_excess_power_mppt_without_consumption():
@@ -104,6 +110,22 @@ def test_calculate_excess_power_mppt_without_consumption():
         configured_reserve=100,
     )
     assert excess == 0
+
+
+def test_calculate_excess_power_mppt_uses_explicit_untapped_power():
+    """Multi-MPPT callers can pass pre-summed untapped power."""
+    excess = calculate_excess_power_mppt(
+        current_max_power=2000,
+        pv_power=1800,
+        battery_power=0,
+        consumption=None,
+        configured_reserve=0,
+        relative_voltage=0.8,
+        energy_harvesting_possible=True,
+        untapped_power=350,
+    )
+
+    assert excess == 350
 
 
 def test_calculate_excess_power_parallel():

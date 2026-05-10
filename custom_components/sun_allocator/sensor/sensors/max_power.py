@@ -6,14 +6,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfPower
 
 from .base import BaseSunAllocatorSensor
-from ...core.solar_optimizer import calculate_pmax
 from ...core.logger import log_debug
 
 from ...const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
-    CONF_PANEL_VMP,
-    CONF_PANEL_IMP,
     CONF_PANEL_VOC,
     CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
@@ -66,48 +63,28 @@ class SunAllocatorMaxPowerSensor(BaseSunAllocatorSensor):
         temp_compensation: Optional[Dict[str, float]],
     ) -> float:
         """Calculate maximum theoretical power."""
-        vmp = panel_params[CONF_PANEL_VMP]
-        imp = panel_params[CONF_PANEL_IMP]
-
-        # Apply temperature compensation if provided
-        if temp_compensation:
-            temp_diff = temp_compensation["temp_diff"]
-            voc_coef = temp_compensation["voc_coef"]
-            pmax_coef = temp_compensation["pmax_coef"]
-
-            # Adjust Vmp and Imp for temperature
-            # Pmax = Vmp * Imp, so Imp_coef = Pmax_coef - Vmp_coef
-            vmp = vmp * (1 + voc_coef * temp_diff)
-            imp = imp * (1 + (pmax_coef - voc_coef) * temp_diff)
-
-            log_debug(
-                f"Temperature compensation applied: temp_diff={temp_diff}°C, "
-                f"adjusted Vmp={vmp:.2f}V, adjusted Imp={imp:.2f}A"
-            )
-
-        # Calculate maximum power based on panel configuration
-        pmax = calculate_pmax(
-            vmp=vmp,
-            imp=imp,
-            panel_count=panel_params[CONF_PANEL_COUNT],
-            panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
-        )
+        snapshot = self._get_shared_calculation_snapshot()
+        panel_summary = self._get_theoretical_panel_summary(snapshot)
+        pmax = panel_summary["pmax"]
+        mppt_inputs = panel_summary["mppt_inputs"]
+        primary_input = mppt_inputs[0]
 
         # Update attributes with panel information
         self._update_attributes(
-            vmp=vmp,
-            imp=imp,
+            vmp=primary_input["vmp"],
+            imp=primary_input["imp"],
             voc=panel_params[CONF_PANEL_VOC],
             isc=panel_params[CONF_PANEL_ISC],
             panel_count=panel_params[CONF_PANEL_COUNT],
             panel_configuration=panel_params[CONF_PANEL_CONFIGURATION],
             pmax=pmax,
+            mppt_count=len(mppt_inputs),
+            mppt_inputs=mppt_inputs,
             temperature_compensated=temp_compensation is not None,
         )
 
         log_debug(
-            f"Max power calculation: Vmp={vmp:.2f}V, Imp={imp:.2f}A, "
-            f"Panel Count={panel_params[CONF_PANEL_COUNT]}, "
+            f"Max power calculation: MPPT inputs={len(mppt_inputs)}, "
             f"Configuration={panel_params[CONF_PANEL_CONFIGURATION]}, "
             f"Pmax={pmax:.1f}W"
         )

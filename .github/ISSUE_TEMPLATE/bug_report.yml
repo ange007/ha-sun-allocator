@@ -13,7 +13,7 @@ body:
     attributes:
       label: SunAllocator version
       description: Found in `manifest.json`, on the integration page in HA, or in HACS.
-      placeholder: "1.0.7"
+      placeholder: "1.1.0"
     validations:
       required: true
 

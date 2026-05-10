@@ -49,7 +49,7 @@ def parse_relay_entity(entity: str | None) -> tuple[str | None, str | None]:
 async def _async_call_service(
     hass: HomeAssistant, domain: str, service: str, service_data: dict, label: str
 ) -> None:
-    """Invoke a HA service non-blockingly and surface errors uniformly."""
+    """Invoke a HA service and surface errors uniformly."""
     try:
         await hass.services.async_call(domain, service, service_data, blocking=True)
         await hass.async_block_till_done()
@@ -117,6 +117,53 @@ def _resolve_hvac_mode(hass: HomeAssistant, entity_id: str, hvac_mode: str | Non
         )
         return non_off[0]
     return "heat"
+
+
+async def async_turn_off_entity(
+    hass: HomeAssistant, entity_id: str, *, blocking: bool = True
+) -> bool:
+    """Turn off a supported entity and return whether a command was sent."""
+    if "|" in entity_id:
+        entity_id = entity_id.split("|", 1)[0].strip()
+
+    state = hass.states.get(entity_id)
+    if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        log_debug(f"Entity {entity_id} not found or unavailable, skipping turn off")
+        return False
+
+    domain = entity_id.split(".")[0]
+    if domain == DOMAIN_CLIMATE:
+        if state.state == "off":
+            return False
+        await hass.services.async_call(
+            DOMAIN_CLIMATE,
+            "set_hvac_mode",
+            {ATTR_ENTITY_ID: entity_id, "hvac_mode": "off"},
+            blocking=blocking,
+        )
+    elif domain in [
+        DOMAIN_LIGHT,
+        DOMAIN_SWITCH,
+        DOMAIN_INPUT_BOOLEAN,
+        DOMAIN_AUTOMATION,
+        DOMAIN_SCRIPT,
+    ]:
+        if state.state == "off":
+            return False
+        await hass.services.async_call(
+            domain,
+            SERVICE_TURN_OFF,
+            {ATTR_ENTITY_ID: entity_id},
+            blocking=blocking,
+        )
+    else:
+        log_warning(f"Unsupported entity domain: {domain}. Cannot turn off {entity_id}")
+        return False
+
+    if not blocking:
+        await hass.async_block_till_done()
+
+    return True
 
 
 async def set_mode_for_entity(hass: HomeAssistant, entity_id: str, mode: str) -> None:

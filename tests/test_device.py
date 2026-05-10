@@ -5,12 +5,17 @@ import pytest
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from conftest import create_test_config_entry, create_test_device
-
-from custom_components.sun_allocator import async_setup_entry, async_unload_entry
+from conftest import (
+    async_setup_test_entry,
+    async_unload_test_entry,
+    create_test_config_entry,
+    create_test_device,
+)
 from custom_components.sun_allocator.const import (
+    DOMAIN,
     CONF_DEVICES,
     CONF_CONSUMPTION,
     CONF_DEVICE_DEBOUNCE_TIME,
@@ -30,6 +35,14 @@ from custom_components.sun_allocator.const import (
 )
 
 
+def _get_main_sensor_entity_id(
+    hass: HomeAssistant, entry_id: str, sensor_suffix: str
+) -> str | None:
+    """Resolve a main sensor entity id from its stable unique id."""
+    registry = er.async_get(hass)
+    return registry.async_get_entity_id("sensor", DOMAIN, f"{entry_id}_{sensor_suffix}")
+
+
 @pytest.mark.parametrize("use_consumption_sensor", [False, True])
 @pytest.mark.asyncio
 async def test_device_control(
@@ -44,6 +57,7 @@ async def test_device_control(
         config_data[CONF_CONSUMPTION] = "sensor.test_consumption"
 
     config_entry = create_test_config_entry(config_data)
+    config_entry.add_to_hass(hass)
 
     # Set initial states before setting up the component
     hass.states.async_set("switch.test_device", "off")
@@ -60,15 +74,16 @@ async def test_device_control(
 
     with patch("homeassistant.core.ServiceRegistry.async_call") as mock_async_call:
         try:
-            assert await async_setup_entry(hass, config_entry)
-            await hass.async_block_till_done()
+            await async_setup_test_entry(hass, config_entry)
 
             # Trigger an update by changing a source sensor's state
             hass.states.async_set("sensor.test_pv_power", "201")
             await hass.async_block_till_done()
 
             # Verify sensors are updated
-            excess_sensor = hass.states.get(f"sensor.sun_allocator_{config_entry.entry_id}_excess")
+            excess_sensor = hass.states.get(
+                _get_main_sensor_entity_id(hass, config_entry.entry_id, "excess")
+            )
             assert excess_sensor is not None
             assert float(excess_sensor.state) > 10  # Expected excess power
 
@@ -78,7 +93,7 @@ async def test_device_control(
             )
         finally:
             # Clean up
-            await async_unload_entry(hass, config_entry)
+            await async_unload_test_entry(hass, config_entry)
 
 
 @pytest.mark.asyncio
@@ -123,8 +138,7 @@ async def test_device_debounce_on_and_off(hass: HomeAssistant) -> None:
     hass.states.async_set(entity_id, "off")
     await hass.async_block_till_done()
 
-    await async_setup_entry(hass, config_entry)
-    await hass.async_block_till_done()
+    await async_setup_test_entry(hass, config_entry)
 
     # Initial state: No power, switch should be off
     assert hass.states.get(entity_id).state == "off"
@@ -148,5 +162,4 @@ async def test_device_debounce_on_and_off(hass: HomeAssistant) -> None:
     assert hass.states.get(entity_id).state == "off"
 
     # Clean up
-    await async_unload_entry(hass, config_entry)
-    await hass.async_block_till_done()
+    await async_unload_test_entry(hass, config_entry)
