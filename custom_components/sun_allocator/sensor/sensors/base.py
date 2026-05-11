@@ -509,8 +509,63 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         return get_temperature_compensation_data(self._hass, self._config)
 
 
+    @staticmethod
+    def _build_legacy_mppt_aliases(
+        mppt_inputs: Optional[list[Dict[str, Any]]],
+        theoretical_mppt_inputs: Optional[list[Dict[str, Any]]],
+    ) -> Dict[str, Any]:
+        """Expose flat PV1/PV2-style attributes alongside structured MPPT lists."""
+        aliases: Dict[str, Any] = {}
+        current_suffix_map = {
+            "name": "name",
+            "pv_power": "power",
+            "pv_voltage": "voltage",
+            "pv_current": "current",
+            "current_max_power": "current_max_power",
+            "untapped_power": "untapped_power",
+            "vmp": "vmp",
+            "imp": "imp",
+            "voc": "voc",
+            "isc": "isc",
+            "panel_count": "panel_count",
+            "panel_configuration": "panel_configuration",
+            "light_factor": "light_factor",
+            "relative_voltage": "relative_voltage",
+            "voc_ratio": "voc_ratio",
+            "calculation_reason": "calculation_reason",
+            "energy_harvesting_possible": "energy_harvesting_possible",
+        }
+
+        for index, input_data in enumerate(mppt_inputs or [], start=1):
+            prefix = f"pv{index}"
+            aliases[f"{prefix}_id"] = input_data.get("id")
+            for source_key, alias_suffix in current_suffix_map.items():
+                aliases[f"{prefix}_{alias_suffix}"] = input_data.get(source_key)
+
+        for index, input_data in enumerate(theoretical_mppt_inputs or [], start=1):
+            prefix = f"pv{index}"
+            aliases[f"{prefix}_theoretical_pmax"] = input_data.get("pmax")
+
+        return aliases
+
+
+    def _clear_legacy_mppt_aliases(self) -> None:
+        """Remove stale flat PV aliases before writing fresh MPPT attributes."""
+        for key in list(self._attr_extra_state_attributes):
+            if key.startswith("pv") and len(key) > 3 and key[2].isdigit() and "_" in key[3:]:
+                self._attr_extra_state_attributes.pop(key, None)
+
+
     def _update_attributes(self, **kwargs) -> None:
         """Update sensor attributes."""
+        if "mppt_inputs" in kwargs or "theoretical_mppt_inputs" in kwargs:
+            self._clear_legacy_mppt_aliases()
+            kwargs.update(
+                self._build_legacy_mppt_aliases(
+                    kwargs.get("mppt_inputs"),
+                    kwargs.get("theoretical_mppt_inputs"),
+                )
+            )
         self._attr_extra_state_attributes.update(kwargs)
 
 

@@ -103,6 +103,31 @@ def test_power_sensor_reports_allocated_w():
     assert sensor.extra_state_attributes["power_percent"] == 80.0
 
 
+def test_status_sensor_uses_live_feedback_when_allocation_is_zero():
+    cfg = _device_config("dev1")
+    entry_data = {
+        "config": {CONF_DEVICES: [cfg]},
+        CONF_POWER_DISTRIBUTION: {"allocation": {"dev1": 0.0}},
+        "device_status": {
+            "dev1": {
+                "is_active_candidate": True,
+                "actual_power_valid": True,
+                "is_consuming": True,
+                "actual_power_source": "binary_feedback",
+                "actual_power_w": 900.0,
+            }
+        },
+    }
+    hass = _hass_with_data("entry_x", entry_data)
+
+    sensor = SunAllocatorDeviceStatusSensor(hass, "entry_x", cfg)
+    sensor.async_write_ha_state = MagicMock()
+    sensor._update_state()
+
+    assert sensor.native_value == "active"
+    assert sensor.extra_state_attributes["is_active"] is True
+
+
 def test_is_device_auto_control_enabled_helper():
     config = {
         CONF_DEVICES: [

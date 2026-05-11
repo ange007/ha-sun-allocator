@@ -502,6 +502,8 @@ def _calculate_standard_power_usage(
     status_entry["reserved_w"] = 0.0
 
     if not is_active:
+        if actual_power_valid and status_entry.get("is_consuming"):
+            return float(actual_power_w or min_expected_w)
         return 0.0
 
     if not actual_power_valid:
@@ -639,14 +641,19 @@ async def _control_standard_device(
             log_debug(f"Turning off standard device {device_name} (remaining={remaining_power}W)")
             await turn_off_entity(hass, relay_entity, device_name)
 
-        _calculate_standard_power_usage(
+        power_used = _calculate_standard_power_usage(
             hass, device, status_entry, False, device_on_time_state, now
         )
+        min_expected_w = max(float(status_entry.get("min_expected_w") or 0.0), 1.0)
         status_entry.update(
             {
                 "percent_target": 0.0,
-                "percent_actual": 0.0,
-                "allocated_w": 0.0,
+                "percent_actual": (
+                    min(MAX_PERCENTAGE, (power_used / min_expected_w) * 100)
+                    if power_used > 0
+                    else 0.0
+                ),
+                "allocated_w": float(power_used),
                 "reserved_w": 0.0,
                 "is_enabled": False,
             }

@@ -42,6 +42,9 @@ class SunAllocatorDeviceStatusSensor(BaseSunAllocatorDeviceSensor):
             data.get("config", {}), self._device_id
         )
         st = device_status.get(self._device_id, {}) or {}
+        is_active = allocated_power > 0 or (
+            bool(st.get("actual_power_valid")) and bool(st.get("is_consuming"))
+        )
 
         self._attr_native_value = build_device_status(
             self._device_id, device_status, allocated_power, auto_control_on,
@@ -51,7 +54,7 @@ class SunAllocatorDeviceStatusSensor(BaseSunAllocatorDeviceSensor):
             "priority": st.get("priority"),
             "auto_control": auto_control_on,
             "manual_override": st.get("manual_override", False),
-            "is_active": allocated_power > 0,
+            "is_active": is_active,
             "is_enabled": st.get("is_enabled", False),
             "is_candidate": st.get("is_active_candidate"),
             "actual_power_w": st.get("actual_power_w"),

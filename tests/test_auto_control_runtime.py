@@ -14,6 +14,7 @@ from custom_components.sun_allocator import (
 )
 from custom_components.sun_allocator.const import (
     CONF_AUTO_CONTROL_ENABLED,
+    CONF_DEVICE_DEBOUNCE_TIME,
     CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR,
     CONF_DEVICE_ENTITY,
     CONF_DEVICE_ID,
@@ -250,3 +251,83 @@ async def test_queue_process_excess_power_coalesces_overlapping_triggers():
     assert calls == [(100.0, None), (300.0, None)]
     assert not entry_data["process_excess_power_lock"].locked()
     assert "pending_process_request" not in entry_data
+
+
+@pytest.mark.asyncio
+async def test_queue_process_excess_power_rechecks_when_debounce_expires():
+    """A pending debounce should trigger a rerun even without a new sensor update."""
+    hass = MagicMock()
+    excess_sensor_id = "sensor.test_excess"
+    hass.states = MagicMock()
+    hass.states.get = lambda entity_id: {
+        excess_sensor_id: State(excess_sensor_id, "125")
+    }.get(entity_id)
+    hass.async_create_task = lambda coro, *_args, **_kwargs: asyncio.create_task(coro)
+
+    config_entry = MagicMock()
+    config_entry.entry_id = "test_entry"
+    config_entry.data = {
+        CONF_DEVICES: [
+            {
+                CONF_DEVICE_ID: "heater_1",
+                CONF_AUTO_CONTROL_ENABLED: True,
+                CONF_DEVICE_DEBOUNCE_TIME: 15,
+            }
+        ]
+    }
+
+    first_seen = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    entry_data = {
+        "tracked_excess_sensor_id": excess_sensor_id,
+    }
+    calls = []
+    timer = {}
+
+    async def processor(_hass, _config_entry, excess_power, start_from_device_id=None):
+        calls.append((excess_power, start_from_device_id))
+        if len(calls) == 1:
+            entry_data["device_debounce_state"] = {
+                "heater_1": {
+                    "candidate_state": True,
+                    "state_change_time": first_seen,
+                    "counter_debounce_start": None,
+                }
+            }
+        else:
+            entry_data["device_debounce_state"] = {
+                "heater_1": {
+                    "candidate_state": True,
+                    "state_change_time": None,
+                    "counter_debounce_start": None,
+                }
+            }
+
+    def _track_point(_hass, callback, when):
+        timer["callback"] = callback
+        timer["when"] = when
+        return MagicMock()
+
+    with (
+        patch(
+            "custom_components.sun_allocator.async_track_point_in_utc_time",
+            side_effect=_track_point,
+        ),
+        patch(
+            "custom_components.sun_allocator.dt_util.utcnow",
+            return_value=first_seen,
+        ),
+    ):
+        await _queue_process_excess_power(
+            hass,
+            config_entry,
+            entry_data,
+            100.0,
+            processor=processor,
+        )
+
+        assert calls == [(100.0, None)]
+        assert timer["when"] == datetime(2026, 1, 1, 12, 0, 15, tzinfo=timezone.utc)
+
+        await timer["callback"](timer["when"])
+
+    assert calls == [(100.0, None), (125.0, None)]

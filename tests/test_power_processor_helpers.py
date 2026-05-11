@@ -6,8 +6,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from custom_components.sun_allocator.const import (
+    CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR,
     CONF_DEVICE_ENTITY,
     CONF_DEVICE_ID,
+    CONF_DEVICE_NAME,
     CONF_DEVICE_TYPE,
     DEVICE_TYPE_CUSTOM,
     DEVICE_TYPE_STANDARD,
@@ -122,3 +124,51 @@ def test_compute_proportional_allocations_skips_non_custom():
 def test_compute_proportional_allocations_returns_empty_when_pool_empty():
     out = pp._compute_proportional_allocations([], {}, 500.0, {}, {}, {}, datetime.now(tz=timezone.utc))
     assert out == {}
+
+
+@pytest.mark.asyncio
+async def test_control_standard_device_reports_live_feedback_while_target_is_off(monkeypatch):
+    hass = MagicMock()
+    hass.states.get.side_effect = lambda entity_id: {
+        "switch.heater": _state("off"),
+        "binary_sensor.heater_active": _state("on"),
+    }.get(entity_id)
+
+    async def _turn_off_entity(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(pp, "parse_relay_entity", lambda entity_id: (entity_id, None))
+    monkeypatch.setattr(pp, "is_entity_on", lambda _domain, state: state.state == "on")
+    monkeypatch.setattr(pp, "turn_off_entity", _turn_off_entity)
+
+    device = {
+        CONF_DEVICE_ID: "heater_1",
+        CONF_DEVICE_NAME: "Heater 1",
+        CONF_DEVICE_ENTITY: "switch.heater",
+        CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR: "binary_sensor.heater_active",
+    }
+    status_entry = {
+        "min_expected_w": 900.0,
+        "max_expected_w": 990.0,
+        "actual_power_threshold_w": 50.0,
+        "refusal_reasons": [],
+    }
+
+    power_used, updated = await pp._control_standard_device(
+        hass,
+        device,
+        False,
+        False,
+        0.0,
+        {},
+        status_entry,
+        {},
+        {},
+        datetime.now(tz=timezone.utc),
+    )
+
+    assert power_used == 900.0
+    assert updated["allocated_w"] == 900.0
+    assert updated["percent_actual"] == 100.0
+    assert updated["is_enabled"] is False
+    assert updated["is_consuming"] is True

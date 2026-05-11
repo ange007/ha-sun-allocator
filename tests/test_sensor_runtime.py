@@ -116,3 +116,78 @@ def test_excess_sensor_journal_is_deduplicated_for_identical_payload():
         assert excess_sensor.native_value == 80.0
 
     mock_journal_event.assert_called_once()
+
+
+def test_current_max_sensor_exposes_flat_legacy_mppt_aliases():
+    """Flat PV1/PV2 attributes should remain available for Lovelace templates."""
+    hass = MagicMock(spec=HomeAssistant)
+    hass.data = {DOMAIN: {"test_entry": {}}}
+    config = _build_sensor_config() | {
+        "mppt2_enabled": True,
+        "panel2_count": 2,
+        "panel2_configuration": "parallel",
+    }
+    current_sensor = SunAllocatorCurrentMaxPowerSensor(hass, config, "test_entry", 1)
+
+    mppt_summary = _build_mppt_summary() | {
+        "mppt_count": 2,
+        "mppt_inputs": [
+            {
+                "id": "mppt1",
+                "name": "MPPT 1",
+                "pv_power": 120.0,
+                "pv_voltage": 35.0,
+                "pv_current": 3.4,
+                "current_max_power": 200.0,
+                "untapped_power": 80.0,
+                "vmp": 36.0,
+                "imp": 8.0,
+                "voc": 44.0,
+                "isc": 8.5,
+                "panel_count": 1,
+                "panel_configuration": "series",
+                "light_factor": 1.0,
+                "relative_voltage": 1.1,
+                "voc_ratio": 1.0,
+                "calculation_reason": "Test",
+                "energy_harvesting_possible": True,
+            },
+            {
+                "id": "mppt2",
+                "name": "MPPT 2",
+                "pv_power": 240.0,
+                "pv_voltage": 37.5,
+                "pv_current": 6.4,
+                "current_max_power": 310.0,
+                "untapped_power": 70.0,
+                "vmp": 36.2,
+                "imp": 8.4,
+                "voc": 44.5,
+                "isc": 8.9,
+                "panel_count": 2,
+                "panel_configuration": "parallel",
+                "light_factor": 0.95,
+                "relative_voltage": 1.03,
+                "voc_ratio": 0.98,
+                "calculation_reason": "Test MPPT 2",
+                "energy_harvesting_possible": True,
+            },
+        ],
+    }
+    with (
+        patch.object(BaseSunAllocatorSensor, "_get_sensor_values", return_value=_build_sensor_values()),
+        patch.object(BaseSunAllocatorSensor, "_get_panel_parameters", return_value=_build_panel_params()),
+        patch.object(BaseSunAllocatorSensor, "_get_mppt_config", return_value={"curve_factor_k": 0.2, "efficiency_correction_factor": 1.05, "min_inverter_voltage": 100.0}),
+        patch.object(BaseSunAllocatorSensor, "_get_temperature_compensation", return_value=None),
+        patch.object(BaseSunAllocatorSensor, "_calculate_mppt_summary", return_value=mppt_summary),
+    ):
+        assert current_sensor.native_value == 200.0
+
+    attrs = current_sensor.extra_state_attributes
+    assert attrs["pv1_power"] == 120.0
+    assert attrs["pv1_voltage"] == 35.0
+    assert attrs["pv1_current"] == 3.4
+    assert attrs["pv2_power"] == 240.0
+    assert attrs["pv2_voltage"] == 37.5
+    assert attrs["pv2_current"] == 6.4
+    assert attrs["pv2_current_max_power"] == 310.0

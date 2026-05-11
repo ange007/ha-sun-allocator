@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import timedelta
+import datetime as dt_stdlib
 
 import voluptuous as vol
 
@@ -12,6 +13,7 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.event import (
+    async_track_point_in_utc_time,
     async_track_state_change_event,
     async_track_time_interval,
 )
@@ -53,6 +55,7 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_DEVICE_PRIORITY,
     CONF_DEVICE_TYPE,
+    CONF_DEVICE_DEBOUNCE_TIME,
     CONF_DEVICE_ACTUAL_POWER_SENSOR,
     CONF_DEVICE_ACTIVE_FEEDBACK_SENSOR,
     CONF_BATTERY_SOC_SENSOR,
@@ -67,6 +70,7 @@ from .const import (
     DOMAIN_CLIMATE,
     MAX_BRIGHTNESS,
     MAX_PERCENTAGE,
+    DEFAULT_DEBOUNCE_TIME,
 )
 
 def _call_unsubscribers(entry_data: dict, keys: list[str]) -> None:
@@ -145,6 +149,96 @@ def _merge_process_request(entry_data, queued_request, incoming_request):
     }
 
 
+def _get_next_debounce_deadline(config_entry, entry_data):
+    """Return the earliest pending debounce completion time, if any."""
+    devices_by_id = {
+        device.get(CONF_DEVICE_ID): device
+        for device in config_entry.data.get(CONF_DEVICES, [])
+        if device.get(CONF_AUTO_CONTROL_ENABLED, False) and device.get(CONF_DEVICE_ID)
+    }
+
+    earliest_deadline = None
+    for device_id, debounce_info in entry_data.get("device_debounce_state", {}).items():
+        state_change_time = debounce_info.get("state_change_time")
+        if not state_change_time:
+            continue
+
+        if isinstance(state_change_time, str):
+            try:
+                state_change_time = dt_stdlib.datetime.fromisoformat(state_change_time)
+            except ValueError:
+                continue
+
+        device = devices_by_id.get(device_id)
+        if device is None:
+            continue
+
+        debounce_time_s = float(
+            device.get(CONF_DEVICE_DEBOUNCE_TIME, DEFAULT_DEBOUNCE_TIME) or 0
+        )
+        if debounce_time_s <= 0:
+            continue
+
+        deadline = state_change_time + timedelta(seconds=debounce_time_s)
+        if earliest_deadline is None or deadline < earliest_deadline:
+            earliest_deadline = deadline
+
+    return earliest_deadline
+
+
+def _schedule_debounce_recheck(
+    hass,
+    config_entry,
+    entry_data,
+    *,
+    processor=process_excess_power,
+):
+    """Re-run the allocator when the next debounce timer expires."""
+    _call_unsubscribers(entry_data, ["unsub_debounce_recheck"])
+
+    deadline = _get_next_debounce_deadline(config_entry, entry_data)
+    entry_data["debounce_recheck_deadline"] = deadline
+    if deadline is None:
+        return
+
+    deadline_utc = dt_util.as_utc(deadline)
+
+    async def _debounce_recheck_callback(_now):
+        entry_data["unsub_debounce_recheck"] = None
+        entry_data["debounce_recheck_deadline"] = None
+
+        excess_sensor_id = entry_data.get("tracked_excess_sensor_id")
+        if not excess_sensor_id:
+            return
+
+        excess_state = hass.states.get(excess_sensor_id)
+        if not excess_state or excess_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            return
+
+        try:
+            await _queue_process_excess_power(
+                hass,
+                config_entry,
+                entry_data,
+                float(excess_state.state),
+                processor=processor,
+            )
+        except (ValueError, TypeError) as exc:
+            log_error("Error processing debounce recheck value: %s", exc)
+        except Exception as exc:
+            log_error("Unexpected error in debounce recheck: %s", exc)
+
+    if deadline_utc <= dt_util.utcnow():
+        hass.async_create_task(_debounce_recheck_callback(deadline_utc))
+        return
+
+    entry_data["unsub_debounce_recheck"] = async_track_point_in_utc_time(
+        hass,
+        _debounce_recheck_callback,
+        deadline_utc,
+    )
+
+
 async def _queue_process_excess_power(
     hass,
     config_entry,
@@ -178,6 +272,13 @@ async def _queue_process_excess_power(
                 next_request["excess_power"],
                 start_from_device_id=next_request.get("start_from_device_id"),
             )
+
+        _schedule_debounce_recheck(
+            hass,
+            config_entry,
+            entry_data,
+            processor=processor,
+        )
 
         queued_request = entry_data.pop("pending_process_request", None)
         if queued_request is None:
@@ -555,6 +656,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             config_entry.entry_id,
         )
         return
+    entry_data["tracked_excess_sensor_id"] = excess_sensor_id
 
     actual_power_sensors = {
         sensor_entity
@@ -656,6 +758,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigType):
             "unsub_auto_control",
             "unsub_mode_listener",
             "unsub_watchdog_timer",
+            "unsub_debounce_recheck",
             "unsub_restore_listener",
             "unsub_ha_start",
         ],

@@ -136,8 +136,14 @@ def _resolve_device_status(
     is_enabled = bool(st.get("is_enabled"))
     is_candidate = st.get("is_active_candidate")
     refusals: list[str] = st.get("refusal_reasons") or []
+    feedback_active = bool(st.get("actual_power_valid")) and bool(st.get("is_consuming"))
+    feedback_idle = bool(st.get("actual_power_valid")) and st.get("is_consuming") is False
 
-    if is_enabled and not is_active and st.get("actual_power_valid") and not st.get("is_consuming"):
+    if feedback_active:
+        key = DEVICE_STATUS_DEBOUNCING_OFF if is_candidate is False else DEVICE_STATUS_ACTIVE
+        return key, refusals if key == DEVICE_STATUS_DEBOUNCING_OFF else []
+
+    if is_enabled and not is_active and feedback_idle:
         return DEVICE_STATUS_IDLE, []
 
     if is_active:
