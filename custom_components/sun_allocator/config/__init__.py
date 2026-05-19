@@ -109,13 +109,13 @@ class SunAllocatorConfigFlow(
                     default=self._solar_config.get(
                         CONF_TEMPERATURE_COMPENSATION_ENABLED, False
                     ),
-                ): bool,
+                ): selector({"boolean": {}}),
                 vol.Required(
                     CONF_ADVANCED_SETTINGS_ENABLED,
                     default=self._solar_config.get(
                         CONF_ADVANCED_SETTINGS_ENABLED, False
                     ),
-                ): bool,
+                ): selector({"boolean": {}}),
             }
         )
 
@@ -296,13 +296,13 @@ class SunAllocatorOptionsFlowHandler(
                     default=self._solar_config.get(
                         CONF_TEMPERATURE_COMPENSATION_ENABLED, False
                     ),
-                ): bool,
+                ): selector({"boolean": {}}),
                 vol.Required(
                     CONF_ADVANCED_SETTINGS_ENABLED,
                     default=self._solar_config.get(
                         CONF_ADVANCED_SETTINGS_ENABLED, False
                     ),
-                ): bool,
+                ): selector({"boolean": {}}),
             }
         )
 

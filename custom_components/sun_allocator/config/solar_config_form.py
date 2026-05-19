@@ -6,10 +6,12 @@ from voluptuous import Schema, Required, Optional as VolOptional
 
 from homeassistant.helpers import selector
 
+import voluptuous as vol
+
 from ..config.ui_helpers import (
-    NumberSelectorBuilder,
     SelectSelectorBuilder,
     BooleanSelectorBuilder,
+    float_field,
 )
 
 from ..const import (
@@ -25,6 +27,7 @@ from ..const import (
     CONF_CONSUMPTION,
     CONF_BATTERY_POWER,
     CONF_BATTERY_POWER_REVERSED,
+    CONF_BATTERY_SOC_SENSOR,
     MPPT_MAX_COUNT,
     PANEL_CONFIG_SERIES,
     PANEL_CONFIG_PARALLEL,
@@ -40,8 +43,10 @@ def build_solar_hub_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
     return Schema({
         Required(
             CONF_MPPT_COUNT,
-            default=defaults.get(CONF_MPPT_COUNT, 1),
-        ): NumberSelectorBuilder(1, MPPT_MAX_COUNT, 1).build(),
+            default=str(defaults.get(CONF_MPPT_COUNT, 1)),
+        ): SelectSelectorBuilder(
+            options=[str(i) for i in range(1, MPPT_MAX_COUNT + 1)],
+        ).build(),
 
         VolOptional(
             CONF_CONSUMPTION,
@@ -76,6 +81,17 @@ def build_solar_hub_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
             CONF_BATTERY_POWER_REVERSED,
             default=defaults.get(CONF_BATTERY_POWER_REVERSED, False),
         ): BooleanSelectorBuilder().build(),
+
+        VolOptional(
+            CONF_BATTERY_SOC_SENSOR,
+            description={"suggested_value": defaults.get(CONF_BATTERY_SOC_SENSOR)},
+        ): selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                multiple=False,
+                filter=[{"device_class": ["battery"]}],
+            )
+        ),
     })
 
 
@@ -110,27 +126,27 @@ def build_mppt_input_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema
         Required(
             CONF_PANEL_VMP,
             default=defaults.get(CONF_PANEL_VMP, 44.3),
-        ): NumberSelectorBuilder(0, 100, 0.1).build(),
+        ): float_field(0, 100),
 
         Required(
             CONF_PANEL_IMP,
             default=defaults.get(CONF_PANEL_IMP, 10.05),
-        ): NumberSelectorBuilder(0, 100, 0.01).build(),
+        ): float_field(0, 100),
 
         Required(
             CONF_PANEL_VOC,
             default=defaults.get(CONF_PANEL_VOC, 52.6),
-        ): NumberSelectorBuilder(0, 100, 0.1).build(),
+        ): float_field(0, 100),
 
         VolOptional(
             CONF_PANEL_ISC,
             default=defaults.get(CONF_PANEL_ISC, 10.71),
-        ): NumberSelectorBuilder(0, 100, 0.01).build(),
+        ): float_field(0, 100),
 
         Required(
             CONF_PANEL_COUNT,
             default=defaults.get(CONF_PANEL_COUNT, 10),
-        ): NumberSelectorBuilder(1, 100, 1).build(),
+        ): vol.Coerce(int),
 
         Required(
             CONF_PANEL_CONFIGURATION,

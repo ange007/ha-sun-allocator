@@ -23,7 +23,10 @@
 - Climate devices: auto-detects `hvac_mode` from the entity's supported modes (`heat` → `heat_cool` → `auto`).
 - Startup grace period prevents devices from being turned off immediately after they start.
 - **Per-device entities** for easy automation and dashboarding (see below).
+- **Multi-MPPT support** — configure up to 4 independent MPPT trackers for accurate power estimation on complex solar arrays.
 - **Auto-control toggle switch** per device — flip auto-control on/off at runtime without reconfiguring.
+- **Turn off on auto-control disable** — optionally send a turn-off command to a device when its auto-control switch is disabled.
+- **Battery SOC gating** — optionally block new device starts until the battery reaches a configured charge level (% per device, with hysteresis to prevent rapid cycling).
 - **Easy configuration through Home Assistant UI** - no YAML editing required.
 
 ## Installation

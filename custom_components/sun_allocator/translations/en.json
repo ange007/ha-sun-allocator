@@ -11,7 +11,8 @@
           "battery_power_reversed": "Reverse Battery Power Values",
           "temperature_compensation_enabled": "Enable Temperature Compensation",
           "consumption": "Consumption Sensor",
-          "battery_power": "Battery Power Sensor"
+          "battery_power": "Battery Power Sensor",
+          "battery_soc_sensor": "Battery SOC Sensor"
         }
       },
       "mppt_input": {
@@ -84,6 +85,8 @@
         "description": "Configure basic device parameters",
         "data": {
           "auto_control_enabled": "Enable Auto Control",
+          "turn_off_on_auto_control_disable": "Turn Off When Auto Control Disabled",
+          "min_battery_soc": "Minimum Battery SOC (%)",
           "min_excess_power": "Minimum Excess Power",
           "min_expected_w": "Minimum Expected Load (W)",
           "max_expected_w": "Maximum Expected Load (W)",
@@ -192,7 +195,8 @@
           "battery_power_reversed": "Reverse Battery Power Values",
           "temperature_compensation_enabled": "Enable Temperature Compensation",
           "consumption": "Consumption Sensor",
-          "battery_power": "Battery Power Sensor"
+          "battery_power": "Battery Power Sensor",
+          "battery_soc_sensor": "Battery SOC Sensor"
         }
       },
       "mppt_input": {
@@ -246,6 +250,8 @@
         "description": "Configure basic device parameters",
         "data": {
           "auto_control_enabled": "Enable Auto Control",
+          "turn_off_on_auto_control_disable": "Turn Off When Auto Control Disabled",
+          "min_battery_soc": "Minimum Battery SOC (%)",
           "min_excess_power": "Minimum Excess Power",
           "min_expected_w": "Minimum Expected Load (W)",
           "max_expected_w": "Maximum Expected Load (W)",

@@ -231,7 +231,10 @@ async def _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor
                 excess_power = float(initial_state.state)
                 entry_data["watchdog_last_seen"] = dt_util.utcnow()
                 entry_data["watchdog_alerted"] = False
-                await process_excess_power(hass, config_entry, excess_power)
+                lock = entry_data.setdefault("_process_lock", asyncio.Lock())
+                if not lock.locked():
+                    async with lock:
+                        await process_excess_power(hass, config_entry, excess_power)
                 log_info(
                     "Initial pass successful for %s: %sW",
                     initial_state.entity_id,
@@ -387,19 +390,26 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
 
     entry_data["process_excess_power"] = process_excess_power
 
+    entry_data.setdefault("_process_lock", asyncio.Lock())
+
     async def handle_state_change(event):
         new_state = event.data.get("new_state") if hasattr(event, "data") else None
         if not new_state or new_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             return
         entry_data["watchdog_last_seen"] = dt_util.utcnow()
         entry_data["watchdog_alerted"] = False
-        try:
-            excess_power = float(new_state.state)
-            await process_excess_power(hass, config_entry, excess_power)
-        except (ValueError, TypeError) as exc:
-            log_error(f"Error processing excess power value: {exc}")
-        except Exception as exc:
-            log_error(f"Unexpected error in process_excess_power: {exc}")
+        lock = entry_data["_process_lock"]
+        if lock.locked():
+            log_debug("process_excess_power already running, skipping duplicate call")
+            return
+        async with lock:
+            try:
+                excess_power = float(new_state.state)
+                await process_excess_power(hass, config_entry, excess_power)
+            except (ValueError, TypeError) as exc:
+                log_error(f"Error processing excess power value: {exc}")
+            except Exception as exc:
+                log_error(f"Unexpected error in process_excess_power: {exc}")
 
     registry = er.async_get(hass)
     excess_sensor_id = registry.async_get_entity_id(

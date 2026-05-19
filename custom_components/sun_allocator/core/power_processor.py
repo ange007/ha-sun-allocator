@@ -55,6 +55,9 @@ from ..const import (
     STRATEGY_DISTRIBUTE_EVENLY,
     KEY_STARTUP_GRACE_PERIOD,
     DEFAULT_STARTUP_GRACE_PERIOD,
+    CONF_BATTERY_SOC_SENSOR,
+    CONF_DEVICE_MIN_BATTERY_SOC,
+    DEFAULT_BATTERY_SOC_HYSTERESIS,
 )
 
 def _initialize_run(entry_data, devices_config):
@@ -74,6 +77,44 @@ def _initialize_run(entry_data, devices_config):
     )
 
     return auto_control_devices
+
+
+def _read_battery_soc(hass, cfg) -> float | None:
+    """Return current battery SOC % from the configured sensor, or None if unavailable."""
+    soc_sensor = cfg.get(CONF_BATTERY_SOC_SENSOR)
+    if not soc_sensor:
+        return None
+    state = hass.states.get(soc_sensor)
+    if not state or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        return None
+    try:
+        return float(state.state)
+    except (ValueError, TypeError):
+        return None
+
+
+def _apply_battery_soc_gate(device, is_active, prev_on, battery_soc, status_entry) -> bool:
+    """Block new device starts when battery SOC is below per-device threshold.
+
+    Running devices (prev_on=True) are never turned off by SOC gating.
+    """
+    if not is_active or prev_on or battery_soc is None:
+        return is_active
+    min_soc = float(device.get(CONF_DEVICE_MIN_BATTERY_SOC, 0) or 0)
+    if min_soc <= 0:
+        return is_active
+    # Require SOC >= threshold + hysteresis to start; avoids rapid toggling near threshold.
+    if battery_soc < min_soc + DEFAULT_BATTERY_SOC_HYSTERESIS:
+        status_entry["refusal_reasons"].append(
+            f"Battery SOC {battery_soc:.1f}% < required {min_soc + DEFAULT_BATTERY_SOC_HYSTERESIS:.1f}%"
+            f" (min {min_soc:.1f}% + {DEFAULT_BATTERY_SOC_HYSTERESIS:.1f}% hysteresis)"
+        )
+        log_debug(
+            f"[soc_gate] Blocking start for {device.get(CONF_DEVICE_NAME)}: "
+            f"SOC={battery_soc:.1f}% < {min_soc + DEFAULT_BATTERY_SOC_HYSTERESIS:.1f}%"
+        )
+        return False
+    return is_active
 
 
 async def _filter_device(hass, device, now):
@@ -643,7 +684,7 @@ async def _dispatch_device_control(
 
 async def _control_one_device(
     hass, config_entry, device, *,
-    cfg, entry_data, now, strategy, proportional_allocations, remaining_power,
+    cfg, entry_data, now, strategy, proportional_allocations, remaining_power, battery_soc,
 ):
     """Run the full per-device control pipeline for one cycle.
 
@@ -707,6 +748,7 @@ async def _control_one_device(
         hass, config_entry, device, device_id, device_on_time_state, status_entry,
         is_active, prev_on_before_calc, now,
     )
+    is_active = _apply_battery_soc_gate(device, is_active, prev_on_before_calc, battery_soc, status_entry)
 
     log_debug(f"Control logic for {device_id}: prev_on={prev_on}, prev_on_before_calc={prev_on_before_calc}")
     power_used, _ = await _dispatch_device_control(
@@ -745,6 +787,7 @@ async def process_excess_power(
 
     remaining_power = excess_power
     strategy = cfg.get(CONF_DEVICE_ALLOCATION_STRATEGY, STRATEGY_FILL_ONE_BY_ONE)
+    battery_soc = _read_battery_soc(hass, cfg)
     proportional_allocations: dict = {}
     if strategy == STRATEGY_DISTRIBUTE_EVENLY:
         proportional_allocations = _compute_proportional_allocations(
@@ -762,6 +805,7 @@ async def process_excess_power(
             cfg=cfg, entry_data=entry_data, now=now, strategy=strategy,
             proportional_allocations=proportional_allocations,
             remaining_power=remaining_power,
+            battery_soc=battery_soc,
         )
         remaining_power -= power_used
         log_debug(

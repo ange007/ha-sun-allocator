@@ -36,6 +36,8 @@ from ..const import (
     CONF_DEVICE_DEBOUNCE_TIME,
     DEFAULT_DEBOUNCE_TIME,
     CONF_DEVICE_MIN_ON_TIME,
+    CONF_DEVICE_MIN_BATTERY_SOC,
+    CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
 )
 
 
@@ -135,6 +137,16 @@ def build_device_basic_settings_schema(defaults=None):
             CONF_AUTO_CONTROL_ENABLED,
             default=defaults.get(CONF_AUTO_CONTROL_ENABLED, False),
         ): selector({"boolean": {}}),
+
+        Required(
+            CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
+            default=defaults.get(CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE, False),
+        ): selector({"boolean": {}}),
+
+        Optional(
+            CONF_DEVICE_MIN_BATTERY_SOC,
+            default=defaults.get(CONF_DEVICE_MIN_BATTERY_SOC, 0),
+        ): NumberSelectorBuilder(0, 100, 1, unit="%").build(),
 
         Required(
             CONF_DEVICE_SCHEDULE_MODE,

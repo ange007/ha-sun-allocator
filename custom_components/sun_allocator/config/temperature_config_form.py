@@ -4,7 +4,7 @@ from voluptuous import Schema, Required
 
 from homeassistant.helpers import selector
 
-from ..config.ui_helpers import NumberSelectorBuilder
+from ..config.ui_helpers import float_field
 
 from ..const import (
     CONF_TEMPERATURE_SENSOR,
@@ -39,13 +39,13 @@ def build_temperature_config_schema(defaults=None):
                 default=defaults.get(
                     CONF_TEMP_COEFFICIENT_VOC, DEFAULT_VOC_COEFFICIENT
                 ),
-            ): NumberSelectorBuilder(-1.0, 0.0, 0.01).build(),
-            
+            ): float_field(-1.0, 0.0),
+
             Required(
                 CONF_TEMP_COEFFICIENT_PMAX,
                 default=defaults.get(
                     CONF_TEMP_COEFFICIENT_PMAX, DEFAULT_PMAX_COEFFICIENT
                 ),
-            ): NumberSelectorBuilder(-1.0, 0.0, 0.01).build(),
+            ): float_field(-1.0, 0.0),
         }
     )

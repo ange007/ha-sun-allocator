@@ -1,6 +1,18 @@
 """UI helpers for Sun Allocator: builder for selectors, label/value, emoji."""
 
+import voluptuous as vol
+
 from homeassistant.helpers.selector import selector
+
+
+def int_field(min_value: int, max_value: int):
+    """Native integer field with range validation. Renders as <ha-form-integer> with own-margin."""
+    return vol.All(vol.Coerce(int), vol.Range(min=min_value, max=max_value))
+
+
+def float_field(min_value: float, max_value: float):
+    """Native float field with range validation. Renders as <ha-form-float> with own-margin."""
+    return vol.All(vol.Coerce(float), vol.Range(min=min_value, max=max_value))
 
 
 class CustomEntitySelectorBuilder:

@@ -71,6 +71,9 @@ CONF_RAMP_DEADBAND = "ramp_deadband"
 CONF_HYSTERESIS_W = "hysteresis_w"
 CONF_CURVE_FACTOR_K = "curve_factor_k"
 CONF_EFFICIENCY_CORRECTION_FACTOR = "efficiency_correction_factor"
+CONF_BATTERY_SOC_SENSOR = "battery_soc_sensor"
+CONF_DEVICE_MIN_BATTERY_SOC = "min_battery_soc"
+CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE = "turn_off_on_auto_control_disable"
 
 # Temperature compensation constants
 CONF_TEMPERATURE_COMPENSATION_ENABLED = "temperature_compensation_enabled"
@@ -83,6 +86,7 @@ CONF_TEMP_COEFFICIENT_PMAX = "temp_coefficient_pmax"
 DEFAULT_STARTUP_GRACE_PERIOD = 90
 DEFAULT_DEBOUNCE_TIME = 15
 DEFAULT_HYSTERESIS_W = 40.0
+DEFAULT_BATTERY_SOC_HYSTERESIS = 2.0
 
 # Internal MPPT algorithm constants (not user-configurable)
 INTERNAL_CURVE_FACTOR_K = 0.2

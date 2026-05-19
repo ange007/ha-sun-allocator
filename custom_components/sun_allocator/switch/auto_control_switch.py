@@ -13,7 +13,10 @@ from ..const import (
     CONF_DEVICE_ID,
     CONF_DEVICES,
     CONF_AUTO_CONTROL_ENABLED,
+    CONF_DEVICE_ENTITY,
+    CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
 )
+from ..core.entity_control import turn_off_entity, parse_relay_entity
 from ..sensor.utils import get_device_info
 
 
@@ -101,3 +104,13 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
         self._is_on = False
         self.async_write_ha_state()
         await self._persist_to_config(False)
+        config_entry = self._hass.config_entries.async_get_entry(self._entry_id)
+        if config_entry:
+            dev_cfg = next(
+                (d for d in config_entry.data.get(CONF_DEVICES, []) if d.get(CONF_DEVICE_ID) == self._device_id),
+                self._device_config,
+            )
+            if dev_cfg.get(CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE, False):
+                relay_entity, _ = parse_relay_entity(dev_cfg.get(CONF_DEVICE_ENTITY))
+                if relay_entity:
+                    await turn_off_entity(self._hass, relay_entity, dev_cfg.get("device_name", ""))
