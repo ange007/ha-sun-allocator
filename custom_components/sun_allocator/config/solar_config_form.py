@@ -35,6 +35,15 @@ from ..const import (
 )
 
 
+def _opt_entity_key(field: str, defaults: dict):
+    """Build VolOptional key with default pre-fill when a saved value exists."""
+    val = defaults.get(field)
+    kwargs = {"description": {"suggested_value": val}}
+    if val:
+        kwargs["default"] = val
+    return VolOptional(field, **kwargs)
+
+
 def build_solar_hub_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
     """Build schema for hub-level solar config: tracker count + shared sensors."""
     if defaults is None:
@@ -48,10 +57,7 @@ def build_solar_hub_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
             options=[str(i) for i in range(1, MPPT_MAX_COUNT + 1)],
         ).build(),
 
-        VolOptional(
-            CONF_CONSUMPTION,
-            description={"suggested_value": defaults.get(CONF_CONSUMPTION)},
-        ): selector.EntitySelector(
+        _opt_entity_key(CONF_CONSUMPTION, defaults): selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 multiple=False,
@@ -62,10 +68,7 @@ def build_solar_hub_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
             )
         ),
 
-        VolOptional(
-            CONF_BATTERY_POWER,
-            description={"suggested_value": defaults.get(CONF_BATTERY_POWER)},
-        ): selector.EntitySelector(
+        _opt_entity_key(CONF_BATTERY_POWER, defaults): selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 multiple=False,
@@ -82,10 +85,7 @@ def build_solar_hub_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
             default=defaults.get(CONF_BATTERY_POWER_REVERSED, False),
         ): BooleanSelectorBuilder().build(),
 
-        VolOptional(
-            CONF_BATTERY_SOC_SENSOR,
-            description={"suggested_value": defaults.get(CONF_BATTERY_SOC_SENSOR)},
-        ): selector.EntitySelector(
+        _opt_entity_key(CONF_BATTERY_SOC_SENSOR, defaults): selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 multiple=False,
