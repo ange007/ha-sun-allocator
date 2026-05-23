@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
 - Prevented recursive `sensor.sun_allocator_power_distribution` state writes by deferring and coalescing dispatcher-driven updates onto the next loop tick.
 - Prevented overdue debounce reruns from re-entering allocator processing in the same event-loop stack.
 - Restored missing English and Ukrainian advanced-settings translations for inverter self-consumption and device allocation strategy.
+- Fixed options-flow device removal so deleted devices are reloaded out of the integration before being removed from the Home Assistant device registry, avoiding double-remove errors on current HA releases.
+- Updated device integration tests to match non-blocking service dispatch and the current MPPT excess-power model.
 
 ## 1.1.0 - 2026-05-10
 
