@@ -198,7 +198,7 @@ async def _filter_device(hass, entry_data, device, now):
         off_requested = tracker.get("off_requested", False) if tracker is not None else False
         if is_device_on and not off_requested:
             try:
-                command_sent = await async_turn_off_entity(hass, relay_entity, blocking=True)
+                command_sent = await async_turn_off_entity(hass, relay_entity, blocking=False)
                 if tracker is not None:
                     tracker["off_requested"] = bool(command_sent)
             except Exception as exc:

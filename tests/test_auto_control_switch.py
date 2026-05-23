@@ -241,7 +241,7 @@ async def test_turn_off_can_turn_device_off_immediately():
     mock_turn_off_entity.assert_awaited_once_with(
         hass,
         "switch.dev1",
-        blocking=True,
+        blocking=False,
     )
     assert entry_data["device_on_state"]["dev1"] is False
     assert "dev1" not in entry_data.get("manual_overrides", {})

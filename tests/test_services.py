@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.setup import async_setup_component
 
 from conftest import create_test_config_entry
 from tests.const import MOCK_CONFIG
@@ -20,6 +21,7 @@ from custom_components.sun_allocator.const import (
     DOMAIN_SWITCH,
     DOMAIN_SELECT,
 )
+from custom_components.sun_allocator.core.entity_control import async_turn_off_entity
 
 
 @pytest.mark.asyncio
@@ -126,3 +128,26 @@ async def test_set_relay_mode_invalid_device(hass: HomeAssistant, caplog) -> Non
 
     # Verify that an error was logged
     assert "Config entry not found for device ID invalid_device" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_async_turn_off_entity_dispatches_non_blocking_service(
+    hass: HomeAssistant,
+) -> None:
+    """Device control helper should not wait for full service execution."""
+    await async_setup_component(hass, "switch", {})
+    hass.states.async_set("switch.test_switch", "on")
+
+    with patch(
+        "homeassistant.core.ServiceRegistry.async_call",
+        new_callable=AsyncMock,
+    ) as mock_async_call:
+        sent = await async_turn_off_entity(hass, "switch.test_switch")
+
+    assert sent is True
+    mock_async_call.assert_awaited_once_with(
+        "switch",
+        "turn_off",
+        {"entity_id": "switch.test_switch"},
+        blocking=False,
+    )

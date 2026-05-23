@@ -58,13 +58,13 @@ async def _enforce_all_off(hass, config_entry, reason: str):
                 await hass.services.async_call(
                     domain, "set_hvac_mode",
                     {ATTR_ENTITY_ID: entity_id, "hvac_mode": "off"},
-                    blocking=True,
+                    blocking=False,
                 )
             else:
                 await hass.services.async_call(
                     domain, SERVICE_TURN_OFF,
                     {ATTR_ENTITY_ID: entity_id},
-                    blocking=True,
+                    blocking=False,
                 )
         except HomeAssistantError as exc:
             log_warning(f"Watchdog OFF failed for {entity_id}: {exc}")

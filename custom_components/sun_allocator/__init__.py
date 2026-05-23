@@ -229,7 +229,9 @@ def _schedule_debounce_recheck(
             log_error("Unexpected error in debounce recheck: %s", exc)
 
     if deadline_utc <= dt_util.utcnow():
-        hass.async_create_task(_debounce_recheck_callback(deadline_utc))
+        # Defer overdue rechecks by one loop tick so eager tasks do not recurse
+        # back into the allocator while the current run is still unwinding.
+        hass.loop.call_soon(hass.async_create_task, _debounce_recheck_callback(deadline_utc))
         return
 
     entry_data["unsub_debounce_recheck"] = async_track_point_in_utc_time(

@@ -127,7 +127,7 @@ This section allows you to fine-tune the behavior of the power allocation algori
 
 - **Reserve Battery Power (W)**: A certain amount of power to be reserved and not used by the allocator. This is useful if you want to ensure your battery is charging with a minimum power.
 - **Inverter Self-Consumption (W)**: The amount of power the inverter itself consumes for its operation. This value is subtracted from the available solar power, providing a more accurate calculation of the real excess power. You can find this value in your inverter's datasheet or measure it.
-- **Proportional Allocation Strategy**: Defines how power is allocated to multiple proportional devices.
+- **Device Allocation Strategy**: Defines how power is allocated to multiple proportional devices.
   - **Fill one by one**: The highest priority device is allocated as much power as it needs, then the next device gets power from what is left, and so on.
   - **Distribute evenly**: The available power is distributed among all active proportional devices based on their `Max Expected (W)`.
 - **Min Inverter Voltage**: The minimum voltage required for the inverter to operate.

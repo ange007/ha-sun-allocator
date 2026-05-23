@@ -10,6 +10,9 @@ from custom_components.sun_allocator.sensor.sensors.current_max_power import (
     SunAllocatorCurrentMaxPowerSensor,
 )
 from custom_components.sun_allocator.sensor.sensors.excess import SunAllocatorExcessSensor
+from custom_components.sun_allocator.sensor.sensors.power_distribution import (
+    SunAllocatorPowerDistributionSensor,
+)
 
 
 def _build_sensor_config():
@@ -191,3 +194,72 @@ def test_current_max_sensor_exposes_flat_legacy_mppt_aliases():
     assert attrs["pv2_voltage"] == 37.5
     assert attrs["pv2_current"] == 6.4
     assert attrs["pv2_current_max_power"] == 310.0
+
+
+def test_power_distribution_dispatch_updates_cached_state_without_force_refresh():
+    """Dispatcher updates should defer writes to the next loop tick."""
+    hass = MagicMock(spec=HomeAssistant)
+    hass.loop = MagicMock()
+    hass.data = {
+        DOMAIN: {
+            "test_entry": {
+                "config": {"devices": []},
+                "device_status": {},
+                "device_filter_reasons": {},
+                "power_distribution": {
+                    "total_power": 500.0,
+                    "remaining_power": 150.0,
+                    "allocated_power": 350.0,
+                    "allocation": {},
+                },
+            }
+        }
+    }
+    sensor = SunAllocatorPowerDistributionSensor(hass, "test_entry", 1)
+    sensor.async_write_ha_state = MagicMock()
+    sensor.async_schedule_update_ha_state = MagicMock()
+
+    sensor._handle_dispatch_update()
+
+    assert sensor.native_value == 350.0
+    assert sensor.extra_state_attributes["allocated_power"] == 350.0
+    sensor.async_write_ha_state.assert_not_called()
+    sensor.async_schedule_update_ha_state.assert_not_called()
+    hass.loop.call_soon.assert_called_once()
+
+    flush_callback = hass.loop.call_soon.call_args.args[0]
+    flush_callback()
+
+    sensor.async_write_ha_state.assert_called_once_with()
+
+
+def test_power_distribution_dispatch_coalesces_multiple_updates_until_flush():
+    """Repeated dispatcher signals before the scheduled flush should collapse into one write."""
+    hass = MagicMock(spec=HomeAssistant)
+    hass.loop = MagicMock()
+    hass.data = {
+        DOMAIN: {
+            "test_entry": {
+                "config": {"devices": []},
+                "device_status": {},
+                "device_filter_reasons": {},
+                "power_distribution": {
+                    "total_power": 500.0,
+                    "remaining_power": 150.0,
+                    "allocated_power": 350.0,
+                    "allocation": {},
+                },
+            }
+        }
+    }
+    sensor = SunAllocatorPowerDistributionSensor(hass, "test_entry", 1)
+    sensor.async_write_ha_state = MagicMock()
+
+    sensor._handle_dispatch_update()
+    sensor._handle_dispatch_update()
+
+    hass.loop.call_soon.assert_called_once()
+    flush_callback = hass.loop.call_soon.call_args.args[0]
+    flush_callback()
+
+    sensor.async_write_ha_state.assert_called_once_with()

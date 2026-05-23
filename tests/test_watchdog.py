@@ -116,7 +116,7 @@ async def test_watchdog_enforces_off_on_stale_sensor(
 
         # Assert that turn_off was called
         mock_async_call.assert_called_once_with(
-            "switch", "turn_off", {"entity_id": "switch.test_switch"}, blocking=True
+            "switch", "turn_off", {"entity_id": "switch.test_switch"}, blocking=False
         )
 
         # Manually update state since we're mocking
@@ -171,7 +171,7 @@ async def test_watchdog_resets_on_sensor_update(
 
         # Assert that _enforce_all_off was called
         mock_async_call.assert_called_once_with(
-            "switch", "turn_off", {"entity_id": "switch.test_switch"}, blocking=True
+            "switch", "turn_off", {"entity_id": "switch.test_switch"}, blocking=False
         )
         hass.states.async_set("switch.test_switch", "off")
         assert hass.states.get("switch.test_switch").state == "off"

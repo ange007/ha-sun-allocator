@@ -52,6 +52,8 @@ from custom_components.sun_allocator.const import (
     
     # Advanced settings
     CONF_RESERVE_BATTERY_POWER,
+    CONF_INVERTER_SELF_CONSUMPTION,
+    CONF_DEVICE_ALLOCATION_STRATEGY,
     CONF_MIN_INVERTER_VOLTAGE,
     CONF_RAMP_UP_STEP,
     CONF_RAMP_DOWN_STEP,
@@ -304,6 +306,38 @@ def test_translation_keys_match():
     missing_in_uk = config_en - config_uk
     assert len(missing_in_uk) == 0, \
         f"Keys in EN but missing in UK: {missing_in_uk}"
+
+
+def test_options_advanced_settings_field_translations():
+    """Test that options advanced-settings fields include translated extra control parameters."""
+    base_path = Path("custom_components/sun_allocator/translations")
+
+    required_fields = [
+        CONF_RESERVE_BATTERY_POWER,
+        CONF_INVERTER_SELF_CONSUMPTION,
+        CONF_DEVICE_ALLOCATION_STRATEGY,
+        CONF_MIN_INVERTER_VOLTAGE,
+        CONF_RAMP_UP_STEP,
+        CONF_RAMP_DOWN_STEP,
+        CONF_RAMP_DEADBAND,
+        CONF_HYSTERESIS_W,
+    ]
+
+    for lang in ["en", "uk"]:
+        file_path = base_path / f"{lang}.json"
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        step_data = (
+            data.get("options", {})
+            .get("step", {})
+            .get(STEP_ADVANCED_SETTINGS, {})
+            .get("data", {})
+        )
+
+        for field in required_fields:
+            assert field in step_data, \
+                f"{lang}.json missing options advanced-settings field '{field}'"
 
 
 def test_panel_configuration_options():

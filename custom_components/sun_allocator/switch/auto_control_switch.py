@@ -87,7 +87,7 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
             return
 
         try:
-            await async_turn_off_entity(self._hass, relay_entity, blocking=True)
+            await async_turn_off_entity(self._hass, relay_entity, blocking=False)
         except Exception as exc:
             log_error(
                 "Failed to force turn off %s when disabling auto-control: %s",

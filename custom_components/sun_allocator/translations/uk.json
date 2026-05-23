@@ -355,6 +355,8 @@
         "description": "Налаштуйте розширені параметри MPPT та керування",
         "data": {
           "reserve_battery_power": "Резерв потужності батареї (Вт)",
+          "inverter_self_consumption": "Власне споживання інвертора (Вт)",
+          "device_allocation_strategy": "Стратегія розподілу потужності",
           "curve_factor_k": "Коефіцієнт кривої I-V (k)",
           "efficiency_correction_factor": "Коефіцієнт корекції ефективності",
           "min_inverter_voltage": "Мінімальна напруга інвертора (В)",

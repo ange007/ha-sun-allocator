@@ -37,6 +37,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
     _attr_should_poll = False
     _attr_native_unit_of_measurement = UnitOfPower.WATT
     _unsub: Any = None
+    _pending_dispatch_write: bool = False
 
     def _get_default_attributes(self) -> Dict[str, Any]:
         """Return the default attributes for the sensor."""
@@ -78,7 +79,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
         """Return the cached state (updated via async_update)."""
         return self._state
 
-    async def async_update(self) -> None:
+    def _refresh_state(self) -> None:
         """Compute and cache the sensor state and attributes."""
         try:
             data = self._hass.data.get(DOMAIN, {}).get(self._entry_id, {})
@@ -210,18 +211,36 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             log_debug("PowerDistribution sensor error: %s", exc)
             journal_event("power_distribution_error", {"error": str(exc)})
 
+    async def async_update(self) -> None:
+        """Compute and cache the sensor state and attributes."""
+        self._refresh_state()
+
+    @callback
+    def _handle_dispatch_update(self, *_: Any) -> None:
+        """Coalesce dispatcher bursts and write state on the next loop tick."""
+        self._refresh_state()
+        if self._pending_dispatch_write:
+            return
+
+        self._pending_dispatch_write = True
+
+        @callback
+        def _flush_dispatch_write() -> None:
+            self._pending_dispatch_write = False
+            self._refresh_state()
+            self.async_write_ha_state()
+
+        self._hass.loop.call_soon(_flush_dispatch_write)
+
 
     async def async_added_to_hass(self):
         """Handle entity which will be added."""
         await super().async_added_to_hass()
 
-        @callback
-        def _update(*_):
-            """Schedule a state refresh when dispatcher fires."""
-            self.async_schedule_update_ha_state(True)
-
         self._unsub = async_dispatcher_connect(
-            self._hass, f"{SIGNAL_POWER_DISTRIBUTION_UPDATED}_{self._entry_id}", _update
+            self._hass,
+            f"{SIGNAL_POWER_DISTRIBUTION_UPDATED}_{self._entry_id}",
+            self._handle_dispatch_update,
         )
         await self.async_update()
 
