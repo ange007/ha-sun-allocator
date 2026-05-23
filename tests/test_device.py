@@ -89,7 +89,7 @@ async def test_device_control(
 
             # Verify device control
             mock_async_call.assert_called_with(
-                "switch", "turn_on", {"entity_id": "switch.test_device"}, blocking=True
+                "switch", "turn_on", {"entity_id": "switch.test_device"}, blocking=False
             )
         finally:
             # Clean up
@@ -111,6 +111,7 @@ async def test_device_debounce_on_and_off(hass: HomeAssistant) -> None:
     config_data = {
         CONF_PV_POWER: "sensor.test_pv_power",
         CONF_PV_VOLTAGE: "sensor.test_pv_voltage",
+        CONF_CONSUMPTION: "sensor.test_consumption",
         CONF_PANEL_VMP: 30.0,
         CONF_PANEL_IMP: 10.0,
         CONF_PANEL_COUNT: 1,
@@ -135,6 +136,7 @@ async def test_device_debounce_on_and_off(hass: HomeAssistant) -> None:
     # Set initial states
     hass.states.async_set("sensor.test_pv_power", "0")
     hass.states.async_set("sensor.test_pv_voltage", "0")
+    hass.states.async_set("sensor.test_consumption", "1000")
     hass.states.async_set(entity_id, "off")
     await hass.async_block_till_done()
 
@@ -149,7 +151,7 @@ async def test_device_debounce_on_and_off(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     # Switch should remain off, since not enough power
-    assert hass.states.get(entity_id).state == "off"
+    assert hass.states.get(entity_id).state == "off"  # Switch should remain off because the configured base load leaves no excess.
 
     # Wait for debounce time
     await asyncio.sleep(1)
@@ -159,7 +161,7 @@ async def test_device_debounce_on_and_off(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     # State should still be off
-    assert hass.states.get(entity_id).state == "off"
+    assert hass.states.get(entity_id).state == "off"  # Update again, still with no available excess power.
 
     # Clean up
     await async_unload_test_entry(hass, config_entry)

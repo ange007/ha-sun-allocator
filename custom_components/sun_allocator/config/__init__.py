@@ -333,21 +333,24 @@ class SunAllocatorOptionsFlowHandler(
         """Confirmation step for device removal."""
         if user_input is not None:
             if user_input.get("confirm"):
-                # Remove device from device registry
-                device_registry = dr.async_get(self.hass)
-                device_to_remove = device_registry.async_get_device(
-                    identifiers={(DOMAIN, self._device_to_remove)}
-                )
-                if device_to_remove:
-                    device_registry.async_remove_device(device_to_remove.id)
-
                 self._devices = [
                     d
                     for d in self._devices
                     if d[CONF_DEVICE_ID] != self._device_to_remove
                 ]
                 log_debug("--- CONFIG FLOW REMOVE ---: Saving %d devices.", len(self._devices))
+                entry_data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id)
+                if isinstance(entry_data, dict):
+                    entry_data["_skip_reload"] = True
                 self._persist_config()
+                await self.hass.config_entries.async_reload(self._config_entry.entry_id)
+
+                device_registry = dr.async_get(self.hass)
+                device_to_remove = device_registry.async_get_device(
+                    identifiers={(DOMAIN, self._device_to_remove)}
+                )
+                if device_to_remove:
+                    device_registry.async_remove_device(device_to_remove.id)
                 return await self.async_step_manage_devices()
 
             return await self.async_step_manage_devices()
