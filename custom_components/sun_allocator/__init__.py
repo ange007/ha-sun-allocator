@@ -231,10 +231,8 @@ async def _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor
                 excess_power = float(initial_state.state)
                 entry_data["watchdog_last_seen"] = dt_util.utcnow()
                 entry_data["watchdog_alerted"] = False
-                lock = entry_data.setdefault("_process_lock", asyncio.Lock())
-                if not lock.locked():
-                    async with lock:
-                        await process_excess_power(hass, config_entry, excess_power)
+                async with entry_data.setdefault("_process_lock", asyncio.Lock()):
+                    await process_excess_power(hass, config_entry, excess_power)
                 log_info(
                     "Initial pass successful for %s: %sW",
                     initial_state.entity_id,
@@ -398,11 +396,7 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             return
         entry_data["watchdog_last_seen"] = dt_util.utcnow()
         entry_data["watchdog_alerted"] = False
-        lock = entry_data["_process_lock"]
-        if lock.locked():
-            log_debug("process_excess_power already running, skipping duplicate call")
-            return
-        async with lock:
+        async with entry_data["_process_lock"]:
             try:
                 excess_power = float(new_state.state)
                 await process_excess_power(hass, config_entry, excess_power)

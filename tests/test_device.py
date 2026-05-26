@@ -9,7 +9,6 @@ from homeassistant.setup import async_setup_component
 
 from conftest import create_test_config_entry, create_test_device
 
-from custom_components.sun_allocator import async_setup_entry, async_unload_entry
 from custom_components.sun_allocator.const import (
     CONF_DEVICES,
     CONF_CONSUMPTION,
@@ -58,9 +57,10 @@ async def test_device_control(
 
     await hass.async_block_till_done()  # Ensure states are processed
 
+    config_entry.add_to_hass(hass)
     with patch("homeassistant.core.ServiceRegistry.async_call") as mock_async_call:
         try:
-            assert await async_setup_entry(hass, config_entry)
+            assert await hass.config_entries.async_setup(config_entry.entry_id)
             await hass.async_block_till_done()
 
             # Trigger an update by changing a source sensor's state
@@ -78,7 +78,7 @@ async def test_device_control(
             )
         finally:
             # Clean up
-            await async_unload_entry(hass, config_entry)
+            await hass.config_entries.async_unload(config_entry.entry_id)
 
 
 @pytest.mark.asyncio
@@ -123,7 +123,7 @@ async def test_device_debounce_on_and_off(hass: HomeAssistant) -> None:
     hass.states.async_set(entity_id, "off")
     await hass.async_block_till_done()
 
-    await async_setup_entry(hass, config_entry)
+    await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
     # Initial state: No power, switch should be off
@@ -148,5 +148,5 @@ async def test_device_debounce_on_and_off(hass: HomeAssistant) -> None:
     assert hass.states.get(entity_id).state == "off"
 
     # Clean up
-    await async_unload_entry(hass, config_entry)
+    await hass.config_entries.async_unload(config_entry.entry_id)
     await hass.async_block_till_done()
