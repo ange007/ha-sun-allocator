@@ -190,7 +190,6 @@ def get_sensor_state_safely(
     """
     if not entity_id:
         log_debug(f"{sensor_name} entity ID not configured")
-        journal_event("sensor_missing_entity_id", {"sensor": sensor_name})
         return 0.0, False
 
     state = hass.states.get(entity_id)
@@ -198,28 +197,17 @@ def get_sensor_state_safely(
         log_debug(
             f"{sensor_name} sensor '{entity_id}' not found - normal during startup"
         )
-        journal_event(
-            "sensor_not_found", {"sensor": sensor_name, "entity_id": entity_id}
-        )
         return 0.0, False
 
     if state.state in (None, STATE_UNKNOWN, STATE_UNAVAILABLE):
         log_debug(
             f"{sensor_name} sensor '{entity_id}' is {state.state} - waiting for it"
         )
-        journal_event(
-            "sensor_unavailable",
-            {"sensor": sensor_name, "entity_id": entity_id, "state": state.state},
-        )
         return 0.0, False
 
     try:
         value = float(state.state)
         log_debug(f"{sensor_name}: {value}")
-        journal_event(
-            "sensor_value",
-            {"sensor": sensor_name, "entity_id": entity_id, "value": value},
-        )
         return value, True
     except (ValueError, TypeError):
         log_error(f"Could not convert {sensor_name} state '{state.state}' to float")
@@ -263,9 +251,6 @@ def get_temperature_compensation_data(
     pmax_coef = config.get(CONF_TEMP_COEFFICIENT_PMAX, DEFAULT_PMAX_COEFFICIENT) / 100
 
     log_debug(f"Temperature compensation: {temp_value}°C, diff: {temp_diff}°C")
-    journal_event(
-        "temperature_compensation", {"temp_value": temp_value, "temp_diff": temp_diff}
-    )
 
     return {
         "temp_diff": temp_diff,

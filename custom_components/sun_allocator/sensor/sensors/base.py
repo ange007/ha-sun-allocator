@@ -85,7 +85,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         self._attr_translation_key = name
         self._attr_unique_id = f"{entry_id}_{unique_id_suffix}"
         self._attr_native_unit_of_measurement = unit_of_measurement
-        self.entity_id = f"sensor.{DOMAIN}_{entry_id}_{unique_id_suffix}"
+        self.entity_id = f"sensor.{DOMAIN}_{entry_id}_{unique_id_suffix}".lower()
 
         self._mppt_inputs: List[Dict[str, Any]] = _build_mppt_inputs_from_config(config)
         self._consumption = config.get(CONF_CONSUMPTION)
