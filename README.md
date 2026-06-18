@@ -27,6 +27,11 @@
 - **Auto-control toggle switch** per device — flip auto-control on/off at runtime without reconfiguring.
 - **Turn off on auto-control disable** — optionally send a turn-off command to a device when its auto-control switch is disabled.
 - **Battery SOC gating** — optionally block new device starts until the battery reaches a configured charge level (% per device, with hysteresis to prevent rapid cycling).
+- **Battery charge priority** (`battery_sharing_soc`) — below a configurable SOC threshold the battery takes absolute charge priority; above it the configured watt-reserve applies and surplus reaches your devices. Set to 0 to disable.
+- **Per-device actual power sensor** — feed a device's real power draw back to the allocator for a more accurate remaining-power budget; below an `idle` threshold the device reports `idle` instead of `active`.
+- **Max on-time per day** — cap a device's total daily runtime; it is turned off and blocked once the budget is hit.
+- **Usable-condition template** — gate a device with an arbitrary Jinja template (e.g. tank temperature) on top of its schedule.
+- **Simulation mode** (debug-only) — enable `DEBUG` logging for `custom_components.sun_allocator` to unlock a hidden test mode that substitutes fixed PV readings so allocation can be verified without sunlight.
 - **Easy configuration through Home Assistant UI** - no YAML editing required.
 
 ## Installation

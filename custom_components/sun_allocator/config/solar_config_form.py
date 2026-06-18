@@ -11,6 +11,7 @@ import voluptuous as vol
 from ..config.ui_helpers import (
     SelectSelectorBuilder,
     BooleanSelectorBuilder,
+    NumberSelectorBuilder,
     float_field,
 )
 
@@ -28,6 +29,7 @@ from ..const import (
     CONF_BATTERY_POWER,
     CONF_BATTERY_POWER_REVERSED,
     CONF_BATTERY_SOC_SENSOR,
+    CONF_BATTERY_SHARING_SOC,
     MPPT_MAX_COUNT,
     PANEL_CONFIG_SERIES,
     PANEL_CONFIG_PARALLEL,
@@ -92,6 +94,13 @@ def build_solar_hub_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
                 filter=[{"device_class": ["battery"]}],
             )
         ),
+
+        # Share surplus above this SOC: below it the battery takes absolute
+        # charge priority (reserve forced to unlimited). 0 = disabled.
+        VolOptional(
+            CONF_BATTERY_SHARING_SOC,
+            default=defaults.get(CONF_BATTERY_SHARING_SOC, 0),
+        ): NumberSelectorBuilder(0, 100, 1, unit="%").build(),
     })
 
 

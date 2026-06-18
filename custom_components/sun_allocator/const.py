@@ -48,6 +48,10 @@ CONF_DEVICE_MIN_EXPECTED_W = "min_expected_w"
 CONF_DEVICE_MAX_EXPECTED_W = "max_expected_w"
 CONF_DEVICE_DEBOUNCE_TIME = "debounce_time"
 CONF_DEVICE_PRIORITY = "priority"
+CONF_DEVICE_ACTUAL_POWER_SENSOR = "actual_power_sensor"
+CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W = "actual_power_threshold_w"
+CONF_DEVICE_CHECK_USABLE_TEMPLATE = "check_usable_template"
+CONF_DEVICE_MAX_ON_TIME_PER_DAY = "max_on_time_per_day"
 
 # Scheduling constants
 CONF_DEVICE_SCHEDULE_MODE = "schedule_mode"
@@ -74,6 +78,20 @@ CONF_EFFICIENCY_CORRECTION_FACTOR = "efficiency_correction_factor"
 CONF_BATTERY_SOC_SENSOR = "battery_soc_sensor"
 CONF_DEVICE_MIN_BATTERY_SOC = "min_battery_soc"
 CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE = "turn_off_on_auto_control_disable"
+# SOC threshold below which the battery takes absolute charge priority
+# (reserve becomes unlimited → all charge protected). 0 = disabled.
+CONF_BATTERY_SHARING_SOC = "battery_sharing_soc"
+
+# Simulation / debug mode constants
+CONF_SIM_ENABLED = "sim_enabled"
+CONF_SIM_PV_POWER = "sim_pv_power"
+CONF_SIM_PV_VOLTAGE = "sim_pv_voltage"
+CONF_SIM_CONSUMPTION = "sim_consumption"
+CONF_SIM_BATTERY_POWER = "sim_battery_power"
+CONF_SIM_BATTERY_SOC = "sim_battery_soc"
+CONF_SIM_OVERRIDE_CONSUMPTION = "sim_override_consumption"
+CONF_SIM_OVERRIDE_BATTERY_POWER = "sim_override_battery_power"
+CONF_SIM_OVERRIDE_BATTERY_SOC = "sim_override_battery_soc"
 
 # Temperature compensation constants
 CONF_TEMPERATURE_COMPENSATION_ENABLED = "temperature_compensation_enabled"
@@ -87,6 +105,12 @@ DEFAULT_STARTUP_GRACE_PERIOD = 90
 DEFAULT_DEBOUNCE_TIME = 15
 DEFAULT_HYSTERESIS_W = 40.0
 DEFAULT_BATTERY_SOC_HYSTERESIS = 2.0
+DEFAULT_ACTUAL_POWER_THRESHOLD_W = 10.0
+DEFAULT_SIM_PV_POWER = 300.0
+DEFAULT_SIM_PV_VOLTAGE = 35.0
+DEFAULT_SIM_CONSUMPTION = 200.0
+DEFAULT_SIM_BATTERY_POWER = 100.0
+DEFAULT_SIM_BATTERY_SOC = 50.0
 
 # Internal MPPT algorithm constants (not user-configurable)
 INTERNAL_CURVE_FACTOR_K = 0.2
@@ -163,6 +187,7 @@ STEP_TEMPERATURE_COMPENSATION = "temperature_compensation"
 STEP_ADVANCED_SETTINGS = "advanced_settings"
 STEP_CONFIRM_REMOVE = "confirm_remove"
 STEP_MPPT_INPUT = "mppt_input"
+STEP_SIMULATION = "simulation"
 
 # Configuration flow actions
 ACTION_ADD = "add"
@@ -171,6 +196,7 @@ ACTION_EDIT = "edit"
 ACTION_REMOVE = "remove"
 ACTION_SETTINGS = "settings"
 ACTION_MANAGE_DEVICES = "manage_devices"
+ACTION_SIMULATION = "simulation"
 ACTION_FINISH = "finish"
 ACTION_BACK = "back"
 

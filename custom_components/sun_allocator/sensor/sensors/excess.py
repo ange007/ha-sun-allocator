@@ -19,6 +19,8 @@ from ...const import (
     CONF_BATTERY_POWER_REVERSED,
     CONF_CONSUMPTION,
     CONF_BATTERY_POWER,
+    CONF_BATTERY_SOC_SENSOR,
+    CONF_BATTERY_SHARING_SOC,
     CONF_RESERVE_BATTERY_POWER,
     CONF_INVERTER_SELF_CONSUMPTION,
     CONF_PANEL_VMP,
@@ -66,8 +68,10 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         """Calculate excess power summed across all configured MPPT trackers."""
         consumption = sensor_values.get(CONF_CONSUMPTION, 0)
         battery_power = sensor_values.get(CONF_BATTERY_POWER, 0)
+        battery_soc = sensor_values.get(CONF_BATTERY_SOC_SENSOR)
         battery_power_reversed = self._config.get(CONF_BATTERY_POWER_REVERSED, False)
         configured_reserve = self._config.get(CONF_RESERVE_BATTERY_POWER, 0)
+        sharing_soc = self._config.get(CONF_BATTERY_SHARING_SOC, 0)
         inverter_self_consumption = self._config.get(
             CONF_INVERTER_SELF_CONSUMPTION, 0
         )
@@ -159,6 +163,8 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             relative_voltage=aggregate_relative_voltage,
             energy_harvesting_possible=any_harvesting,
             untapped_power_override=total_untapped,
+            battery_soc=battery_soc,
+            sharing_soc=sharing_soc,
         )
 
         usage = calculate_usage_percentage(total_pv_power, total_cmp)

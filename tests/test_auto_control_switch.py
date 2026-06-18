@@ -8,7 +8,9 @@ from custom_components.sun_allocator.const import (
     DOMAIN,
     CONF_DEVICES,
     CONF_DEVICE_ID,
+    CONF_DEVICE_ENTITY,
     CONF_AUTO_CONTROL_ENABLED,
+    CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
 )
 from custom_components.sun_allocator.switch import async_setup_entry
 from custom_components.sun_allocator.switch.auto_control_switch import (
@@ -90,6 +92,57 @@ async def test_turn_off_persists_to_config_without_reload():
     hass.config_entries.async_update_entry.assert_called_once()
     new_data = hass.config_entries.async_update_entry.call_args.kwargs["data"]
     assert new_data[CONF_DEVICES][0][CONF_AUTO_CONTROL_ENABLED] is False
+
+
+@pytest.mark.asyncio
+async def test_turn_off_dispatches_command_when_flag_enabled():
+    """turn_off_on_auto_control_disable=True → an explicit turn-off command is sent."""
+    hass = _make_hass()
+    devices = [{
+        CONF_DEVICE_ID: "dev1",
+        CONF_DEVICE_ENTITY: "switch.heater",
+        CONF_AUTO_CONTROL_ENABLED: True,
+        CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE: True,
+    }]
+    hass.data[DOMAIN]["entry_x"] = {}
+    hass.config_entries.async_get_entry.return_value = MagicMock(data={CONF_DEVICES: devices})
+
+    sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
+    sw.async_write_ha_state = MagicMock()
+
+    with patch(
+        "custom_components.sun_allocator.switch.auto_control_switch.turn_off_entity",
+        new_callable=AsyncMock,
+    ) as mock_off:
+        await sw.async_turn_off()
+
+    mock_off.assert_awaited_once()
+    assert mock_off.await_args.args[1] == "switch.heater"
+
+
+@pytest.mark.asyncio
+async def test_turn_off_does_not_dispatch_when_flag_disabled():
+    """Default (flag off) → device is left in its current state, no command sent."""
+    hass = _make_hass()
+    devices = [{
+        CONF_DEVICE_ID: "dev1",
+        CONF_DEVICE_ENTITY: "switch.heater",
+        CONF_AUTO_CONTROL_ENABLED: True,
+        CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE: False,
+    }]
+    hass.data[DOMAIN]["entry_x"] = {}
+    hass.config_entries.async_get_entry.return_value = MagicMock(data={CONF_DEVICES: devices})
+
+    sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
+    sw.async_write_ha_state = MagicMock()
+
+    with patch(
+        "custom_components.sun_allocator.switch.auto_control_switch.turn_off_entity",
+        new_callable=AsyncMock,
+    ) as mock_off:
+        await sw.async_turn_off()
+
+    mock_off.assert_not_awaited()
 
 
 @pytest.mark.asyncio

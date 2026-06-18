@@ -12,7 +12,8 @@
           "temperature_compensation_enabled": "Увімкнути температурну компенсацію",
           "consumption": "Датчик споживання",
           "battery_power": "Датчик потужності батареї",
-          "battery_soc_sensor": "Датчик рівня заряду батареї (SOC)"
+          "battery_soc_sensor": "Датчик рівня заряду батареї (SOC)",
+          "battery_sharing_soc": "Ділитись надлишком вище SOC (%)"
         }
       },
       "mppt_input": {
@@ -46,7 +47,8 @@
           "temperature_compensation_enabled": "Увімкнути температурну компенсацію",
           "consumption": "Датчик споживання",
           "battery_power": "Датчик потужності батареї",
-          "battery_soc_sensor": "Датчик рівня заряду батареї (SOC)"
+          "battery_soc_sensor": "Датчик рівня заряду батареї (SOC)",
+          "battery_sharing_soc": "Ділитись надлишком вище SOC (%)"
         }
       },
       "manage_devices": {
@@ -88,6 +90,10 @@
           "auto_control_enabled": "Увімкнути автоматичне керування",
           "turn_off_on_auto_control_disable": "Вимкнути при відключенні автоматичного керування",
           "min_battery_soc": "Мінімальний рівень заряду батареї (%)",
+          "actual_power_sensor": "Датчик фактичного споживання",
+          "actual_power_threshold_w": "Поріг активного споживання (Вт)",
+          "max_on_time_per_day": "Макс. час роботи на добу (хв)",
+          "check_usable_template": "Шаблон умови придатності",
           "min_excess_power": "Мінімальна надлишкова потужність",
           "min_expected_w": "Мінімальне очікуване навантаження (Вт)",
           "max_expected_w": "Максимальне очікуване навантаження (Вт)",
@@ -196,7 +202,9 @@
           "battery_power_reversed": "Інвертувати значення потужності батареї",
           "temperature_compensation_enabled": "Увімкнути температурну компенсацію",
           "consumption": "Датчик споживання",
-          "battery_power": "Датчик потужності батареї"
+          "battery_power": "Датчик потужності батареї",
+          "battery_soc_sensor": "Датчик рівня заряду батареї (SOC)",
+          "battery_sharing_soc": "Ділитись надлишком вище SOC (%)"
         }
       },
       "mppt_input": {
@@ -297,14 +305,28 @@
         "description": "Налаштуйте розширені параметри MPPT та керування",
         "data": {
           "reserve_battery_power": "Резерв потужності батареї (Вт)",
-          "curve_factor_k": "Коефіцієнт кривої I-V (k)",
-          "efficiency_correction_factor": "Коефіцієнт корекції ефективності",
+          "inverter_self_consumption": "Власне споживання інвертора (Вт)",
+          "device_allocation_strategy": "Стратегія розподілу потужності",
           "min_inverter_voltage": "Мінімальна напруга інвертора (В)",
           "ramp_up_step": "Крок наростання (% за такт)",
           "ramp_down_step": "Крок спадання (% за такт)",
           "ramp_deadband": "Зона нечутливості (%)",
-          "default_min_start_w": "Мінімальна потужність за замовчуванням (Вт)",
           "hysteresis_w": "Гістерезис (Вт)"
+        }
+      },
+      "simulation": {
+        "title": "Режим симуляції [DEBUG]",
+        "description": "Замінити всі показники датчиків фіксованими значеннями для тестування без сонця та заліза. Відображається лише коли увімкнено журналювання налагодження.",
+        "data": {
+          "sim_enabled": "Увімкнути симуляцію",
+          "sim_pv_power": "Симульована потужність PV (Вт)",
+          "sim_pv_voltage": "Симульована напруга PV (В)",
+          "sim_override_consumption": "Замінити сенсор споживання",
+          "sim_consumption": "Симульоване споживання будинку (Вт)",
+          "sim_override_battery_power": "Замінити сенсор потужності батареї",
+          "sim_battery_power": "Симульована потужність батареї (Вт, від'ємне = розряд)",
+          "sim_override_battery_soc": "Замінити сенсор SOC батареї",
+          "sim_battery_soc": "Симульований SOC батареї (%)"
         }
       }
     },
@@ -351,7 +373,8 @@
     "main_menu_action": {
       "options": {
         "settings": "Налаштування",
-        "manage_devices": "Керувати пристроями"
+        "manage_devices": "Керувати пристроями",
+        "simulation": "Симуляція [DEBUG]"
       }
     },
     "manage_devices_action": {
@@ -714,6 +737,7 @@
         "name": "Статус",
         "state": {
           "active": "Активний",
+          "idle": "Очікування",
           "insufficient_power": "Недостатньо потужності",
           "debouncing_on": "Очікування (вмикання)",
           "debouncing_off": "Очікування (вимикання)",

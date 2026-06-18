@@ -141,3 +141,78 @@ def test_calculate_excess_power_parallel():
         configured_reserve=100,
     )
     assert excess == 2460  # 3000 - 500 - 40
+
+
+def test_soc_modulated_reserve_disabled_is_regression_safe():
+    """sharing_soc=0 (default) must behave identically to the un-modulated path."""
+    base_kwargs = dict(
+        current_max_power=1500,
+        pv_power=1000,
+        battery_power=300,  # charging
+        consumption=None,
+        configured_reserve=100,
+    )
+    # Budget mode reference: untapped 500 + (300-100) = 700
+    assert calculate_excess_power_mppt(**base_kwargs) == 700
+    # sharing_soc=0 → unchanged regardless of SOC value
+    assert calculate_excess_power_mppt(**base_kwargs, sharing_soc=0, battery_soc=10) == 700
+    assert calculate_excess_power_mppt(**base_kwargs, sharing_soc=0, battery_soc=95) == 700
+
+
+def test_soc_below_threshold_forces_priority_mode():
+    """SOC below sharing_soc → reserve forced to 0 (battery keeps all charge)."""
+    # configured_reserve=100 would normally release (300-100)=200 from battery.
+    # Below threshold, effective_reserve=0 → priority mode → battery_excess=0.
+    excess = calculate_excess_power_mppt(
+        current_max_power=1500,
+        pv_power=1000,          # untapped = 500
+        battery_power=300,      # charging
+        consumption=None,
+        configured_reserve=100,
+        sharing_soc=70,
+        battery_soc=50,         # < 70 → priority
+    )
+    # Priority mode: excess = untapped only = 500 (battery hoards its 300W)
+    assert excess == 500
+
+
+def test_soc_at_or_above_threshold_uses_configured_reserve():
+    """SOC at/above sharing_soc → configured reserve applies (sharing)."""
+    excess = calculate_excess_power_mppt(
+        current_max_power=1500,
+        pv_power=1000,          # untapped = 500
+        battery_power=300,      # charging
+        consumption=None,
+        configured_reserve=100,
+        sharing_soc=70,
+        battery_soc=80,         # >= 70 → budget mode
+    )
+    # Budget mode: untapped 500 + (300-100) = 700
+    assert excess == 700
+
+    # Exactly at threshold also shares (>=).
+    excess_at = calculate_excess_power_mppt(
+        current_max_power=1500,
+        pv_power=1000,
+        battery_power=300,
+        consumption=None,
+        configured_reserve=100,
+        sharing_soc=70,
+        battery_soc=70,
+    )
+    assert excess_at == 700
+
+
+def test_soc_none_with_threshold_falls_open_to_configured_reserve():
+    """sharing_soc>0 but SOC unavailable (None) → use configured reserve (fail-open)."""
+    excess = calculate_excess_power_mppt(
+        current_max_power=1500,
+        pv_power=1000,
+        battery_power=300,
+        consumption=None,
+        configured_reserve=100,
+        sharing_soc=70,
+        battery_soc=None,       # sensor missing/unavailable
+    )
+    # Fail-open: behaves as plain budget mode → 700
+    assert excess == 700

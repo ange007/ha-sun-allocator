@@ -82,9 +82,11 @@ DEVICE_STATUS_FILTERED = "filtered"
 DEVICE_STATUS_TRYING_ON = "trying_on"
 DEVICE_STATUS_TRYING_OFF = "trying_off"
 DEVICE_STATUS_FAILED_ON = "failed_on"
+DEVICE_STATUS_IDLE = "idle"
 
 DEVICE_STATUS_OPTIONS = [
     DEVICE_STATUS_ACTIVE,
+    DEVICE_STATUS_IDLE,
     DEVICE_STATUS_INSUFFICIENT_POWER,
     DEVICE_STATUS_DEBOUNCING_ON,
     DEVICE_STATUS_DEBOUNCING_OFF,
@@ -130,13 +132,24 @@ def _resolve_device_status(
         key = DEVICE_STATUS_TRYING_ON if retry_expected_on else DEVICE_STATUS_TRYING_OFF
         return key, []
 
-    is_active = allocated_power > 0
     is_candidate = st.get("is_active_candidate")
     refusals: list[str] = st.get("refusal_reasons") or []
 
-    if is_active:
-        key = DEVICE_STATUS_DEBOUNCING_OFF if is_candidate is False else DEVICE_STATUS_ACTIVE
-        return key, refusals if key == DEVICE_STATUS_DEBOUNCING_OFF else []
+    # "Enabled" = relay commanded ON this cycle. Standard devices set this flag
+    # explicitly; for device types that don't (e.g. custom/proportional), fall back
+    # to the allocated-power signal so behaviour is unchanged for them.
+    is_enabled = st.get("is_enabled")
+    if is_enabled is None:
+        is_enabled = allocated_power > 0
+
+    if is_enabled:
+        if is_candidate is False:
+            return DEVICE_STATUS_DEBOUNCING_OFF, refusals
+        # Relay on but the actual-power sensor confirms draw below threshold →
+        # idle (e.g. boiler reached target temp, element cycled off).
+        if st.get("is_idle"):
+            return DEVICE_STATUS_IDLE, []
+        return DEVICE_STATUS_ACTIVE, []
 
     if refusals:
         return DEVICE_STATUS_FILTERED, refusals
@@ -342,6 +355,8 @@ def calculate_excess_power_mppt(
     relative_voltage: float | None = None,
     energy_harvesting_possible: bool | None = None,
     untapped_power_override: float | None = None,
+    battery_soc: float | None = None,
+    sharing_soc: float = 0.0,
     **kwargs,  # Catch-all for future compatibility
 ) -> float:
     """
@@ -353,6 +368,12 @@ def calculate_excess_power_mppt(
     sum of per-tracker untapped power (with each tracker's own relative_voltage
     gating already applied). When provided, ``relative_voltage`` is bypassed for
     the untapped calculation but still used as a guard.
+
+    SOC-modulated reserve: when ``sharing_soc`` > 0 and the battery SOC is below it,
+    the configured reserve is forced to 0 (priority mode → the battery keeps all
+    charge, devices get only untapped surplus). At or above ``sharing_soc`` the
+    configured reserve applies normally (battery keeps the reserve, releases the
+    rest). ``sharing_soc`` = 0 (default) or unknown SOC → configured reserve as-is.
     """
     # 1. Discharge Guard: If the battery is discharging, there's no excess power.
     is_discharging = (battery_power > 0) if battery_power_reversed else (battery_power < 0)
@@ -382,11 +403,19 @@ def calculate_excess_power_mppt(
     if consumption is not None:
         base_loads += consumption
 
-    # 6. Calculate battery load and battery_excess
-    if configured_reserve > 0:
+    # 6. SOC-modulated reserve: below sharing_soc the battery gets absolute
+    # priority (reserve forced to 0 → all charge protected); at/above it the
+    # configured reserve applies. Disabled (sharing_soc=0) or unknown SOC → as-is.
+    if sharing_soc > 0 and battery_soc is not None and battery_soc < sharing_soc:
+        effective_reserve = 0.0
+    else:
+        effective_reserve = configured_reserve
+
+    # 7. Calculate battery load and battery_excess
+    if effective_reserve > 0:
         # Budget mode: only battery charge above reserve is load, rest is excess
-        battery_load = min(battery_charge_w, configured_reserve)
-        battery_excess = max(0, battery_charge_w - configured_reserve)
+        battery_load = min(battery_charge_w, effective_reserve)
+        battery_excess = max(0, battery_charge_w - effective_reserve)
     else:
         # Priority mode: all battery charge is load
         battery_load = battery_charge_w
@@ -404,7 +433,7 @@ def calculate_excess_power_mppt(
         # double-counting when untapped < real_excess.
         effective_untapped = max(0.0, untapped_power - inverter_self_consumption)
         real_excess = current_max_power - float(consumption) - battery_load
-        if configured_reserve > 0:
+        if effective_reserve > 0:
             excess = min(effective_untapped, max(0, real_excess)) + battery_excess
         else:
             excess = min(effective_untapped, max(0, real_excess))

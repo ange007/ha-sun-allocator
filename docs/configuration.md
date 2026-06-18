@@ -24,6 +24,8 @@ This section covers the primary sensors and the physical characteristics of your
 - **Consumption Sensor**: (Optional) The sensor that measures your total house power consumption in Watts (W). When this sensor is provided, the integration will operate in **Parallel Mode**. If not provided, it will operate in **MPPT Mode**.
 - **Battery Power Sensor**: (Optional) The sensor that measures your battery power in Watts (W). Used to determine if the battery is charging or discharging.
 - **Is Battery Power Reversed?**: (Optional) Enable this if your battery power sensor shows a positive value for discharging and a negative value for charging. By default, the integration assumes negative values for discharging and positive for charging.
+- **Battery SOC Sensor**: (Optional) The sensor that reports the battery state of charge in percent (%). Required for the per-device **Minimum Battery SOC** gate and for the **Share Surplus Above SOC** charge-priority feature below. If left empty, both SOC-based features are disabled (fail-open).
+- **Share Surplus Above SOC (%)**: (Optional, `0` = disabled) Battery charge-priority threshold. **Below** this SOC the battery takes absolute charge priority — the **Reserve Battery Power** value (see Advanced Settings) is effectively forced to unlimited, so no surplus is released to devices and the battery charges as fast as possible. **At or above** this SOC the configured **Reserve Battery Power** applies as usual: the battery keeps that many watts and the remaining surplus is shared with your devices. Requires both the **Battery SOC Sensor** and a non-zero **Reserve Battery Power** to share anything. Fail-open: if the SOC sensor is unavailable the threshold is ignored and the plain reserve applies.
 
 ### Per-MPPT Settings
 
@@ -67,11 +69,28 @@ In this section, you can add, edit, or remove the devices (loads) that you want 
 - **Device Entity**: The Home Assistant entity that represents your device.
 - **Min Expected (W)**: (Required) The minimum power in Watts the device consumes when it's on. This is used to determine if the device is actually running.
 - **Max Expected (W)**: (Required for Custom devices) The maximum power in Watts the device consumes at 100% load. This is used for proportional control.
+- **Min Excess Power (W)**: (Optional) The minimum amount of excess solar power that must be available before this device is considered for activation.
 - **Priority**: A number from 1 to 100 that determines the order in which devices are turned on. Devices with higher priority are turned on first.
 - **Debounce Time (s)**: The time in seconds the system will wait before turning a device on or off. This prevents the device from rapidly switching on and off.
 - **Min On-Time (s)**: The minimum time in seconds that the device must remain on before it can be turned off. This is useful for appliances like compressors or pumps that should not be cycled on and off rapidly. When a device is turned on, a **startup grace period** is also applied (configurable in Advanced Settings), during which the device will not be turned off even if solar power drops below the threshold.
+- **Max On Time Per Day (min)**: (Optional, `0` = unlimited) Caps the device's total runtime per calendar day. Once the budget is reached the device is turned off and blocked from starting again until the next day.
 - **Auto-Control**: Enable or disable automatic control for this device.
+- **Turn Off When Auto-Control Disabled**: (Optional) When enabled, flipping this device's auto-control switch off (or disabling auto-control in config) sends an explicit turn-off command. When disabled, the device is simply left in its current state.
 - **Enable Schedule**: Enable or disable a schedule for this device.
+
+#### Device gating (optional)
+
+These optional fields add extra conditions that must be satisfied before a device is allowed to start. They stack independently — every configured gate must pass.
+
+- **Minimum Battery SOC (%)**: Block new starts for this device until the battery reaches this charge level. Sticky hysteresis is applied over the range `[min, min + 2%]` so the device does not rapidly cycle around the threshold. Only *new* starts are gated — a device already running is never turned off by this gate. Failure behaviour depends on *why* SOC is missing:
+  - **No hub Battery SOC Sensor configured at all** → **fail-open**: the gate is ignored and the device may start. A per-device minimum is meaningless without a sensor, so a forgotten hub config never permanently blocks a device.
+  - **Sensor configured but currently unavailable** → **fail-safe**: the start is blocked (and stays sticky until the sensor returns and SOC climbs back above the recovery threshold). The charge cannot be verified, so the battery is protected. This is the opposite of the hub-level sharing feature, because here the gate exists to protect the battery.
+- **Usable Condition Template**: (Optional) An arbitrary Jinja2 template evaluated to gate device usability beyond the schedule — e.g. `{{ states('sensor.tank_temp') | float < 60 }}` to only run a heater while the tank is below 60 °C. The device is considered usable only when the template renders to a truthy value (`true`, `on`, `1`, etc.).
+
+#### Actual power feedback (optional)
+
+- **Actual Power Sensor**: (Optional) A sensor reporting the device's real power draw in Watts. When set, the allocator subtracts the device's *actual* consumption from the remaining power budget instead of its declared **Min Expected (W)**, giving a more accurate budget for the rest of the devices.
+- **Active Power Threshold (W)**: (Default 10 W) Used together with the **Actual Power Sensor**. A device commanded ON but drawing **below** this threshold reports the `idle` status instead of `active` (e.g. a boiler that has reached temperature and stopped drawing power).
 
 ### Schedule Settings
 The **Schedule Mode** field selects how the device's allowed control window is determined:
@@ -96,7 +115,7 @@ Once a device is added, the integration creates the following entities for it:
 |---|---|
 | `sensor.sun_allocator_<device>_power` | Allocated power in W. |
 | `sensor.sun_allocator_<device>_power_percent` | Proportional duty %. |
-| `sensor.sun_allocator_<device>_device_status` | ENUM status (`active`, `insufficient_power`, `debouncing_on`/`off`, `auto_control_off`, `manual_override`, `filtered`, `trying_on`/`off`, `failed_on`). |
+| `sensor.sun_allocator_<device>_device_status` | ENUM status (`active`, `idle`, `insufficient_power`, `debouncing_on`/`off`, `auto_control_off`, `manual_override`, `filtered`, `trying_on`/`off`, `failed_on`). `idle` = commanded ON but drawing below the **Active Power Threshold**. |
 | `switch.sun_allocator_<device>_auto_control` | Runtime auto-control toggle. State persists across restarts. |
 
 Unique IDs follow the pattern `<entry_id>_<device_id>_<suffix>` and are stable across reloads.
@@ -117,7 +136,7 @@ This feature allows the integration to adjust the solar panel's maximum power po
 
 This section allows you to fine-tune the behavior of the power allocation algorithm.
 
-- **Reserve Battery Power (W)**: A certain amount of power to be reserved and not used by the allocator. This is useful if you want to ensure your battery is charging with a minimum power.
+- **Reserve Battery Power (W)**: A certain amount of power to be reserved and not used by the allocator. This is useful if you want to ensure your battery is charging with a minimum power. This reserve is the watt-budget modulated by the hub-level **Share Surplus Above SOC** threshold: below the threshold it is effectively unlimited (battery first), at/above it the configured value applies and the rest is shared with devices.
 - **Inverter Self-Consumption (W)**: The amount of power the inverter itself consumes for its operation. This value is subtracted from the available solar power, providing a more accurate calculation of the real excess power. You can find this value in your inverter's datasheet or measure it.
 - **Proportional Allocation Strategy**: Defines how power is allocated to multiple proportional devices.
   - **Fill one by one**: The highest priority device is allocated as much power as it needs, then the next device gets power from what is left, and so on.
@@ -128,3 +147,25 @@ This section allows you to fine-tune the behavior of the power allocation algori
 - **Ramp Deadband (%)**: A small range around the target power where no changes are made, to prevent oscillations.
 - **Hysteresis (W)**: A power buffer to prevent devices from turning on and off too frequently. A device will turn on at its configured minimum power and turn off at `Minimum Power - Hysteresis`.
 - **Startup Grace Period (s)**: The time in seconds after a device is first turned on during which it will not be turned off, even if solar power drops below the threshold. This gives devices time to ramp up to their operating power before the allocator can decide to turn them off.
+
+---
+
+## Simulation Mode (debug)
+
+A hidden **Simulation [DEBUG]** entry appears in the configuration menu **only when debug logging is enabled** for the integration. Add the following to your `configuration.yaml` and restart to reveal it:
+
+```yaml
+logger:
+  logs:
+    custom_components.sun_allocator: debug
+```
+
+Simulation lets you verify the allocation logic without sunlight or real hardware by substituting fixed values for the live sensors:
+
+- **Enable Simulation**: Master switch. While on, the PV power/voltage readings are always replaced with the simulated values below.
+- **Simulated PV Power (W)** / **Simulated PV Voltage (V)**: The synthetic panel readings (total PV power is split evenly across all configured MPPT trackers).
+- **Override Consumption Sensor** + **Simulated House Consumption (W)**: When the override toggle is on, the consumption value is forced to the simulated number; when off, the real consumption sensor is read as usual.
+- **Override Battery Power Sensor** + **Simulated Battery Power (W)**: Same pattern for battery power (negative = discharging).
+- **Override Battery SOC Sensor** + **Simulated Battery SOC (%)**: Same pattern for SOC — useful for exercising the **Share Surplus Above SOC** and per-device **Minimum Battery SOC** features.
+
+Each override toggle is independent: leave a toggle off to keep reading the corresponding real sensor while simulating the rest. Turn **Enable Simulation** off (or raise the log level back above debug) to return to normal operation.

@@ -216,6 +216,41 @@ async def _setup_esphome_mode_tracking(hass, config_entry, entry_data):
             await set_mode_for_entity(hass, _entity_id, _desired)
 
 
+async def _queue_process_excess_power(hass, config_entry, entry_data, excess_power):
+    """Serialize allocator runs and coalesce overlapping triggers.
+
+    The excess sensor can fire several state changes in quick succession (e.g. a
+    PV ramp). Running ``process_excess_power`` for every one wastes work — each run
+    is O(devices) — and only the latest value matters. So:
+
+    - If no run is in progress, run now, then drain any value that arrived while we
+      ran (looping until none is pending). The loop's body re-acquires the lock each
+      iteration so a concurrently-arriving trigger is handled correctly.
+    - If a run is already in progress, just record the latest value in
+      ``_pending_excess`` and return; the active runner will pick it up. Rapid bursts
+      thus collapse into a single trailing run on the most recent value.
+    """
+    lock = entry_data.setdefault("_process_lock", asyncio.Lock())
+    if lock.locked():
+        entry_data["_pending_excess"] = excess_power
+        return
+
+    next_excess = excess_power
+    while True:
+        async with lock:
+            try:
+                await process_excess_power(hass, config_entry, next_excess)
+            except (ValueError, TypeError) as exc:
+                log_error(f"Error processing excess power value: {exc}")
+            except Exception as exc:
+                log_error(f"Unexpected error in process_excess_power: {exc}")
+        # No await between lock release and this pop → no trigger can interleave here.
+        pending = entry_data.pop("_pending_excess", None)
+        if pending is None:
+            return
+        next_excess = pending
+
+
 async def _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor_id):
     """Perform an initial pass to set the state of the devices."""
     for i in range(3):
@@ -231,8 +266,9 @@ async def _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor
                 excess_power = float(initial_state.state)
                 entry_data["watchdog_last_seen"] = dt_util.utcnow()
                 entry_data["watchdog_alerted"] = False
-                async with entry_data.setdefault("_process_lock", asyncio.Lock()):
-                    await process_excess_power(hass, config_entry, excess_power)
+                await _queue_process_excess_power(
+                    hass, config_entry, entry_data, excess_power
+                )
                 log_info(
                     "Initial pass successful for %s: %sW",
                     initial_state.entity_id,
@@ -396,14 +432,12 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
             return
         entry_data["watchdog_last_seen"] = dt_util.utcnow()
         entry_data["watchdog_alerted"] = False
-        async with entry_data["_process_lock"]:
-            try:
-                excess_power = float(new_state.state)
-                await process_excess_power(hass, config_entry, excess_power)
-            except (ValueError, TypeError) as exc:
-                log_error(f"Error processing excess power value: {exc}")
-            except Exception as exc:
-                log_error(f"Unexpected error in process_excess_power: {exc}")
+        try:
+            excess_power = float(new_state.state)
+        except (ValueError, TypeError) as exc:
+            log_error(f"Error processing excess power value: {exc}")
+            return
+        await _queue_process_excess_power(hass, config_entry, entry_data, excess_power)
 
     registry = er.async_get(hass)
     excess_sensor_id = registry.async_get_entity_id(

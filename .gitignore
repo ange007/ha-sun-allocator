@@ -29,6 +29,7 @@ Thumbs.db
 
 # Environments
 .venv/
+.venv-wsl/
 venv/
 .env
 

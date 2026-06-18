@@ -12,7 +12,8 @@
           "temperature_compensation_enabled": "Enable Temperature Compensation",
           "consumption": "Consumption Sensor",
           "battery_power": "Battery Power Sensor",
-          "battery_soc_sensor": "Battery SOC Sensor"
+          "battery_soc_sensor": "Battery SOC Sensor",
+          "battery_sharing_soc": "Share Surplus Above SOC (%)"
         }
       },
       "mppt_input": {
@@ -87,6 +88,10 @@
           "auto_control_enabled": "Enable Auto Control",
           "turn_off_on_auto_control_disable": "Turn Off When Auto Control Disabled",
           "min_battery_soc": "Minimum Battery SOC (%)",
+          "actual_power_sensor": "Actual Power Sensor",
+          "actual_power_threshold_w": "Active Power Threshold (W)",
+          "max_on_time_per_day": "Max On Time Per Day (min)",
+          "check_usable_template": "Usable Condition Template",
           "min_excess_power": "Minimum Excess Power",
           "min_expected_w": "Minimum Expected Load (W)",
           "max_expected_w": "Maximum Expected Load (W)",
@@ -196,7 +201,8 @@
           "temperature_compensation_enabled": "Enable Temperature Compensation",
           "consumption": "Consumption Sensor",
           "battery_power": "Battery Power Sensor",
-          "battery_soc_sensor": "Battery SOC Sensor"
+          "battery_soc_sensor": "Battery SOC Sensor",
+          "battery_sharing_soc": "Share Surplus Above SOC (%)"
         }
       },
       "mppt_input": {
@@ -297,14 +303,28 @@
         "description": "Configure advanced MPPT and control parameters",
         "data": {
           "reserve_battery_power": "Battery Power Reserve (W)",
-          "curve_factor_k": "I-V Curve Factor (k)",
-          "efficiency_correction_factor": "Efficiency Correction Factor",
+          "inverter_self_consumption": "Inverter Self-Consumption (W)",
+          "device_allocation_strategy": "Device Allocation Strategy",
           "min_inverter_voltage": "Minimum Inverter Voltage (V)",
           "ramp_up_step": "Ramp Up Step (% per tick)",
           "ramp_down_step": "Ramp Down Step (% per tick)",
           "ramp_deadband": "Ramp Deadband (%)",
-          "default_min_start_w": "Default Min Start (W)",
           "hysteresis_w": "Hysteresis (W)"
+        }
+      },
+      "simulation": {
+        "title": "Simulation Mode [DEBUG]",
+        "description": "Override all sensor readings with fixed values for testing without sunlight or hardware. Only visible when debug logging is enabled.",
+        "data": {
+          "sim_enabled": "Enable Simulation",
+          "sim_pv_power": "Simulated PV Power (W)",
+          "sim_pv_voltage": "Simulated PV Voltage (V)",
+          "sim_override_consumption": "Override Consumption Sensor",
+          "sim_consumption": "Simulated House Consumption (W)",
+          "sim_override_battery_power": "Override Battery Power Sensor",
+          "sim_battery_power": "Simulated Battery Power (W, negative = discharging)",
+          "sim_override_battery_soc": "Override Battery SOC Sensor",
+          "sim_battery_soc": "Simulated Battery SOC (%)"
         }
       }
     },
@@ -352,7 +372,8 @@
     "main_menu_action": {
       "options": {
         "settings": "Settings",
-        "manage_devices": "Manage Devices"
+        "manage_devices": "Manage Devices",
+        "simulation": "Simulation [DEBUG]"
       }
     },
     "manage_devices_action": {
@@ -715,6 +736,7 @@
         "name": "Status",
         "state": {
           "active": "Active",
+          "idle": "Idle",
           "insufficient_power": "Insufficient power",
           "debouncing_on": "Debouncing (turning on)",
           "debouncing_off": "Debouncing (turning off)",

@@ -38,6 +38,11 @@ from ..const import (
     CONF_DEVICE_MIN_ON_TIME,
     CONF_DEVICE_MIN_BATTERY_SOC,
     CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
+    CONF_DEVICE_ACTUAL_POWER_SENSOR,
+    CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
+    DEFAULT_ACTUAL_POWER_THRESHOLD_W,
+    CONF_DEVICE_CHECK_USABLE_TEMPLATE,
+    CONF_DEVICE_MAX_ON_TIME_PER_DAY,
 )
 
 
@@ -148,6 +153,41 @@ def build_device_basic_settings_schema(defaults=None):
             default=defaults.get(CONF_DEVICE_MIN_BATTERY_SOC, 0),
         ): NumberSelectorBuilder(0, 100, 1, unit="%").build(),
 
+    }
+
+    actual_sensor_val = defaults.get(CONF_DEVICE_ACTUAL_POWER_SENSOR)
+    schema_dict[
+        Optional(
+            CONF_DEVICE_ACTUAL_POWER_SENSOR,
+            **({"default": actual_sensor_val} if actual_sensor_val else {}),
+            description={"suggested_value": actual_sensor_val},
+        )
+    ] = selector({"entity": {"domain": "sensor", "device_class": "power"}})
+
+    schema_dict[
+        Optional(
+            CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
+            default=defaults.get(CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W, DEFAULT_ACTUAL_POWER_THRESHOLD_W),
+        )
+    ] = NumberSelectorBuilder(0, 10000, 1, unit="W").build()
+
+    schema_dict[
+        Optional(
+            CONF_DEVICE_MAX_ON_TIME_PER_DAY,
+            default=defaults.get(CONF_DEVICE_MAX_ON_TIME_PER_DAY, 0),
+        )
+    ] = NumberSelectorBuilder(0, 1440, 1, unit="min").build()
+
+    usable_template_val = defaults.get(CONF_DEVICE_CHECK_USABLE_TEMPLATE)
+    schema_dict[
+        Optional(
+            CONF_DEVICE_CHECK_USABLE_TEMPLATE,
+            **({"default": usable_template_val} if usable_template_val else {}),
+            description={"suggested_value": usable_template_val},
+        )
+    ] = selector({"template": {}})
+
+    schema_dict.update({
         Required(
             CONF_DEVICE_SCHEDULE_MODE,
             default=_get_schedule_mode_default(defaults),
@@ -155,7 +195,7 @@ def build_device_basic_settings_schema(defaults=None):
             options=[SCHEDULE_MODE_DISABLED, SCHEDULE_MODE_STANDARD, SCHEDULE_MODE_HELPER],
             translation_key=CONF_DEVICE_SCHEDULE_MODE,
         ).build(),
-    }
+    })
 
     if device_type == DEVICE_TYPE_CUSTOM:
         schema_dict[

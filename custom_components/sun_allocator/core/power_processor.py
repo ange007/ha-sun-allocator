@@ -3,8 +3,10 @@
 import datetime as dt_stdlib
 import homeassistant.util.dt as dt_util
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.template import Template
 from homeassistant.const import (
     STATE_UNKNOWN,
     STATE_UNAVAILABLE,
@@ -58,7 +60,13 @@ from ..const import (
     CONF_BATTERY_SOC_SENSOR,
     CONF_DEVICE_MIN_BATTERY_SOC,
     DEFAULT_BATTERY_SOC_HYSTERESIS,
+    CONF_DEVICE_ACTUAL_POWER_SENSOR,
+    CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
+    DEFAULT_ACTUAL_POWER_THRESHOLD_W,
+    CONF_DEVICE_CHECK_USABLE_TEMPLATE,
+    CONF_DEVICE_MAX_ON_TIME_PER_DAY,
 )
+from ..sensor.utils import get_sensor_state_safely
 
 def _initialize_run(entry_data, devices_config):
     """Initialize states for the processing run."""
@@ -93,26 +101,152 @@ def _read_battery_soc(hass, cfg) -> float | None:
         return None
 
 
-def _apply_battery_soc_gate(device, is_active, prev_on, battery_soc, status_entry) -> bool:
+def _apply_battery_soc_gate(
+    device, device_id, is_active, prev_on, battery_soc, soc_configured, gate_state, status_entry
+) -> bool:
     """Block new device starts when battery SOC is below per-device threshold.
 
-    Running devices (prev_on=True) are never turned off by SOC gating.
+    Only NEW starts are gated; running devices (prev_on=True) are never turned off.
+
+    Hysteresis (sticky-state band ``[min, min + DEFAULT_BATTERY_SOC_HYSTERESIS]``):
+      - allow a start at SOC >= ``min`` while the device has not been blocked;
+      - once SOC drops below ``min`` the device is marked blocked and must climb back
+        to ``min + hysteresis`` (the recovery threshold) before it may start again.
+      ``gate_state`` (a per-entry dict keyed by device_id) carries the blocked flag
+      between cycles, since ``status_entry`` is rebuilt each run.
+
+    Fail behaviour when the device has a ``min_battery_soc`` requirement:
+      - no hub SOC sensor configured at all → fail-open (requirement is meaningless
+        without a sensor; don't permanently block a device over a forgotten config).
+      - sensor configured but currently unavailable → fail-safe (block; we cannot
+        verify charge, so don't risk draining the battery).
     """
-    if not is_active or prev_on or battery_soc is None:
+    if prev_on:
+        # Running device: never gated, and clear any sticky block.
+        gate_state.pop(device_id, None)
         return is_active
+    if not is_active:
+        return is_active  # not a start candidate this cycle — leave block state as-is
+
     min_soc = float(device.get(CONF_DEVICE_MIN_BATTERY_SOC, 0) or 0)
     if min_soc <= 0:
-        return is_active
-    # Require SOC >= threshold + hysteresis to start; avoids rapid toggling near threshold.
-    if battery_soc < min_soc + DEFAULT_BATTERY_SOC_HYSTERESIS:
+        gate_state.pop(device_id, None)
+        return is_active  # device opted out of SOC gating
+
+    if not soc_configured:
+        return is_active  # fail-open: per-device min with no hub sensor
+
+    if battery_soc is None:
+        # Sensor configured but unavailable → fail-safe block, and stay sticky so a
+        # full recovery is required once the sensor returns.
+        gate_state[device_id] = True
         status_entry["refusal_reasons"].append(
-            f"Battery SOC {battery_soc:.1f}% < required {min_soc + DEFAULT_BATTERY_SOC_HYSTERESIS:.1f}%"
-            f" (min {min_soc:.1f}% + {DEFAULT_BATTERY_SOC_HYSTERESIS:.1f}% hysteresis)"
+            "Battery SOC sensor unavailable — start blocked (fail-safe)"
         )
         log_debug(
             f"[soc_gate] Blocking start for {device.get(CONF_DEVICE_NAME)}: "
-            f"SOC={battery_soc:.1f}% < {min_soc + DEFAULT_BATTERY_SOC_HYSTERESIS:.1f}%"
+            "SOC sensor unavailable (fail-safe)"
         )
+        return False
+
+    recovery = min(100.0, min_soc + DEFAULT_BATTERY_SOC_HYSTERESIS)
+    was_blocked = bool(gate_state.get(device_id))
+
+    if was_blocked and battery_soc < recovery:
+        status_entry["refusal_reasons"].append(
+            f"Battery SOC {battery_soc:.1f}% < recovery threshold {recovery:.1f}%"
+            f" (was blocked below min {min_soc:.1f}%)"
+        )
+        log_debug(
+            f"[soc_gate] Holding block for {device.get(CONF_DEVICE_NAME)}: "
+            f"SOC={battery_soc:.1f}% < recovery {recovery:.1f}%"
+        )
+        return False
+
+    if battery_soc < min_soc:
+        gate_state[device_id] = True
+        status_entry["refusal_reasons"].append(
+            f"Battery SOC {battery_soc:.1f}% < minimum {min_soc:.1f}%"
+        )
+        log_debug(
+            f"[soc_gate] Blocking start for {device.get(CONF_DEVICE_NAME)}: "
+            f"SOC={battery_soc:.1f}% < min {min_soc:.1f}%"
+        )
+        return False
+
+    # SOC at or above the applicable threshold → clear sticky block and allow.
+    gate_state.pop(device_id, None)
+    return is_active
+
+
+def _accumulate_daily_on_time(device_on_time_state, device_id, now) -> None:
+    """Fold the just-finished ON session into today's accumulated on-time.
+
+    Called when a device transitions OFF. Resets the accumulator first if the day
+    rolled over, then adds ``now - last_on_time`` for the session that just ended.
+    """
+    entry = device_on_time_state.get(device_id)
+    if not entry:
+        return
+    today = now.date()
+    if entry.get("on_time_day") != today:
+        entry["on_time_day"] = today
+        entry["on_time_accum_sec"] = 0.0
+    last_on = entry.get("last_on_time")
+    if last_on is not None:
+        entry["on_time_accum_sec"] = entry.get("on_time_accum_sec", 0.0) + max(
+            0.0, (now - last_on).total_seconds()
+        )
+
+
+def _daily_on_time_sec(device_on_time_state, device_id, now, currently_on) -> float:
+    """Return seconds the device has run today (completed sessions + current one).
+
+    Resets the per-day accumulator when the calendar day changes. ``currently_on``
+    adds the in-progress session (``now - last_on_time``).
+    """
+    entry = device_on_time_state.get(device_id, {})
+    today = now.date()
+    if entry.get("on_time_day") != today:
+        # Stale/absent day → nothing counted yet today.
+        accum = 0.0
+    else:
+        accum = entry.get("on_time_accum_sec", 0.0)
+    if currently_on:
+        last_on = entry.get("last_on_time")
+        if last_on is not None:
+            accum += max(0.0, (now - last_on).total_seconds())
+    return accum
+
+
+def _apply_max_on_time_gate(
+    device, device_id, is_active, prev_on, device_on_time_state, now, status_entry
+) -> bool:
+    """Block (and turn off) a device that has hit its daily on-time budget.
+
+    ``max_on_time_per_day`` is in minutes; 0 disables the limit. Unlike the SOC
+    gate this also forces a RUNNING device off once the budget is exhausted, mirroring
+    schedule filtering. The accumulator resets at midnight.
+    """
+    max_minutes = float(device.get(CONF_DEVICE_MAX_ON_TIME_PER_DAY, 0) or 0)
+    if max_minutes <= 0:
+        return is_active
+    on_sec = _daily_on_time_sec(device_on_time_state, device_id, now, currently_on=prev_on)
+    if on_sec >= max_minutes * 60.0:
+        status_entry["refusal_reasons"].append(
+            f"Daily on-time limit reached: {on_sec / 60.0:.0f}min >= {max_minutes:.0f}min"
+        )
+        log_debug(
+            f"[max_on_time] Blocking {device.get(CONF_DEVICE_NAME)}: "
+            f"{on_sec / 60.0:.0f}min >= {max_minutes:.0f}min today"
+        )
+        if prev_on:
+            # We force a running device off here, bypassing _apply_min_on_time's
+            # turn-off branch — so fold this session into the accumulator and clear
+            # last_on_time, otherwise the session would go uncounted and the device
+            # could immediately restart.
+            _accumulate_daily_on_time(device_on_time_state, device_id, now)
+            device_on_time_state.get(device_id, {}).pop("last_on_time", None)
         return False
     return is_active
 
@@ -140,6 +274,23 @@ async def _filter_device(hass, device, now):
         if is_entity_on(service_domain, relay_state_obj):
             await turn_off_entity(hass, relay_entity, device_name)
         return "Outside of schedule"
+
+    usable_template = device.get(CONF_DEVICE_CHECK_USABLE_TEMPLATE)
+    if usable_template:
+        try:
+            usable = Template(usable_template, hass).async_render(parse_result=True)
+        except TemplateError as exc:
+            # Broken template → fail-open (don't block a device over a typo), but warn.
+            log_warning(
+                f"Device '{device_name}': check_usable template error, treating as "
+                f"usable: {exc}"
+            )
+            usable = True
+        if not usable:
+            log_debug(f"Device '{device_name}' skipped: check_usable template is falsy.")
+            if is_entity_on(service_domain, relay_state_obj):
+                await turn_off_entity(hass, relay_entity, device_name)
+            return "Not usable (template)"
 
     return None
 
@@ -261,8 +412,67 @@ def _initialize_status_entry(hass, device):
     }
 
 
+def _startup_reserve_active(device_on_time_state, device_id, now) -> bool:
+    """True while a just-turned-on device is still inside its startup-grace window.
+
+    During this window a low actual-power reading is not yet trustworthy (the load
+    hasn't ramped up), so we hold the declared budget instead of freeing it.
+    """
+    if now is None:
+        return False
+    startup_until = device_on_time_state.get(device_id, {}).get("startup_until")
+    return startup_until is not None and now < startup_until
+
+
+def _resolve_standard_power_used(
+    hass, device, status_entry, device_on_time_state, device_id, now, device_sensor_cache,
+) -> float:
+    """Determine accounting power for an ON standard device.
+
+    Without an actual-power sensor: use ``min_expected_w`` (the original behaviour).
+    With one:
+      - reading >= threshold  → trust it (measured consumption)
+      - reading < threshold during startup grace → reserve ``min_expected_w``
+        (load not ramped yet; avoid handing its budget to the next device)
+      - reading < threshold after grace → genuinely idle: free the budget (0 W)
+        and flag ``is_idle`` so the status sensor can report it.
+    """
+    min_expected_w = float(status_entry["min_expected_w"])
+    actual_sensor = device.get(CONF_DEVICE_ACTUAL_POWER_SENSOR)
+    if not actual_sensor:
+        status_entry.pop("is_idle", None)
+        return min_expected_w
+
+    threshold = float(
+        device.get(CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W) or DEFAULT_ACTUAL_POWER_THRESHOLD_W
+    )
+    if device_sensor_cache and actual_sensor in device_sensor_cache:
+        actual_w, ok = device_sensor_cache[actual_sensor]
+    else:
+        actual_w, ok = get_sensor_state_safely(hass, actual_sensor, "Actual Power")
+
+    if not ok:
+        # Sensor unavailable — fall back to the declared estimate, no idle claim.
+        status_entry.pop("is_idle", None)
+        return min_expected_w
+
+    if actual_w >= threshold:
+        status_entry["is_idle"] = False
+        return actual_w
+
+    if _startup_reserve_active(device_on_time_state, device_id, now):
+        status_entry["is_idle"] = False
+        status_entry["reserved_w"] = min_expected_w
+        return min_expected_w
+
+    # Confirmed drawing below threshold after startup — genuinely idle.
+    status_entry["is_idle"] = True
+    return 0.0
+
+
 async def _control_standard_device(
-    hass, device, is_active, prev_on, remaining_power, cfg, status_entry, device_on_state
+    hass, device, is_active, prev_on, remaining_power, cfg, status_entry, device_on_state,
+    device_sensor_cache=None, device_on_time_state=None, now=None,
 ):
     """Control logic for a standard (on/off) device."""
     power_used = 0.0
@@ -274,6 +484,11 @@ async def _control_standard_device(
     actual_state = hass.states.get(relay_entity)
     is_actually_on = is_entity_on(service_domain, actual_state) if actual_state else False
 
+    # is_enabled = relay commanded ON this cycle. Tracked separately from allocated
+    # power so the status sensor can distinguish a powered-but-idle device (relay on,
+    # measured draw ~0) from one that simply wasn't allocated any power.
+    status_entry["is_enabled"] = bool(is_active)
+
     if is_active:
         if device_id:
             device_on_state[device_id] = True
@@ -282,7 +497,10 @@ async def _control_standard_device(
             log_debug(f"Turning on standard device {device_name} (prev_on={prev_on}, actual={actual_state.state if actual_state else 'N/A'})")
             await turn_on_entity(hass, relay_entity, hvac_mode, device_name)
 
-        power_used = status_entry["min_expected_w"]
+        power_used = _resolve_standard_power_used(
+            hass, device, status_entry, device_on_time_state or {}, device_id, now,
+            device_sensor_cache,
+        )
         status_entry.update({"allocated_w": float(power_used), "percent_target": 100.0, "percent_actual": 100.0})
     else:
         if device_id:
@@ -291,6 +509,7 @@ async def _control_standard_device(
             log_debug(f"Turning off standard device {device_name} (remaining={remaining_power}W)")
             await turn_off_entity(hass, relay_entity, device_name)
 
+        status_entry.pop("is_idle", None)
         status_entry.update({"percent_target": 0.0, "percent_actual": 0.0, "allocated_w": 0.0})
 
     return power_used, status_entry
@@ -614,6 +833,8 @@ def _apply_min_on_time(
             log_debug(f"[min_on_time] Keeping {device_id} ON (min_on_time not elapsed)")
             return True
 
+    # Fold the finished session into today's on-time budget before clearing last_on_time.
+    _accumulate_daily_on_time(device_on_time_state, device_id, now)
     device_on_time_state.setdefault(device_id, {})["last_off_time"] = now
     device_on_time_state[device_id].pop("last_on_time", None)
     device_on_time_state[device_id].pop("startup_until", None)
@@ -656,7 +877,8 @@ def _apply_startup_grace(
 
 async def _dispatch_device_control(
     hass, device, is_active, prev_on, status_entry, cfg, device_on_state,
-    strategy, proportional_allocations, remaining_power,
+    strategy, proportional_allocations, remaining_power, device_sensor_cache=None,
+    device_on_time_state=None, now=None,
 ):
     """Forward to the per-type control coroutine and return ``(power_used, status_entry)``."""
     device_id = device.get(CONF_DEVICE_ID)
@@ -664,7 +886,9 @@ async def _dispatch_device_control(
 
     if device_type == DEVICE_TYPE_STANDARD:
         return await _control_standard_device(
-            hass, device, is_active, prev_on, remaining_power, cfg, status_entry, device_on_state,
+            hass, device, is_active, prev_on, remaining_power, cfg, status_entry,
+            device_on_state, device_sensor_cache=device_sensor_cache,
+            device_on_time_state=device_on_time_state, now=now,
         )
 
     if device_type == DEVICE_TYPE_CUSTOM:
@@ -685,6 +909,7 @@ async def _dispatch_device_control(
 async def _control_one_device(
     hass, config_entry, device, *,
     cfg, entry_data, now, strategy, proportional_allocations, remaining_power, battery_soc,
+    battery_soc_configured=False, device_sensor_cache=None,
 ):
     """Run the full per-device control pipeline for one cycle.
 
@@ -748,12 +973,21 @@ async def _control_one_device(
         hass, config_entry, device, device_id, device_on_time_state, status_entry,
         is_active, prev_on_before_calc, now,
     )
-    is_active = _apply_battery_soc_gate(device, is_active, prev_on_before_calc, battery_soc, status_entry)
+    gate_state = entry_data.setdefault("battery_soc_gate_state", {})
+    is_active = _apply_battery_soc_gate(
+        device, device_id, is_active, prev_on_before_calc, battery_soc,
+        battery_soc_configured, gate_state, status_entry
+    )
+    is_active = _apply_max_on_time_gate(
+        device, device_id, is_active, prev_on_before_calc, device_on_time_state, now, status_entry
+    )
 
     log_debug(f"Control logic for {device_id}: prev_on={prev_on}, prev_on_before_calc={prev_on_before_calc}")
     power_used, _ = await _dispatch_device_control(
         hass, device, is_active, prev_on, status_entry, cfg, device_on_state,
         strategy, proportional_allocations, remaining_power,
+        device_sensor_cache=device_sensor_cache,
+        device_on_time_state=device_on_time_state, now=now,
     )
 
     if device_id and is_active != prev_on_before_calc:
@@ -785,9 +1019,19 @@ async def process_excess_power(
         device_id = device.get(CONF_DEVICE_ID)
         entry_data["device_status"][device_id] = _initialize_status_entry(hass, device)
 
+    # Pre-read all per-device sensors once per cycle to avoid redundant state
+    # lookups when multiple devices share the same entity (e.g. a shared power
+    # meter), and to give every device a consistent snapshot of the same instant.
+    device_sensor_cache: dict[str, tuple[float, bool]] = {}
+    for _dev in auto_control_devices:
+        _sensor = _dev.get(CONF_DEVICE_ACTUAL_POWER_SENSOR)
+        if _sensor and _sensor not in device_sensor_cache:
+            device_sensor_cache[_sensor] = get_sensor_state_safely(hass, _sensor, "Actual Power")
+
     remaining_power = excess_power
     strategy = cfg.get(CONF_DEVICE_ALLOCATION_STRATEGY, STRATEGY_FILL_ONE_BY_ONE)
     battery_soc = _read_battery_soc(hass, cfg)
+    battery_soc_configured = bool(cfg.get(CONF_BATTERY_SOC_SENSOR))
     proportional_allocations: dict = {}
     if strategy == STRATEGY_DISTRIBUTE_EVENLY:
         proportional_allocations = _compute_proportional_allocations(
@@ -806,6 +1050,8 @@ async def process_excess_power(
             proportional_allocations=proportional_allocations,
             remaining_power=remaining_power,
             battery_soc=battery_soc,
+            battery_soc_configured=battery_soc_configured,
+            device_sensor_cache=device_sensor_cache,
         )
         remaining_power -= power_used
         log_debug(

@@ -2,6 +2,7 @@
 
 import uuid
 import json
+import logging
 from datetime import time as dt_time
 
 import voluptuous as vol
@@ -39,8 +40,24 @@ from ..const import (
     ACTION_REMOVE,
     ACTION_SETTINGS,
     ACTION_MANAGE_DEVICES,
+    ACTION_SIMULATION,
     ACTION_BACK,
     STEP_CONFIRM_REMOVE,
+    STEP_SIMULATION,
+    CONF_SIM_ENABLED,
+    CONF_SIM_PV_POWER,
+    CONF_SIM_PV_VOLTAGE,
+    CONF_SIM_CONSUMPTION,
+    CONF_SIM_BATTERY_POWER,
+    CONF_SIM_BATTERY_SOC,
+    CONF_SIM_OVERRIDE_CONSUMPTION,
+    CONF_SIM_OVERRIDE_BATTERY_POWER,
+    CONF_SIM_OVERRIDE_BATTERY_SOC,
+    DEFAULT_SIM_PV_POWER,
+    DEFAULT_SIM_PV_VOLTAGE,
+    DEFAULT_SIM_CONSUMPTION,
+    DEFAULT_SIM_BATTERY_POWER,
+    DEFAULT_SIM_BATTERY_SOC,
 )
 
 
@@ -230,6 +247,15 @@ class SunAllocatorOptionsFlowHandler(
                 return await self.async_step_settings()
             if action == ACTION_MANAGE_DEVICES:
                 return await self.async_step_manage_devices()
+            if action == ACTION_SIMULATION:
+                return await self.async_step_simulation()
+
+        debug_active = logging.getLogger(
+            "custom_components.sun_allocator"
+        ).isEnabledFor(logging.DEBUG)
+        menu_options = [ACTION_SETTINGS, ACTION_MANAGE_DEVICES]
+        if debug_active:
+            menu_options.append(ACTION_SIMULATION)
 
         return self.async_show_form(
             step_id=STEP_MAIN_MENU,
@@ -241,7 +267,7 @@ class SunAllocatorOptionsFlowHandler(
                     ): selector(
                         {
                             "select": {
-                                "options": [ACTION_SETTINGS, ACTION_MANAGE_DEVICES],
+                                "options": menu_options,
                                 "translation_key": "main_menu_action",
                             }
                         }
@@ -250,6 +276,101 @@ class SunAllocatorOptionsFlowHandler(
             ),
             description_placeholders={"devices_count": len(self._devices)},
             errors=errors,
+        )
+
+
+    async def async_step_simulation(self, user_input=None):
+        """Debug simulation: override all sensor readings with fixed values."""
+        if user_input is not None:
+            self._solar_config[CONF_SIM_ENABLED] = user_input.get(CONF_SIM_ENABLED, False)
+            self._solar_config[CONF_SIM_PV_POWER] = float(
+                user_input.get(CONF_SIM_PV_POWER, DEFAULT_SIM_PV_POWER)
+            )
+            self._solar_config[CONF_SIM_PV_VOLTAGE] = float(
+                user_input.get(CONF_SIM_PV_VOLTAGE, DEFAULT_SIM_PV_VOLTAGE)
+            )
+            self._solar_config[CONF_SIM_OVERRIDE_CONSUMPTION] = user_input.get(
+                CONF_SIM_OVERRIDE_CONSUMPTION, False
+            )
+            self._solar_config[CONF_SIM_CONSUMPTION] = float(
+                user_input.get(CONF_SIM_CONSUMPTION, DEFAULT_SIM_CONSUMPTION)
+            )
+            self._solar_config[CONF_SIM_OVERRIDE_BATTERY_POWER] = user_input.get(
+                CONF_SIM_OVERRIDE_BATTERY_POWER, False
+            )
+            self._solar_config[CONF_SIM_BATTERY_POWER] = float(
+                user_input.get(CONF_SIM_BATTERY_POWER, DEFAULT_SIM_BATTERY_POWER)
+            )
+            self._solar_config[CONF_SIM_OVERRIDE_BATTERY_SOC] = user_input.get(
+                CONF_SIM_OVERRIDE_BATTERY_SOC, False
+            )
+            self._solar_config[CONF_SIM_BATTERY_SOC] = float(
+                user_input.get(CONF_SIM_BATTERY_SOC, DEFAULT_SIM_BATTERY_SOC)
+            )
+            self._persist_config()
+            await self.hass.config_entries.async_reload(self._config_entry.entry_id)
+            return await self.async_step_main_menu()
+
+        sim_on = self._solar_config.get(CONF_SIM_ENABLED, False)
+        return self.async_show_form(
+            step_id=STEP_SIMULATION,
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SIM_ENABLED, default=sim_on): selector(
+                        {"boolean": {}}
+                    ),
+                    vol.Optional(
+                        CONF_SIM_PV_POWER,
+                        default=self._solar_config.get(CONF_SIM_PV_POWER, DEFAULT_SIM_PV_POWER),
+                    ): selector(
+                        {"number": {"min": 0, "max": 10000, "step": 10, "unit_of_measurement": "W"}}
+                    ),
+                    vol.Optional(
+                        CONF_SIM_PV_VOLTAGE,
+                        default=self._solar_config.get(CONF_SIM_PV_VOLTAGE, DEFAULT_SIM_PV_VOLTAGE),
+                    ): selector(
+                        {"number": {"min": 0, "max": 200, "step": 0.5, "unit_of_measurement": "V"}}
+                    ),
+                    vol.Required(
+                        CONF_SIM_OVERRIDE_CONSUMPTION,
+                        default=self._solar_config.get(CONF_SIM_OVERRIDE_CONSUMPTION, False),
+                    ): selector({"boolean": {}}),
+                    vol.Optional(
+                        CONF_SIM_CONSUMPTION,
+                        default=self._solar_config.get(
+                            CONF_SIM_CONSUMPTION, DEFAULT_SIM_CONSUMPTION
+                        ),
+                    ): selector(
+                        {"number": {"min": 0, "max": 10000, "step": 10,
+                                    "unit_of_measurement": "W"}}
+                    ),
+                    vol.Required(
+                        CONF_SIM_OVERRIDE_BATTERY_POWER,
+                        default=self._solar_config.get(CONF_SIM_OVERRIDE_BATTERY_POWER, False),
+                    ): selector({"boolean": {}}),
+                    vol.Optional(
+                        CONF_SIM_BATTERY_POWER,
+                        default=self._solar_config.get(
+                            CONF_SIM_BATTERY_POWER, DEFAULT_SIM_BATTERY_POWER
+                        ),
+                    ): selector(
+                        {"number": {"min": -10000, "max": 10000, "step": 10,
+                                    "unit_of_measurement": "W"}}
+                    ),
+                    vol.Required(
+                        CONF_SIM_OVERRIDE_BATTERY_SOC,
+                        default=self._solar_config.get(CONF_SIM_OVERRIDE_BATTERY_SOC, False),
+                    ): selector({"boolean": {}}),
+                    vol.Optional(
+                        CONF_SIM_BATTERY_SOC,
+                        default=self._solar_config.get(
+                            CONF_SIM_BATTERY_SOC, DEFAULT_SIM_BATTERY_SOC
+                        ),
+                    ): selector(
+                        {"number": {"min": 0, "max": 100, "step": 1, "unit_of_measurement": "%"}}
+                    ),
+                }
+            ),
         )
 
 

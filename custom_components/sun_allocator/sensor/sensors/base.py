@@ -35,6 +35,19 @@ from ...const import (
     PANEL_CONFIG_SERIES,
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
+    CONF_BATTERY_SOC_SENSOR,
+    CONF_SIM_ENABLED,
+    CONF_SIM_PV_POWER,
+    CONF_SIM_PV_VOLTAGE,
+    CONF_SIM_CONSUMPTION,
+    CONF_SIM_BATTERY_POWER,
+    CONF_SIM_BATTERY_SOC,
+    CONF_SIM_OVERRIDE_CONSUMPTION,
+    CONF_SIM_OVERRIDE_BATTERY_POWER,
+    CONF_SIM_OVERRIDE_BATTERY_SOC,
+    DEFAULT_SIM_CONSUMPTION,
+    DEFAULT_SIM_BATTERY_POWER,
+    DEFAULT_SIM_BATTERY_SOC,
 )
 
 
@@ -90,6 +103,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         self._mppt_inputs: List[Dict[str, Any]] = _build_mppt_inputs_from_config(config)
         self._consumption = config.get(CONF_CONSUMPTION)
         self._battery_power = config.get(CONF_BATTERY_POWER)
+        self._battery_soc_sensor = config.get(CONF_BATTERY_SOC_SENSOR)
 
         self._state = 0.0
         self._attr_extra_state_attributes = self._get_default_attributes()
@@ -136,6 +150,12 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         @callback
         def _update_sensor(*_):
             """Update the sensor when underlying data changes."""
+            # Invalidate the shared snapshot so the next computation re-reads inputs.
+            # All hub sensors listen to the same entities; when one input changes,
+            # every sensor's listener fires and clears the cache before any of them
+            # recompute, so the first to recompute rebuilds the snapshot and the rest
+            # reuse it within the same event-loop burst.
+            self._invalidate_shared_snapshot()
             self.async_schedule_update_ha_state(True)
 
         setup_sensor_listeners(
@@ -168,6 +188,9 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         if self._battery_power:
             entity_ids.append(self._battery_power)
 
+        if self._battery_soc_sensor:
+            entity_ids.append(self._battery_soc_sensor)
+
         if self._config.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False):
             temp_sensor = self._config.get(CONF_TEMPERATURE_SENSOR)
             if temp_sensor:
@@ -177,7 +200,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
 
 
     def _get_sensor_values(self) -> Dict[str, Any]:
-        """Read shared sensor values (consumption, battery_power)."""
+        """Read shared sensor values (consumption, battery_power, battery_soc)."""
         consumption = 0.0
         if self._consumption:
             consumption, _ = get_sensor_state_safely(
@@ -190,14 +213,41 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
                 self._hass, self._battery_power, "Battery Power"
             )
 
+        # SOC stays None when unconfigured or unavailable so the reserve
+        # modulation fails open (configured reserve as-is) rather than to 0%.
+        battery_soc = None
+        if self._battery_soc_sensor:
+            soc_value, soc_ok = get_sensor_state_safely(
+                self._hass, self._battery_soc_sensor, "Battery SOC"
+            )
+            if soc_ok:
+                battery_soc = soc_value
+
+        if self._config.get(CONF_SIM_ENABLED):
+            if self._config.get(CONF_SIM_OVERRIDE_CONSUMPTION):
+                consumption = float(
+                    self._config.get(CONF_SIM_CONSUMPTION, DEFAULT_SIM_CONSUMPTION)
+                )
+            if self._config.get(CONF_SIM_OVERRIDE_BATTERY_POWER):
+                battery_power = float(
+                    self._config.get(CONF_SIM_BATTERY_POWER, DEFAULT_SIM_BATTERY_POWER)
+                )
+            if self._config.get(CONF_SIM_OVERRIDE_BATTERY_SOC):
+                battery_soc = float(
+                    self._config.get(CONF_SIM_BATTERY_SOC, DEFAULT_SIM_BATTERY_SOC)
+                )
+
         return {
             CONF_CONSUMPTION: consumption,
             CONF_BATTERY_POWER: battery_power,
+            CONF_BATTERY_SOC_SENSOR: battery_soc,
         }
 
 
     def _get_mppt_readings(self) -> List[Dict[str, Any]]:
         """Read per-MPPT pv_power, pv_voltage and panel parameters."""
+        if self._config.get(CONF_SIM_ENABLED):
+            return self._get_simulated_mppt_readings()
         readings: List[Dict[str, Any]] = []
         for mppt in self._mppt_inputs:
             pv_power = 0.0
@@ -220,6 +270,42 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             readings.append({
                 "pv_power": pv_power,
                 "pv_voltage": pv_voltage,
+                "panel_params": {
+                    CONF_PANEL_VMP: vmp,
+                    CONF_PANEL_IMP: imp,
+                    CONF_PANEL_VOC: voc,
+                    CONF_PANEL_ISC: isc,
+                    CONF_PANEL_COUNT: panel_count,
+                    CONF_PANEL_CONFIGURATION: mppt.get(
+                        CONF_PANEL_CONFIGURATION, PANEL_CONFIG_SERIES
+                    ),
+                },
+            })
+        return readings
+
+
+    def _get_simulated_mppt_readings(self) -> List[Dict[str, Any]]:
+        """Build synthetic MPPT readings from simulation config.
+
+        sim_pv_power is total across all MPPTs; split evenly.
+        Panel parameters come from real config so MPPT math stays correct.
+        """
+        total_power = float(self._config.get(CONF_SIM_PV_POWER, 0.0))
+        voltage = float(self._config.get(CONF_SIM_PV_VOLTAGE, 0.0))
+        inputs = self._mppt_inputs or [{}]
+        per_mppt_power = total_power / len(inputs)
+        readings: List[Dict[str, Any]] = []
+        for mppt in inputs:
+            vmp, imp, voc, isc, panel_count = get_panel_parameters_with_fallbacks(
+                mppt.get(CONF_PANEL_VMP),
+                mppt.get(CONF_PANEL_IMP),
+                mppt.get(CONF_PANEL_VOC),
+                mppt.get(CONF_PANEL_ISC),
+                mppt.get(CONF_PANEL_COUNT, 1),
+            )
+            readings.append({
+                "pv_power": per_mppt_power,
+                "pv_voltage": voltage,
                 "panel_params": {
                     CONF_PANEL_VMP: vmp,
                     CONF_PANEL_IMP: imp,
@@ -264,6 +350,46 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         return get_temperature_compensation_data(self._hass, self._config)
 
 
+    def _invalidate_shared_snapshot(self) -> None:
+        """Drop the cached input snapshot for this config entry, if present."""
+        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
+        if entry_data is not None:
+            entry_data.pop("_sensor_snapshot", None)
+
+
+    def _get_shared_snapshot(self) -> Dict[str, Any]:
+        """Return per-cycle shared input snapshot, building it once per change.
+
+        The four hub sensors (excess, max_power, current_max_power, usage_percent)
+        all derive from the same inputs (per-MPPT readings, consumption, battery,
+        algorithm config, temperature compensation). Reading and assembling those is
+        identical across the four; caching the snapshot means it is built once per
+        input change instead of four times. The cache is invalidated event-driven
+        (see ``_update_sensor``), so it never serves data older than the latest
+        state change — no time-based staleness.
+        """
+        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
+        if entry_data is None:
+            # No entry storage (e.g. during teardown) — build a throwaway snapshot.
+            return {
+                "sensor_values": self._get_sensor_values(),
+                "mppt_readings": self._get_mppt_readings(),
+                "mppt_config": self._get_mppt_config(),
+                "temp_compensation": self._get_temperature_compensation(),
+            }
+
+        snapshot = entry_data.get("_sensor_snapshot")
+        if snapshot is None:
+            snapshot = {
+                "sensor_values": self._get_sensor_values(),
+                "mppt_readings": self._get_mppt_readings(),
+                "mppt_config": self._get_mppt_config(),
+                "temp_compensation": self._get_temperature_compensation(),
+            }
+            entry_data["_sensor_snapshot"] = snapshot
+        return snapshot
+
+
     def _update_attributes(self, **kwargs) -> None:
         """Update sensor attributes."""
         self._attr_extra_state_attributes.update(kwargs)
@@ -273,16 +399,13 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
     def native_value(self) -> StateType:
         """Return the state of the sensor."""
         try:
-            sensor_values = self._get_sensor_values()
-            mppt_readings = self._get_mppt_readings()
-            mppt_config = self._get_mppt_config()
-            temp_compensation = self._get_temperature_compensation()
+            snapshot = self._get_shared_snapshot()
 
             value = self._calculate_value(
-                sensor_values=sensor_values,
-                mppt_readings=mppt_readings,
-                mppt_config=mppt_config,
-                temp_compensation=temp_compensation,
+                sensor_values=snapshot["sensor_values"],
+                mppt_readings=snapshot["mppt_readings"],
+                mppt_config=snapshot["mppt_config"],
+                temp_compensation=snapshot["temp_compensation"],
             )
 
             self._state = value

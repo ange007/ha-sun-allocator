@@ -11,6 +11,10 @@ ENABLE_AUDIT = True
 # Default timing and thresholds
 WATCHDOG_STALE_AFTER_MINUTES = 3
 WATCHDOG_PERIOD_SECONDS = 60
+# Hard cap on a single HA service call. Keeps blocking=True (needed so the
+# retry/reconciliation path knows a command completed) without letting one slow
+# or hung device stall the whole allocation loop indefinitely.
+SERVICE_CALL_TIMEOUT_SECONDS = 30
 RAMP_INTERVAL_SECONDS = 5
 RAMP_UP_STEP_DEFAULT = 10.0
 RAMP_DOWN_STEP_DEFAULT = 20.0

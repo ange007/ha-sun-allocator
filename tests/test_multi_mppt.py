@@ -13,6 +13,8 @@ import pytest
 
 from custom_components.sun_allocator.const import (
     CONF_BATTERY_POWER,
+    CONF_BATTERY_SOC_SENSOR,
+    CONF_BATTERY_SHARING_SOC,
     CONF_CONSUMPTION,
     CONF_MPPT_INPUTS,
     CONF_PANEL_CONFIGURATION,
@@ -202,6 +204,7 @@ def test_entity_ids_for_two_mppts():
     sensor._mppt_inputs = list(config[CONF_MPPT_INPUTS])
     sensor._consumption = config[CONF_CONSUMPTION]
     sensor._battery_power = None
+    sensor._battery_soc_sensor = None
 
     ids = sensor._get_entity_ids_to_listen()
     assert "sensor.mppt1_power" in ids
@@ -298,6 +301,78 @@ def test_excess_per_mppt_untapped_gating():
     # Tracker0 contributes 0 untapped (at MPP). Tracker1 contributes 200 (above MPP).
     # No consumption, no battery → excess equals total untapped.
     assert result == pytest.approx(200.0)
+
+
+# ---------------------------------------------------------------------------
+# excess.py: battery_soc + sharing_soc are wired through to the calculation
+# ---------------------------------------------------------------------------
+
+
+def test_excess_passes_soc_and_sharing_to_calculation():
+    """The sensor layer must forward battery_soc (from sensor_values) and
+    sharing_soc (from config) into calculate_excess_power_mppt — the unit math
+    is tested in test_utils; this guards the plumbing."""
+    from custom_components.sun_allocator.sensor.sensors.excess import (
+        SunAllocatorExcessSensor,
+    )
+
+    def _fake_cmp(pv_voltage, pv_power, **_kwargs):
+        debug = {
+            "energy_harvesting_possible": True,
+            "relative_voltage": 1.0,
+            "pmax": 500.0,
+            "light_factor": 1.0,
+            "voc_ratio": 1.0,
+            "calculation_reason": "at_mpp",
+            "min_system_voltage": 30.0,
+        }
+        return 500.0, debug
+
+    sensor = SunAllocatorExcessSensor.__new__(SunAllocatorExcessSensor)
+    sensor._config = {
+        CONF_CONSUMPTION: None,
+        CONF_BATTERY_POWER: None,
+        CONF_BATTERY_SHARING_SOC: 70,
+    }
+    sensor._attr_extra_state_attributes = {}
+    sensor.hass = None
+    sensor._entry_id = "x"
+
+    mppt_readings = [{
+        "pv_power": 500.0,
+        "pv_voltage": 50.0,
+        "panel_params": {
+            CONF_PANEL_VMP: 44.3,
+            CONF_PANEL_IMP: 10.05,
+            CONF_PANEL_VOC: 52.6,
+            CONF_PANEL_ISC: 10.71,
+            CONF_PANEL_COUNT: 8,
+            CONF_PANEL_CONFIGURATION: PANEL_CONFIG_SERIES,
+        },
+    }]
+
+    with patch(
+        "custom_components.sun_allocator.sensor.sensors.excess.calculate_current_max_power",
+        side_effect=_fake_cmp,
+    ), patch(
+        "custom_components.sun_allocator.sensor.sensors.excess.calculate_excess_power_mppt",
+        return_value=0.0,
+    ) as mock_calc:
+        sensor._calculate_value(
+            sensor_values={
+                CONF_CONSUMPTION: 0,
+                CONF_BATTERY_POWER: 0,
+                CONF_BATTERY_SOC_SENSOR: 55.0,
+            },
+            mppt_readings=mppt_readings,
+            mppt_config={},
+            temp_compensation=None,
+        )
+
+    mock_calc.assert_called_once()
+    kwargs = mock_calc.call_args.kwargs
+    assert kwargs["battery_soc"] == 55.0
+    assert kwargs["sharing_soc"] == 70
 
 
 # ---------------------------------------------------------------------------
