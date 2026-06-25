@@ -81,6 +81,11 @@ CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE = "turn_off_on_auto_control_disable
 # SOC threshold below which the battery takes absolute charge priority
 # (reserve becomes unlimited → all charge protected). 0 = disabled.
 CONF_BATTERY_SHARING_SOC = "battery_sharing_soc"
+# Max battery discharge (W) that does NOT block excess calculation.
+# Small oscillations ≤ this threshold are treated as neutral (battery neither
+# charges nor discharges for the purposes of excess). Default 20W absorbs typical
+# inverter self-draw jitter; 0 = strict (any discharge blocks excess).
+CONF_BATTERY_DISCHARGE_TOLERANCE_W = "battery_discharge_tolerance_w"
 
 # Simulation / debug mode constants
 CONF_SIM_ENABLED = "sim_enabled"
@@ -106,6 +111,11 @@ DEFAULT_DEBOUNCE_TIME = 15
 DEFAULT_HYSTERESIS_W = 40.0
 DEFAULT_BATTERY_SOC_HYSTERESIS = 2.0
 DEFAULT_ACTUAL_POWER_THRESHOLD_W = 10.0
+# A battery SOC reading older than this is treated as unavailable so SOC-based
+# logic follows its fail-open (sharing) / fail-safe (per-device gate) paths
+# instead of acting on stale data. SOC sensors often update only a few times/hour.
+DEFAULT_SOC_MAX_AGE_S = 1800.0
+DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W = 20.0
 DEFAULT_SIM_PV_POWER = 300.0
 DEFAULT_SIM_PV_VOLTAGE = 35.0
 DEFAULT_SIM_CONSUMPTION = 200.0

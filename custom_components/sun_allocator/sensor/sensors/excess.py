@@ -23,6 +23,8 @@ from ...const import (
     CONF_BATTERY_SHARING_SOC,
     CONF_RESERVE_BATTERY_POWER,
     CONF_INVERTER_SELF_CONSUMPTION,
+    CONF_BATTERY_DISCHARGE_TOLERANCE_W,
+    DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W,
     CONF_PANEL_VMP,
     CONF_PANEL_IMP,
     KEY_CALCULATION_REASON,
@@ -38,6 +40,13 @@ from ...const import (
 
 class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
     """Sensor for excess power (untapped potential), aggregated across MPPTs."""
+
+    # Deadband for state writes: suppress fluctuations smaller than max(absolute,
+    # relative * current_max_power). Cuts recorder/listener churn (real data showed
+    # ~37k writes/7d, mostly small jitter) without hiding meaningful changes.
+    # Transitions to/from 0 are always published.
+    _DEADBAND_W = 10.0
+    _DEADBAND_PCT = 0.015
 
     def __init__(
         self,
@@ -56,6 +65,36 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             unique_id_suffix=SENSOR_EXCESS_SUFFIX,
             unit_of_measurement=UnitOfPower.WATT,
         )
+        self._last_published_excess = None
+
+    @property
+    def native_value(self):
+        """Return the excess value and remember it as the last published value."""
+        value = super().native_value
+        self._last_published_excess = value
+        return value
+
+    def _should_skip_update(self) -> bool:
+        """Skip the write when excess moved less than the deadband (0-crossings
+        always publish)."""
+        last = getattr(self, "_last_published_excess", None)
+        if last is None:
+            return False
+        try:
+            snap = self._get_shared_snapshot()
+            new = self._calculate_value(
+                sensor_values=snap["sensor_values"],
+                mppt_readings=snap["mppt_readings"],
+                mppt_config=snap["mppt_config"],
+                temp_compensation=snap["temp_compensation"],
+            )
+        except (ValueError, TypeError, ZeroDivisionError, KeyError, AttributeError):
+            return False
+        if (new == 0) != (last == 0):
+            return False
+        cmax = self._attr_extra_state_attributes.get("current_max_power") or 0.0
+        band = max(self._DEADBAND_W, self._DEADBAND_PCT * float(cmax))
+        return abs(float(new) - float(last)) < band
 
 
     def _calculate_value(
@@ -165,6 +204,9 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             untapped_power_override=total_untapped,
             battery_soc=battery_soc,
             sharing_soc=sharing_soc,
+            battery_discharge_tolerance_w=self._config.get(
+                CONF_BATTERY_DISCHARGE_TOLERANCE_W, DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W
+            ),
         )
 
         usage = calculate_usage_percentage(total_pv_power, total_cmp)
@@ -226,4 +268,6 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
                 # During setup or teardown — safe to ignore.
                 pass
 
-        return excess
+        # Round to 1 decimal for the published state (matches pv_power/current_max_power);
+        # the raw value would otherwise surface as e.g. 159.323368872324 W.
+        return round(excess, 1)

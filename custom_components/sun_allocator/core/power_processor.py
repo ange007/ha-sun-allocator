@@ -60,13 +60,14 @@ from ..const import (
     CONF_BATTERY_SOC_SENSOR,
     CONF_DEVICE_MIN_BATTERY_SOC,
     DEFAULT_BATTERY_SOC_HYSTERESIS,
+    DEFAULT_SOC_MAX_AGE_S,
     CONF_DEVICE_ACTUAL_POWER_SENSOR,
     CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
     DEFAULT_ACTUAL_POWER_THRESHOLD_W,
     CONF_DEVICE_CHECK_USABLE_TEMPLATE,
     CONF_DEVICE_MAX_ON_TIME_PER_DAY,
 )
-from ..sensor.utils import get_sensor_state_safely
+from ..sensor.utils import get_sensor_state_safely, is_reading_stale
 
 def _initialize_run(entry_data, devices_config):
     """Initialize states for the processing run."""
@@ -94,6 +95,13 @@ def _read_battery_soc(hass, cfg) -> float | None:
         return None
     state = hass.states.get(soc_sensor)
     if not state or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        return None
+    # Stale SOC is treated as unavailable so the per-device gate fails safe.
+    if is_reading_stale(hass, soc_sensor, DEFAULT_SOC_MAX_AGE_S):
+        log_debug(
+            "Battery SOC '%s' is stale (>%ss old) — ignoring",
+            soc_sensor, int(DEFAULT_SOC_MAX_AGE_S),
+        )
         return None
     try:
         return float(state.state)

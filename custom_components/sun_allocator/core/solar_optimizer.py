@@ -14,6 +14,16 @@ from ..const import (
 # 1.18-1.25; 1.2 is a safe centroid that keeps relative_voltage math stable.
 _DEFAULT_VOC_RATIO_FALLBACK = 1.2
 
+# Back-estimate damping. Between Vmp and Voc the irradiance is back-estimated as
+# light_est = pv_power / (pmax * power_factor * eff). As the operating point moves
+# toward Voc, power_factor hits its small floor and the division explodes — a few
+# volts of noise can swing the estimate to full Pmax (observed 2.6x swings on real
+# data). Bound light_est to a multiple of the directly-measured light fraction
+# (pv_power / pmax) so a lightly-loaded panel cannot jump to full Pmax on noise.
+# ~5x corresponds to a power factor of ~0.2 typical near Voc, keeping untapped-
+# power detection while bounding the error.
+_BACKEST_LIGHT_EST_CAP = 5.0
+
 
 def calculate_current_max_power(
     pv_voltage: float,
@@ -162,9 +172,24 @@ def calculate_current_max_power(
         else:
             light_est = light_factor
 
+        # The back-estimate is ill-conditioned as the operating point approaches
+        # Voc (power_factor hits its floor and the division explodes). Bound it to
+        # a multiple of the directly-measured light fraction so a lightly-loaded
+        # panel cannot jump to full Pmax on a few volts of noise.
+        damped = False
+        if pmax > 0:
+            measured_light = max(0.01, min(1.0, pv_power / pmax))
+            capped = min(light_est, measured_light * _BACKEST_LIGHT_EST_CAP)
+            damped = capped < light_est - 1e-9
+            light_est = capped
+
         # Project to MPP at the same light level
         current_max_power = pmax * light_est * efficiency_correction_factor
-        calculation_reason = "Between Vmp and Voc (back-estimated irradiance)"
+        calculation_reason = (
+            "Between Vmp and Voc (back-estimated irradiance, damped)"
+            if damped
+            else "Between Vmp and Voc (back-estimated irradiance)"
+        )
         # Replace light_factor in debug info with the estimated irradiance
         light_factor = light_est
 
@@ -175,7 +200,13 @@ def calculate_current_max_power(
             calculation_reason, pv_power,
         )
         current_max_power = pv_power
+    # Floor: the achievable max can never be below what the panel is producing now.
     current_max_power = max(current_max_power, pv_power)
+    # Ceiling: never claim more than the physical nameplate Pmax (the I-V model and
+    # efficiency_correction_factor can otherwise overshoot it by a few %). If the
+    # panel is already producing above nameplate (cold/high-irradiance), keep that
+    # as the ceiling so the floor invariant (cmax >= pv_power) still holds.
+    current_max_power = min(current_max_power, max(pmax, pv_power))
     current_max_power = round(current_max_power, 1)
 
     # Prepare debug information

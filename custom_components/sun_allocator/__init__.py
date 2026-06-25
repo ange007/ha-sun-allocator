@@ -1,6 +1,7 @@
 """The Sun Allocator integration."""
 
 import asyncio
+import re
 from datetime import timedelta
 
 import voluptuous as vol
@@ -286,6 +287,69 @@ async def _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor
     log_warning("Failed to perform initial pass after multiple retries.")
 
 
+# Per-device entity unique_id tail: "<device_uuid>_<suffix>". Hub sensors
+# (e.g. "<entry>_excess") never match, so reconciliation can't touch them.
+_DEVICE_UID_TAIL_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    r"_(?:power_percent|power|status|auto_control)$"
+)
+
+
+def _fix_power_percent_entity_ids(hass: HomeAssistant, config_entry: ConfigType) -> None:
+    """Rename *_power_2 entities whose unique_id ends with _power_percent.
+
+    When 'Power (%)' and 'Power' slugify identically HA appends '_2' to the
+    power-percent entity_id. Fixing the translation to 'Power Percent' prevents
+    new collisions; this one-time pass cleans up existing ones.
+    """
+    registry = er.async_get(hass)
+    prefix = f"{config_entry.entry_id}_"
+    for entity in er.async_entries_for_config_entry(registry, config_entry.entry_id):
+        uid = entity.unique_id or ""
+        if not uid.startswith(prefix) or not uid.endswith("_power_percent"):
+            continue
+        if not entity.entity_id.endswith("_power_2"):
+            continue
+        new_id = entity.entity_id[: -len("_power_2")] + "_power_percent"
+        if registry.async_get(new_id):
+            log_debug("Skip rename %s → %s: target already occupied", entity.entity_id, new_id)
+            continue
+        registry.async_update_entity(entity.entity_id, new_entity_id=new_id)
+        log_info("Renamed entity %s → %s (power_percent slug fix)", entity.entity_id, new_id)
+
+
+def _cleanup_orphan_device_entities(hass: HomeAssistant, config_entry: ConfigType) -> None:
+    """Remove per-device entities whose device_id is no longer in the config.
+
+    Per-device unique_ids are ``{entry_id}_{device_id}_{suffix}`` and stable, but
+    nothing previously removed them when a device was deleted, leaving orphans in
+    the entity registry. This runs on setup/reload (a device removal reloads the
+    entry), and only touches entities matching the per-device uuid pattern whose
+    device_id is absent from the current devices list.
+    """
+    registry = er.async_get(hass)
+    current_ids = {
+        d.get(CONF_DEVICE_ID)
+        for d in config_entry.data.get(CONF_DEVICES, [])
+        if d.get(CONF_DEVICE_ID)
+    }
+    prefix = f"{config_entry.entry_id}_"
+    removed = []
+    for entity in er.async_entries_for_config_entry(registry, config_entry.entry_id):
+        uid = entity.unique_id or ""
+        if not uid.startswith(prefix):
+            continue
+        tail = uid[len(prefix):]
+        if not _DEVICE_UID_TAIL_RE.match(tail):
+            continue
+        device_id = tail[:36]  # uuid4 is exactly 36 chars; suffix follows after "_"
+        if device_id not in current_ids:
+            registry.async_remove(entity.entity_id)
+            removed.append(entity.entity_id)
+    if removed:
+        log_info("Removed %d orphaned device entities: %s", len(removed), removed)
+
+
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     """Set up SunAllocator from a config entry."""
     log_info(
@@ -329,6 +393,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
 
     unsub_ha_start = hass.bus.async_listen_once("homeassistant_started", _on_ha_started)
     entry_data["unsub_ha_start"] = unsub_ha_start
+
+    # Drop entities for devices that no longer exist (a device removal reloads the
+    # entry) before re-creating the current ones.
+    _cleanup_orphan_device_entities(hass, config_entry)
+    _fix_power_percent_entity_ids(hass, config_entry)
 
     await _setup_entity_state_listeners(hass, config_entry, entry_data)
     await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor", "switch"])

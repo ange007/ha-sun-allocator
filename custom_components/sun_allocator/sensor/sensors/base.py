@@ -8,10 +8,11 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.typing import StateType
 
-from ...core.logger import log_error, journal_event
+from ...core.logger import log_error, log_warning, journal_event
 from ...core.solar_optimizer import get_panel_parameters_with_fallbacks
 from ..utils import (
     get_sensor_state_safely,
+    is_reading_stale,
     get_temperature_compensation_data,
     create_sensor_attributes,
     setup_sensor_listeners,
@@ -26,6 +27,7 @@ from ...const import (
     CONF_PV_VOLTAGE,
     CONF_CONSUMPTION,
     CONF_BATTERY_POWER,
+    CONF_BATTERY_POWER_REVERSED,
     CONF_PANEL_VMP,
     CONF_PANEL_IMP,
     CONF_PANEL_VOC,
@@ -36,6 +38,7 @@ from ...const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
     CONF_BATTERY_SOC_SENSOR,
+    DEFAULT_SOC_MAX_AGE_S,
     CONF_SIM_ENABLED,
     CONF_SIM_PV_POWER,
     CONF_SIM_PV_VOLTAGE,
@@ -143,6 +146,15 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         return False
 
 
+    def _should_skip_update(self) -> bool:
+        """Hook: return True to suppress this state update (deadband).
+
+        Default never skips. Subclasses (e.g. the excess sensor) may override to
+        coalesce sub-threshold fluctuations and cut recorder/listener churn.
+        """
+        return False
+
+
     async def async_added_to_hass(self) -> None:
         """Register callbacks when entity is added."""
         entity_ids = self._get_entity_ids_to_listen()
@@ -156,6 +168,11 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             # recompute, so the first to recompute rebuilds the snapshot and the rest
             # reuse it within the same event-loop burst.
             self._invalidate_shared_snapshot()
+            # Optional per-sensor deadband: skip the state write (and therefore the
+            # recorder row + downstream listeners) when the value has not moved
+            # enough to matter. Default hook never skips.
+            if self._should_skip_update():
+                return
             self.async_schedule_update_ha_state(True)
 
         setup_sensor_listeners(
@@ -199,6 +216,44 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         return entity_ids
 
 
+    _BATTERY_SIGN_MIN_SAMPLES = 300
+
+    def _check_battery_sign(self, battery_power: float) -> None:
+        """Warn once if the battery power sensor never goes negative while reversal
+        is off — a sign that a charge/discharge-magnitude (non-signed) sensor was
+        chosen, which skews the excess calculation (the discharge guard can't fire)."""
+        if self._config.get(CONF_BATTERY_POWER_REVERSED):
+            return
+        entry_data = self._hass.data.get(DOMAIN, {}).get(self._entry_id)
+        if entry_data is None:
+            return
+        st = entry_data.setdefault(
+            "_battery_sign_check",
+            {"samples": 0, "saw_negative": False, "saw_positive": False, "warned": False},
+        )
+        if st["warned"]:
+            return
+        if battery_power < 0:
+            st["saw_negative"] = True
+        elif battery_power > 0:
+            st["saw_positive"] = True
+        st["samples"] += 1
+        if (
+            st["samples"] >= self._BATTERY_SIGN_MIN_SAMPLES
+            and st["saw_positive"]
+            and not st["saw_negative"]
+        ):
+            st["warned"] = True
+            log_warning(
+                "Battery power sensor '%s' has only reported values >= 0 over %d "
+                "samples. SunAllocator expects a SIGNED bidirectional sensor "
+                "(negative = discharging, with 'Reverse Battery Power Values' off). "
+                "A charge/discharge-magnitude sensor breaks the discharge guard and "
+                "skews excess. Choose a signed sensor or toggle 'Reverse Battery "
+                "Power Values'.",
+                self._battery_power, st["samples"],
+            )
+
     def _get_sensor_values(self) -> Dict[str, Any]:
         """Read shared sensor values (consumption, battery_power, battery_soc)."""
         consumption = 0.0
@@ -209,18 +264,22 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
 
         battery_power = 0.0
         if self._battery_power:
-            battery_power, _ = get_sensor_state_safely(
+            battery_power, battery_ok = get_sensor_state_safely(
                 self._hass, self._battery_power, "Battery Power"
             )
+            if battery_ok and not self._config.get(CONF_SIM_ENABLED):
+                self._check_battery_sign(battery_power)
 
-        # SOC stays None when unconfigured or unavailable so the reserve
+        # SOC stays None when unconfigured, unavailable or STALE so the reserve
         # modulation fails open (configured reserve as-is) rather than to 0%.
         battery_soc = None
         if self._battery_soc_sensor:
             soc_value, soc_ok = get_sensor_state_safely(
                 self._hass, self._battery_soc_sensor, "Battery SOC"
             )
-            if soc_ok:
+            if soc_ok and not is_reading_stale(
+                self._hass, self._battery_soc_sensor, DEFAULT_SOC_MAX_AGE_S
+            ):
                 battery_soc = soc_value
 
         if self._config.get(CONF_SIM_ENABLED):

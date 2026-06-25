@@ -21,7 +21,7 @@ This section covers the primary sensors and the physical characteristics of your
 ### Hub-level Sensors
 
 - **Number of MPPT trackers**: How many independent MPPT trackers your inverter exposes. Choose 1 for a single-tracker setup, or 2–4 for dual/multi-MPPT inverters (Deye, Growatt, Goodwe, etc.). Each tracker is configured separately on the next step.
-- **Consumption Sensor**: (Optional) The sensor that measures your total house power consumption in Watts (W). When this sensor is provided, the integration will operate in **Parallel Mode**. If not provided, it will operate in **MPPT Mode**.
+- **Consumption Sensor**: (Optional) The sensor that measures your total house power consumption in Watts (W). When provided, it *refines* the excess calculation — the available power is additionally bounded by your real measured consumption, which is more accurate. It is not a separate mode; see [Concepts → Calculate Excess Power](concepts.md#step-1--calculate-excess-power).
 - **Battery Power Sensor**: (Optional) The sensor that measures your battery power in Watts (W). Used to determine if the battery is charging or discharging.
 - **Is Battery Power Reversed?**: (Optional) Enable this if your battery power sensor shows a positive value for discharging and a negative value for charging. By default, the integration assumes negative values for discharging and positive for charging.
 - **Battery SOC Sensor**: (Optional) The sensor that reports the battery state of charge in percent (%). Required for the per-device **Minimum Battery SOC** gate and for the **Share Surplus Above SOC** charge-priority feature below. If left empty, both SOC-based features are disabled (fail-open).
@@ -119,6 +119,8 @@ Once a device is added, the integration creates the following entities for it:
 | `switch.sun_allocator_<device>_auto_control` | Runtime auto-control toggle. State persists across restarts. |
 
 Unique IDs follow the pattern `<entry_id>_<device_id>_<suffix>` and are stable across reloads.
+When a device is removed, its entities are cleaned up from the entity registry on the next
+reload (the integration reconciles entities against the current device list).
 
 ---
 
@@ -146,6 +148,7 @@ This section allows you to fine-tune the behavior of the power allocation algori
 - **Ramp Down Step (%)**: The percentage by which the power is decreased for proportional devices in each step.
 - **Ramp Deadband (%)**: A small range around the target power where no changes are made, to prevent oscillations.
 - **Hysteresis (W)**: A power buffer to prevent devices from turning on and off too frequently. A device will turn on at its configured minimum power and turn off at `Minimum Power - Hysteresis`.
+- **Battery Discharge Tolerance (W)**: (Default `20`) How much battery discharge is tolerated before excess is forced to `0`. Brief battery oscillations within this band (typical inverter self-draw jitter) are treated as neutral, so a device covered mostly by solar is not switched off by minor dips into the battery. Discharge beyond the tolerance still blocks excess. Set to `0` for strict behaviour (any discharge blocks excess); increase (e.g. `50`–`100` W) if your battery oscillates more.
 - **Startup Grace Period (s)**: The time in seconds after a device is first turned on during which it will not be turned off, even if solar power drops below the threshold. This gives devices time to ramp up to their operating power before the allocator can decide to turn them off.
 
 ---

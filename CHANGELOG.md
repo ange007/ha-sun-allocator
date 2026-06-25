@@ -8,6 +8,48 @@ is approximate. This project tracks its version in
 `custom_components/sun_allocator/manifest.json` (used by HACS) and, from
 `1.1.0` onward, in matching `vX.Y.Z` git release tags.
 
+## [1.1.1] — 2026-06-25
+
+### Added
+- **Battery discharge tolerance** (`battery_discharge_tolerance_w`, default 20 W) —
+  small battery oscillations within this band (typical inverter self-draw jitter)
+  are treated as neutral instead of forcing excess to 0. Previously *any* discharge
+  blocked the excess calculation, so a load covered mostly by solar with a few watts
+  of battery dip was wrongly reported as having no surplus. Set to 0 for the old
+  strict behaviour; increase if your battery oscillates more.
+- **Excess-power write deadband** — the excess sensor now suppresses sub-threshold
+  fluctuations (`max(10 W, 1.5% of current_max_power)`), cutting recorder/listener
+  churn while always publishing zero-crossings.
+- **Battery-sign sanity warning** — logs once if the configured battery power sensor
+  only ever reports non-negative values while reversal is off, which indicates a
+  magnitude (unsigned) sensor was chosen and would skew the excess calculation.
+
+### Changed
+- **Power-percent entity renamed** — the per-device `Power (%)` sensor is now
+  `Power Percent`, fixing the duplicate-slug collision that produced confusing
+  `_power_2` entity IDs. Existing `*_power_2` entities are migrated automatically to
+  `*_power_percent` on the first launch after upgrade.
+- **`current_max_power` clamped to nameplate Pmax** with near-Voc back-estimate
+  damping, so the estimated maximum can no longer overshoot the physical panel rating.
+- Excess sensor state is rounded to 1 decimal (previously surfaced as a long raw
+  float, e.g. `159.323368872324 W`).
+
+### Fixed
+- **Stale battery SOC** readings (older than 30 min) are now treated as unavailable,
+  so SOC-based logic follows its fail-open / fail-safe paths instead of acting on
+  stale data.
+- **Usable-condition template** is validated when the device form is saved; an
+  invalid Jinja template now surfaces a form error instead of failing silently at
+  runtime.
+- **Orphan per-device entities** are reconciled against the current device list and
+  removed from the entity registry on reload.
+- Missing device-form translation labels (`actual_power_sensor`,
+  `actual_power_threshold_w`, `max_on_time_per_day`, `check_usable_template`,
+  `min_on_time`) added in English and Ukrainian.
+- Documentation corrected: removed the inaccurate "Parallel Mode auto-activates"
+  claim — there is a single MPPT-based calculation that a consumption sensor refines;
+  removed dead `is_excess_possible` helper.
+
 ## [1.1.0] — 2026-06-18
 
 ### Added

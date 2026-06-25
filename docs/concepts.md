@@ -93,23 +93,35 @@ This section describes how SunAllocator decides which devices to turn on and how
 Each time the PV power sensor updates, SunAllocator calculates how much power is available for distribution:
 
 ```
-# MPPT Mode (no house consumption sensor — default):
-excess_power_W = estimated_max_power_at_current_voltage_W
+# Default (no house consumption sensor):
+# excess = the UNTAPPED headroom on the panel curve, minus reserves.
+untapped_W     = estimated_max_power_at_current_voltage_W - current_panel_output_W
+excess_power_W = untapped_W
               - inverter_self_consumption_W   # power the inverter itself uses (from settings)
               - reserved_battery_power_W      # power kept for battery charging (from settings)
 ```
 
-In **Parallel Mode** (when a house consumption sensor is configured), the excess is:
+`untapped_W` is positive **only when the array voltage sits above its maximum-power point
+(Vmp)** — i.e. the inverter is throttling the panels because nothing is drawing the surplus.
+SunAllocator offers devices only what the panels can actually deliver on top of the current
+output. (Near the open-circuit voltage this estimate is approximate — irradiance is not
+directly observable there — so the value is damped to avoid spikes.)
+
+There is no separate "parallel" mode. Configuring a **house consumption sensor** simply
+*refines* the same MPPT estimate by additionally bounding it with your real measured
+consumption, which is more accurate:
 
 ```
-# Parallel Mode — direct measurement of what is truly "spare":
-excess_power_W = solar_panel_output_W
-              - total_house_consumption_W     # everything the house is currently using
-              - battery_charging_power_W      # positive = charging, negative = discharging
-              - inverter_self_consumption_W   # inverter idle draw (from settings)
+# With a house consumption sensor (more accurate):
+excess_power_W = min( untapped_W,
+                      estimated_max_power_W - house_consumption_W - battery_charge_used_W )
+              + battery_surplus_above_reserve_W
 ```
 
-A negative excess means the house is drawing from the grid; no devices are turned on.
+The battery reserve is split into a protected part (`min(charge, reserve)`) and any charge
+above the reserve, which becomes available to devices. The reserve is modulated by the
+**Share Surplus Above SOC** threshold (below it the battery keeps everything). A negative or
+zero result means nothing is turned on.
 
 ### Step 2 — Filter Devices
 

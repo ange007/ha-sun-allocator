@@ -16,6 +16,8 @@ from ..const import (
     CONF_DEVICE_ALLOCATION_STRATEGY,
     STRATEGY_FILL_ONE_BY_ONE,
     STRATEGY_DISTRIBUTE_EVENLY,
+    CONF_BATTERY_DISCHARGE_TOLERANCE_W,
+    DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W,
 )
 
 
@@ -41,7 +43,7 @@ def build_advanced_config_schema(defaults=None):
                 default=defaults.get(CONF_DEVICE_ALLOCATION_STRATEGY, STRATEGY_FILL_ONE_BY_ONE),
             ): SelectSelectorBuilder(
                 options=[
-                    STRATEGY_FILL_ONE_BY_ONE, 
+                    STRATEGY_FILL_ONE_BY_ONE,
                     STRATEGY_DISTRIBUTE_EVENLY
                 ],
                 translation_key=CONF_DEVICE_ALLOCATION_STRATEGY,
@@ -68,5 +70,12 @@ def build_advanced_config_schema(defaults=None):
                 CONF_HYSTERESIS_W,
                 default=defaults.get(CONF_HYSTERESIS_W, DEFAULT_HYSTERESIS_W),
             ): int_field(0, 5000),
+
+            Required(
+                CONF_BATTERY_DISCHARGE_TOLERANCE_W,
+                default=defaults.get(
+                    CONF_BATTERY_DISCHARGE_TOLERANCE_W, DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W
+                ),
+            ): NumberSelectorBuilder(0, 500, 10).build(),
         }
     )

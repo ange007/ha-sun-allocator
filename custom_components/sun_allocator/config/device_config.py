@@ -6,7 +6,8 @@ from typing import Dict, Any, Optional
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, TemplateError
+from homeassistant.helpers.template import Template
 
 from ..core.logger import log_debug, log_info, log_error, audit_action, log_exception
 from ..utils import clean_entity_id_and_mode
@@ -34,6 +35,7 @@ from ..const import (
     CONF_DEVICE_MAX_EXPECTED_W,
     CONF_DEVICE_DEBOUNCE_TIME,
     CONF_DEVICE_MIN_ON_TIME,
+    CONF_DEVICE_CHECK_USABLE_TEMPLATE,
     CONF_DEVICE_SCHEDULE_MODE,
     SCHEDULE_MODE_STANDARD,
     SCHEDULE_MODE_HELPER,
@@ -220,6 +222,17 @@ class DeviceConfigMixin:
                 if d.get(CONF_DEVICE_ID) != device_id_to_edit and d.get(CONF_DEVICE_ENTITY) == entity_id:
                     errors[CONF_DEVICE_ENTITY] = "duplicate_entity_id"
                     break
+
+        # Render the usability template once so a broken one is rejected at save
+        # time instead of silently failing open at runtime (the runtime path still
+        # fails open as a safety net). A valid template that merely references an
+        # unavailable entity should use defaults (e.g. states('x')|float(0)).
+        usable_template = user_input.get(CONF_DEVICE_CHECK_USABLE_TEMPLATE)
+        if usable_template:
+            try:
+                Template(str(usable_template), self.hass).async_render(parse_result=True)
+            except TemplateError:
+                errors[CONF_DEVICE_CHECK_USABLE_TEMPLATE] = "invalid_check_usable_template"
 
         return errors
 

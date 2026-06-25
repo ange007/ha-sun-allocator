@@ -2,6 +2,7 @@
 
 from typing import Optional, Dict, Any, Tuple
 
+import homeassistant.util.dt as dt_util
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
@@ -231,6 +232,25 @@ def get_sensor_state_safely(
         return 0.0, False
 
 
+def is_reading_stale(
+    hass: HomeAssistant, entity_id: Optional[str], max_age_s: float
+) -> bool:
+    """Return True if the entity's last update is older than ``max_age_s`` seconds.
+
+    Returns False when there is nothing to judge (no entity, no timestamp, or
+    max_age_s <= 0) — absence/unavailability is handled by the callers' own checks.
+    """
+    if not entity_id or max_age_s <= 0:
+        return False
+    state = hass.states.get(entity_id)
+    if state is None:
+        return False
+    last = getattr(state, "last_updated", None) or getattr(state, "last_changed", None)
+    if last is None:
+        return False
+    return (dt_util.utcnow() - last).total_seconds() > max_age_s
+
+
 def get_temperature_compensation_data(
     hass: HomeAssistant, config: Dict[str, Any]
 ) -> Optional[Dict[str, float]]:
@@ -357,6 +377,7 @@ def calculate_excess_power_mppt(
     untapped_power_override: float | None = None,
     battery_soc: float | None = None,
     sharing_soc: float = 0.0,
+    battery_discharge_tolerance_w: float = 0.0,
     **kwargs,  # Catch-all for future compatibility
 ) -> float:
     """
@@ -375,17 +396,18 @@ def calculate_excess_power_mppt(
     configured reserve applies normally (battery keeps the reserve, releases the
     rest). ``sharing_soc`` = 0 (default) or unknown SOC → configured reserve as-is.
     """
-    # 1. Discharge Guard: If the battery is discharging, there's no excess power.
-    is_discharging = (battery_power > 0) if battery_power_reversed else (battery_power < 0)
-    if is_discharging:
+    # 1. Discharge Guard with tolerance.
+    # net_charge_w: positive = charging, negative = discharging (sign-convention-independent).
+    net_charge_w = (-battery_power if battery_power_reversed else battery_power)
+    if net_charge_w < -battery_discharge_tolerance_w:
         return 0.0
 
     # 2. Topology Guard: No excess if harvesting isn't possible.
     if energy_harvesting_possible is not None and not energy_harvesting_possible:
         return 0.0
 
-    # 3. Normalize battery power (positive for charging, 0 otherwise).
-    battery_charge_w = max(-battery_power if battery_power_reversed else battery_power, 0.0)
+    # 3. Normalize: positive charging load; within-tolerance discharge counted as neutral (0).
+    battery_charge_w = max(0.0, net_charge_w)
 
     # 4. Calculate untapped power based on voltage relative to MPP
     if untapped_power_override is not None:
@@ -450,11 +472,6 @@ def calculate_usage_percentage(actual_power: float, max_power: float) -> float: 
         return round((actual_power / max_power) * 100, 1)
 
     return 0.0
-
-
-def is_excess_possible(pv_voltage: float, vmp: float) -> bool:
-    """Check if excess power is possible based on voltage."""
-    return pv_voltage > vmp if pv_voltage > 0 else False
 
 
 def get_mppt_algorithm_config(config: Dict[str, Any]) -> Dict[str, float]:
