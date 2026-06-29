@@ -1,6 +1,5 @@
 from custom_components.sun_allocator.sensor.utils import (
     calculate_excess_power_mppt,
-    calculate_excess_power_parallel,
 )
 
 
@@ -104,43 +103,6 @@ def test_calculate_excess_power_mppt_without_consumption():
         configured_reserve=100,
     )
     assert excess == 0
-
-
-def test_calculate_excess_power_parallel():
-    """Test the parallel excess power calculation for both sub-modes."""
-
-    # --- Priority Mode (reserve = 0) ---
-    # Excess = PV - Consumption - Battery Charge
-    excess = calculate_excess_power_parallel(
-        pv_power=3000,
-        consumption=500,
-        battery_power=200,  # Charging
-        battery_power_reversed=False,
-        configured_reserve=0,
-    )
-    assert excess == 2300  # 3000 - 500 - 200
-
-    # --- Budgeting Mode (reserve > 0) ---
-    # Excess = PV - Consumption - Reserve
-    excess = calculate_excess_power_parallel(
-        pv_power=3000,
-        consumption=500,
-        battery_power=200,  # Charging
-        battery_power_reversed=False,
-        configured_reserve=100,
-    )
-    assert excess == 2400  # 3000 - 500 - 100
-
-    # --- Budgeting Mode with Passive Charging ---
-    # Effective reserve becomes the battery charge rate
-    excess = calculate_excess_power_parallel(
-        pv_power=3000,
-        consumption=500,
-        battery_power=40,  # Passive charging
-        battery_power_reversed=False,
-        configured_reserve=100,
-    )
-    assert excess == 2460  # 3000 - 500 - 40
 
 
 def test_soc_modulated_reserve_disabled_is_regression_safe():

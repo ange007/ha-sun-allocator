@@ -8,6 +8,9 @@ from custom_components.sun_allocator.const import (
     CONF_DEVICES,
     CONF_DEVICE_ID,
     CONF_DEVICE_SCHEDULE_MODE,
+    CONF_CALCULATION_METHOD,
+    DEFAULT_CALCULATION_METHOD,
+    CALC_METHOD_EXPORT,
     SCHEDULE_MODE_DISABLED,
     SCHEDULE_MODE_STANDARD,
     SCHEDULE_MODE_HELPER,
@@ -30,13 +33,38 @@ def _hass():
 
 @pytest.mark.asyncio
 async def test_no_op_when_no_devices_have_old_key():
-    """Migrator must not touch the entry when no device has the legacy key."""
+    """Migrator must not touch a fully-migrated entry (legacy key absent AND
+    calculation_method already present)."""
     hass = _hass()
     entry = _entry({
+        CONF_CALCULATION_METHOD: DEFAULT_CALCULATION_METHOD,
         CONF_DEVICES: [
             {CONF_DEVICE_ID: "a", CONF_DEVICE_SCHEDULE_MODE: SCHEDULE_MODE_HELPER},
-        ]
+        ],
     })
+    changed = await ConfigEntryMigrator(hass, entry).run()
+    assert changed is False
+    hass.config_entries.async_update_entry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_calculation_method_backfilled_when_missing():
+    """An entry without calculation_method gets the default backfilled."""
+    hass = _hass()
+    # Pre-Phase-B entry: no calculation_method key.
+    entry = _entry({"x": 1})
+    changed = await ConfigEntryMigrator(hass, entry).run()
+    assert changed is True
+    new_data = hass.config_entries.async_update_entry.call_args.kwargs["data"]
+    assert new_data[CONF_CALCULATION_METHOD] == DEFAULT_CALCULATION_METHOD
+    assert new_data["x"] == 1
+
+
+@pytest.mark.asyncio
+async def test_calculation_method_preserved_when_set():
+    """An explicit calculation_method is never overwritten by the backfill."""
+    hass = _hass()
+    entry = _entry({CONF_CALCULATION_METHOD: CALC_METHOD_EXPORT})
     changed = await ConfigEntryMigrator(hass, entry).run()
     assert changed is False
     hass.config_entries.async_update_entry.assert_not_called()

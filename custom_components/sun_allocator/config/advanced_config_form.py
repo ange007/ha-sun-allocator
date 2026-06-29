@@ -18,6 +18,13 @@ from ..const import (
     STRATEGY_DISTRIBUTE_EVENLY,
     CONF_BATTERY_DISCHARGE_TOLERANCE_W,
     DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W,
+    CONF_PROBE_BATTERY_ASSIST_W,
+    DEFAULT_PROBE_BATTERY_ASSIST_W,
+    CONF_CALCULATION_METHOD,
+    DEFAULT_CALCULATION_METHOD,
+    CALC_METHOD_MPPT,
+    CALC_METHOD_MPPT_PROBE,
+    CALC_METHOD_EXPORT,
 )
 
 
@@ -28,6 +35,20 @@ def build_advanced_config_schema(defaults=None):
 
     return Schema(
         {
+            Required(
+                CONF_CALCULATION_METHOD,
+                default=defaults.get(
+                    CONF_CALCULATION_METHOD, DEFAULT_CALCULATION_METHOD
+                ),
+            ): SelectSelectorBuilder(
+                options=[
+                    CALC_METHOD_MPPT,
+                    CALC_METHOD_MPPT_PROBE,
+                    CALC_METHOD_EXPORT,
+                ],
+                translation_key=CONF_CALCULATION_METHOD,
+            ).build(),
+
             Required(
                 CONF_RESERVE_BATTERY_POWER,
                 default=defaults.get(CONF_RESERVE_BATTERY_POWER, 0),
@@ -77,5 +98,12 @@ def build_advanced_config_schema(defaults=None):
                     CONF_BATTERY_DISCHARGE_TOLERANCE_W, DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W
                 ),
             ): NumberSelectorBuilder(0, 500, 10).build(),
+
+            Required(
+                CONF_PROBE_BATTERY_ASSIST_W,
+                default=defaults.get(
+                    CONF_PROBE_BATTERY_ASSIST_W, DEFAULT_PROBE_BATTERY_ASSIST_W
+                ),
+            ): NumberSelectorBuilder(0, 1000, 10).build(),
         }
     )

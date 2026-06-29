@@ -43,6 +43,8 @@ from ..const import (
     DEFAULT_ACTUAL_POWER_THRESHOLD_W,
     CONF_DEVICE_CHECK_USABLE_TEMPLATE,
     CONF_DEVICE_MAX_ON_TIME_PER_DAY,
+    CONF_DEVICE_ALLOW_PROBE,
+    DEFAULT_DEVICE_ALLOW_PROBE,
 )
 
 
@@ -146,6 +148,11 @@ def build_device_basic_settings_schema(defaults=None):
         Required(
             CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE,
             default=defaults.get(CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE, False),
+        ): selector({"boolean": {}}),
+
+        Required(
+            CONF_DEVICE_ALLOW_PROBE,
+            default=defaults.get(CONF_DEVICE_ALLOW_PROBE, DEFAULT_DEVICE_ALLOW_PROBE),
         ): selector({"boolean": {}}),
 
         Optional(

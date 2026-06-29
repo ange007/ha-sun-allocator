@@ -1,6 +1,19 @@
 """Constants for the Sun Allocator integration."""
 
+import json as _json
+import os as _os
+
 DOMAIN = "sun_allocator"
+
+def _read_version() -> str:
+    try:
+        _path = _os.path.join(_os.path.dirname(__file__), "manifest.json")
+        with open(_path, encoding="utf-8") as _f:
+            return _json.load(_f).get("version", "unknown")
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+VERSION = _read_version()
 
 # Service constants
 SERVICE_SET_RELAY_MODE = "set_relay_mode"
@@ -52,6 +65,12 @@ CONF_DEVICE_ACTUAL_POWER_SENSOR = "actual_power_sensor"
 CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W = "actual_power_threshold_w"
 CONF_DEVICE_CHECK_USABLE_TEMPLATE = "check_usable_template"
 CONF_DEVICE_MAX_ON_TIME_PER_DAY = "max_on_time_per_day"
+# Whether the mppt_probe controller may turn this device on via discovered
+# headroom. Default True. Set False for self-modulating loads (e.g. inverter AC
+# compressors) that the integration can only switch on/off — they then run only
+# on genuine (cautious) excess, never on speculative probe budget.
+CONF_DEVICE_ALLOW_PROBE = "allow_probe"
+DEFAULT_DEVICE_ALLOW_PROBE = True
 
 # Scheduling constants
 CONF_DEVICE_SCHEDULE_MODE = "schedule_mode"
@@ -87,6 +106,35 @@ CONF_BATTERY_SHARING_SOC = "battery_sharing_soc"
 # inverter self-draw jitter; 0 = strict (any discharge blocks excess).
 CONF_BATTERY_DISCHARGE_TOLERANCE_W = "battery_discharge_tolerance_w"
 
+# Excess-power calculation method (Phase B). Selects how available surplus is
+# estimated so it matches the inverter topology:
+#   mppt       — untapped-headroom from the I-V model (cautious, default). Reads
+#                potential from the panel operating point; underestimates when a
+#                hybrid inverter curtails PV (battery full + low load).
+#   mppt_probe — mppt plus active probing: when curtailment is detected and a
+#                device is waiting, gently raise its load and watch whether
+#                pv_power rises without the battery discharging → recover the
+#                curtailed (free) energy that the cautious estimate cannot see.
+#   export     — energy balance (pv − consumption − self − reserve-modulated
+#                battery_charge), for grid-export inverters where pv_power
+#                reflects true generation rather than load-following output.
+CONF_CALCULATION_METHOD = "calculation_method"
+CALC_METHOD_MPPT = "mppt"
+CALC_METHOD_MPPT_PROBE = "mppt_probe"
+CALC_METHOD_EXPORT = "export"
+
+# Optional external PV-production forecast sensor (W), e.g. Forecast.Solar /
+# Open-Meteo Solar Forecast. Surfaced as a diagnostic metric on the excess sensor
+# (forecast_potential_w / forecast_untapped_w) and — when present — used as the
+# probe's growth TARGET: the probe grows headroom toward the forecast and the
+# battery validates it (discharge before the target → back off, distrust via the
+# probe's cooldown). It also enables probe-style headroom growth in the plain
+# `mppt` method (gated by each device's allow_probe / extra_pool), so opt-out
+# devices stay on the cautious excess. It never lifts the published excess value.
+# For multi-slope arrays, combine the per-slope forecasts into one entity via a
+# template helper before selecting it here.
+CONF_PV_FORECAST_SENSOR = "pv_forecast_sensor"
+
 # Simulation / debug mode constants
 CONF_SIM_ENABLED = "sim_enabled"
 CONF_SIM_PV_POWER = "sim_pv_power"
@@ -116,6 +164,7 @@ DEFAULT_ACTUAL_POWER_THRESHOLD_W = 10.0
 # instead of acting on stale data. SOC sensors often update only a few times/hour.
 DEFAULT_SOC_MAX_AGE_S = 1800.0
 DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W = 20.0
+DEFAULT_CALCULATION_METHOD = CALC_METHOD_MPPT
 DEFAULT_SIM_PV_POWER = 300.0
 DEFAULT_SIM_PV_VOLTAGE = 35.0
 DEFAULT_SIM_CONSUMPTION = 200.0
@@ -126,12 +175,71 @@ DEFAULT_SIM_BATTERY_SOC = 50.0
 INTERNAL_CURVE_FACTOR_K = 0.2
 INTERNAL_EFFICIENCY_CORRECTION_FACTOR = 1.05
 
+# Curtailment detection (Phase B). The inverter is considered to be curtailing PV
+# (so the MPPT untapped estimate is a known underestimate) when the battery is at
+# its charge limit, not discharging, and there is meaningful headroom between the
+# estimated max and the actual output. "At its charge limit" is detected from the
+# charge POWER being near zero (battery not accepting charge), NOT from SOC: many
+# inverters cap charging below 100% (SOC limit, stop-charging voltage, preserve
+# mode), so an SOC==100 trigger would never fire on those systems.
+CURTAILMENT_UNTAPPED_MARGIN_W = 50.0  # min (current_max_power − pv_power) to flag
+# Battery charge power (W) at/below which the battery counts as "at its limit"
+# (not hungry for charge) — the precondition for curtailment / probing. Above
+# this the battery is actively absorbing and takes priority (no probe).
+BATTERY_CHARGE_IDLE_W = 50.0
+
+# Probe control loop (Phase B, mppt_probe). The probe is a scalar feedback
+# controller: it grows a "headroom" budget (extra watts beyond the cautious
+# excess) so the normal priority allocator turns on / ramps waiting devices, then
+# watches the battery. If the battery stays out of discharge the added load was
+# covered by previously-curtailed PV (free) and headroom grows further; if the
+# battery starts discharging the load was not free, so headroom backs off below
+# that level and a cooldown prevents immediate re-probing (avoids cycling on/off
+# devices like an AC compressor). All device-level cascade/partial/priority
+# behaviour is handled by the existing allocator via the inflated budget.
+PROBE_DWELL_S = 30.0            # settle time between probe steps
+PROBE_STEP_W = 100.0           # headroom increment per step (W)
+PROBE_SOC_BACKOFF_DROP = 1.0   # SOC% drop during a step that forces a back-off
+PROBE_COOLDOWN_S = 300.0       # base wait after a back-off before growing again
+# Adaptive cooldown: each consecutive back-off doubles the wait
+# (base × 2**failures), capped here, so a load that repeatedly fails to sustain
+# (e.g. an oversized AC in weak evening sun) is retried less and less instead of
+# cycling every few minutes. A sustained success resets it to the base.
+PROBE_COOLDOWN_MAX_S = 3600.0
+# Fallback hard cap on discovered headroom, used only when the panel nameplate
+# Pmax is unavailable. Normally the probe caps headroom at the live Pmax (read
+# from the excess sensor), which auto-scales to any inverter/array size.
+PROBE_MAX_HEADROOM_W = 5000.0
+# Start-gate: the probe only grows headroom for a waiting on/off device whose
+# minimum draw is within this multiple of the live untapped estimate (measured
+# while the device is OFF, where untapped is valid and does not collapse). Stops
+# the probe from blindly chasing a large load (e.g. a 700 W AC) when only ~100 W
+# of curtailed surplus exists (evening), which would just cycle it. The multiple
+# allows recovery beyond the cautious estimate (which underreports ~2×).
+PROBE_START_GATE_FACTOR = 3.0
+# How much battery discharge (W) the probe tolerates before backing off — i.e. how
+# much battery "assist" is accepted to keep a probe-driven load running. Higher =
+# a self-modulating load (e.g. an AC compressor) runs continuously with the
+# battery buffering its peaks instead of cycling. Kept separate from
+# DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W so the cautious base excess stays strict.
+CONF_PROBE_BATTERY_ASSIST_W = "probe_battery_assist_w"
+DEFAULT_PROBE_BATTERY_ASSIST_W = 100.0
+# Consecutive probe ticks the battery must be discharging (beyond the assist
+# tolerance) before the probe backs off. Prevents a single momentary dip (a
+# compressor peak or a passing cloud) from collapsing the headroom and dropping a
+# device — the deficit must be confirmed sustained first.
+PROBE_BACKOFF_STREAK = 2
+# Fraction of the remaining gap to the forecast target the probe closes per tick
+# when a forecast target is set (vs the fixed PROBE_STEP_W when probing blind).
+# Reaches the target geometrically — fast while far, gentle near it — with
+# PROBE_STEP_W as the minimum step so it never stalls just short of the target.
+PROBE_FORECAST_APPROACH_FRACTION = 0.25
+
 # Proportional strategy options
 STRATEGY_FILL_ONE_BY_ONE = "fill"
 STRATEGY_DISTRIBUTE_EVENLY = "distribute"
 
 # Other internal constants
-PASSIVE_CHARGING_THRESHOLD_W = 50
 MAX_BRIGHTNESS = 255
 MIN_BRIGHTNESS = 0
 MAX_PERCENTAGE = 100

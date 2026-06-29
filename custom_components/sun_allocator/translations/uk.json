@@ -13,7 +13,8 @@
           "consumption": "Датчик споживання",
           "battery_power": "Датчик потужності батареї",
           "battery_soc_sensor": "Датчик рівня заряду батареї (SOC)",
-          "battery_sharing_soc": "Ділитись надлишком вище SOC (%)"
+          "battery_sharing_soc": "Ділитись надлишком вище SOC (%)",
+          "pv_forecast_sensor": "Сенсор прогнозу PV (Вт, ціль для probe)"
         }
       },
       "mppt_input": {
@@ -48,7 +49,8 @@
           "consumption": "Датчик споживання",
           "battery_power": "Датчик потужності батареї",
           "battery_soc_sensor": "Датчик рівня заряду батареї (SOC)",
-          "battery_sharing_soc": "Ділитись надлишком вище SOC (%)"
+          "battery_sharing_soc": "Ділитись надлишком вище SOC (%)",
+          "pv_forecast_sensor": "Сенсор прогнозу PV (Вт, ціль для probe)"
         }
       },
       "manage_devices": {
@@ -89,6 +91,7 @@
         "data": {
           "auto_control_enabled": "Увімкнути автоматичне керування",
           "turn_off_on_auto_control_disable": "Вимкнути при відключенні автоматичного керування",
+          "allow_probe": "Дозволити активний підбір (MPPT + підбір)",
           "min_battery_soc": "Мінімальний рівень заряду батареї (%)",
           "actual_power_sensor": "Датчик фактичного споживання",
           "actual_power_threshold_w": "Поріг активного споживання (Вт)",
@@ -138,6 +141,7 @@
         "title": "Розширені налаштування",
         "description": "Налаштуйте розширені параметри MPPT та керування",
         "data": {
+          "calculation_method": "Метод розрахунку надлишку",
           "reserve_battery_power": "Резерв потужності батареї (Вт)",
           "inverter_self_consumption": "Власне споживання інвертора (Вт)",
           "device_allocation_strategy": "Стратегія розподілу потужності",
@@ -146,7 +150,8 @@
           "ramp_down_step": "Крок спадання (% за такт)",
           "ramp_deadband": "Зона нечутливості (%)",
           "hysteresis_w": "Гістерезис (Вт)",
-          "battery_discharge_tolerance_w": "Допустимий розряд батареї (Вт)"
+          "battery_discharge_tolerance_w": "Допустимий розряд батареї (Вт)",
+          "probe_battery_assist_w": "Підтримка батареї для підбору (Вт)"
         }
       },
       "confirm_remove": {
@@ -207,7 +212,8 @@
           "consumption": "Датчик споживання",
           "battery_power": "Датчик потужності батареї",
           "battery_soc_sensor": "Датчик рівня заряду батареї (SOC)",
-          "battery_sharing_soc": "Ділитись надлишком вище SOC (%)"
+          "battery_sharing_soc": "Ділитись надлишком вище SOC (%)",
+          "pv_forecast_sensor": "Сенсор прогнозу PV (Вт, ціль для probe)"
         }
       },
       "mppt_input": {
@@ -262,6 +268,7 @@
         "data": {
           "auto_control_enabled": "Увімкнути автоматичне керування",
           "turn_off_on_auto_control_disable": "Вимкнути при відключенні автоматичного керування",
+          "allow_probe": "Дозволити активний підбір (MPPT + підбір)",
           "min_battery_soc": "Мінімальний рівень заряду батареї (%)",
           "actual_power_sensor": "Датчик фактичного споживання",
           "actual_power_threshold_w": "Поріг активного споживання (Вт)",
@@ -311,6 +318,7 @@
         "title": "Розширені налаштування",
         "description": "Налаштуйте розширені параметри MPPT та керування",
         "data": {
+          "calculation_method": "Метод розрахунку надлишку",
           "reserve_battery_power": "Резерв потужності батареї (Вт)",
           "inverter_self_consumption": "Власне споживання інвертора (Вт)",
           "device_allocation_strategy": "Стратегія розподілу потужності",
@@ -319,7 +327,8 @@
           "ramp_down_step": "Крок спадання (% за такт)",
           "ramp_deadband": "Зона нечутливості (%)",
           "hysteresis_w": "Гістерезис (Вт)",
-          "battery_discharge_tolerance_w": "Допустимий розряд батареї (Вт)"
+          "battery_discharge_tolerance_w": "Допустимий розряд батареї (Вт)",
+          "probe_battery_assist_w": "Підтримка батареї для підбору (Вт)"
         }
       },
       "simulation": {
@@ -422,6 +431,13 @@
         "distribute": "Розподіляти рівномірно"
       }
     },
+    "calculation_method": {
+      "options": {
+        "mppt": "MPPT (обережний)",
+        "mppt_probe": "MPPT + підбір",
+        "export": "Export (енергобаланс)"
+      }
+    },
     "panel_configuration": {
       "options": {
         "series": "Послідовно",
@@ -488,6 +504,21 @@
           },
           "battery_discharging": {
             "name": "Розряд батареї"
+          },
+          "calculation_method": {
+            "name": "Метод розрахунку"
+          },
+          "curtailment_detected": {
+            "name": "Виявлено куртейлінг"
+          },
+          "forecast_potential_w": {
+            "name": "Потенціал за прогнозом"
+          },
+          "forecast_untapped_w": {
+            "name": "Невикористаний за прогнозом"
+          },
+          "probe_headroom_w": {
+            "name": "Запас probe (headroom)"
           },
           "excess_possible": {
             "name": "Можливий надлишок"

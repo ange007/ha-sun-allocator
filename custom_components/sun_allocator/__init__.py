@@ -36,8 +36,10 @@ from .core.device_restore import (
 from .core.services import handle_set_relay_mode, handle_set_relay_power, rebuild_device_index
 from .core.migrations import ConfigEntryMigrator
 from .core.mode_select import mode_select_state_listener
-from .core.power_processor import process_excess_power
+from .core.power_processor import process_excess_power, _read_battery_soc
 from .core.watchdog import watchdog_check
+from .core import probe
+from .sensor.utils import get_sensor_state_safely
 
 from .const import (
     DOMAIN,
@@ -55,6 +57,24 @@ from .const import (
     CONF_DEVICE_PRIORITY,
     CONF_DEVICE_TYPE,
     CONF_POWER_ALLOCATION,
+    CONF_CALCULATION_METHOD,
+    DEFAULT_CALCULATION_METHOD,
+    CALC_METHOD_MPPT,
+    CONF_BATTERY_POWER,
+    CONF_BATTERY_POWER_REVERSED,
+    CONF_BATTERY_SHARING_SOC,
+    PROBE_DWELL_S,
+    PROBE_MAX_HEADROOM_W,
+    PROBE_FORECAST_APPROACH_FRACTION,
+    CONF_PROBE_BATTERY_ASSIST_W,
+    DEFAULT_PROBE_BATTERY_ASSIST_W,
+    CONF_SIM_ENABLED,
+    CONF_SIM_OVERRIDE_BATTERY_POWER,
+    CONF_SIM_BATTERY_POWER,
+    DEFAULT_SIM_BATTERY_POWER,
+    CONF_SIM_OVERRIDE_BATTERY_SOC,
+    CONF_SIM_BATTERY_SOC,
+    DEFAULT_SIM_BATTERY_SOC,
     STATE_ON,
     DOMAIN_LIGHT,
     DOMAIN_SWITCH,
@@ -440,7 +460,10 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
     log_info("--- SETUP AUTO CONTROL ---")
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
 
-    _call_unsubscribers(entry_data, ["unsub_auto_control", "unsub_watchdog_timer"])
+    _call_unsubscribers(
+        entry_data,
+        ["unsub_auto_control", "unsub_watchdog_timer", "unsub_probe_timer"],
+    )
 
     devices = config_entry.data.get(CONF_DEVICES, [])
     auto_control_devices = [
@@ -526,6 +549,165 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         hass, [excess_sensor_id], handle_state_change
     )
 
+    async def _probe_timer_callback(now):
+        """Periodic probe tick (mppt_probe): grow/back-off the headroom budget by
+        watching the battery, then re-allocate when it changes.
+
+        Runs on its own timer because during curtailment the excess sensor is
+        ~stable (deadbanded) and would not trigger the state-change path. Reads
+        RAW battery/SOC sensors, not the excess sensor's (frozen) attributes.
+        """
+        cfg = config_entry.data
+
+        # Respect the watchdog fail-safe: while the excess sensor is stale the
+        # watchdog has forced everything OFF. The probe must NOT re-enable devices
+        # — release the headroom and stand down until data is fresh again.
+        if entry_data.get("watchdog_alerted"):
+            if entry_data.get("probe_headroom_w"):
+                entry_data["probe_headroom_w"] = 0.0
+            entry_data.pop("probe_state", None)
+            return
+
+        method = cfg.get(CONF_CALCULATION_METHOD, DEFAULT_CALCULATION_METHOD)
+        reversed_ = cfg.get(CONF_BATTERY_POWER_REVERSED, False)
+        sim = cfg.get(CONF_SIM_ENABLED)
+        net_charge = 0.0
+        if sim and cfg.get(CONF_SIM_OVERRIDE_BATTERY_POWER):
+            # Mirror the excess sensor's simulation overrides so the probe's
+            # feedback loop sees the same (simulated) world, not live hardware.
+            net_charge = probe.battery_net_charge_w(
+                float(cfg.get(CONF_SIM_BATTERY_POWER, DEFAULT_SIM_BATTERY_POWER)),
+                reversed_,
+            )
+        else:
+            bp_entity = cfg.get(CONF_BATTERY_POWER)
+            if bp_entity:
+                value, ok = get_sensor_state_safely(hass, bp_entity, "Battery Power")
+                if ok:
+                    net_charge = probe.battery_net_charge_w(value, reversed_)
+        if sim and cfg.get(CONF_SIM_OVERRIDE_BATTERY_SOC):
+            soc = float(cfg.get(CONF_SIM_BATTERY_SOC, DEFAULT_SIM_BATTERY_SOC))
+        else:
+            soc = _read_battery_soc(hass, cfg)
+        # Probe uses its OWN battery-assist tolerance (how much battery draw it
+        # accepts to keep a probe-driven load running), kept separate from the
+        # strict base excess guard so a self-modulating load (AC) runs steadily
+        # instead of cycling on minor compressor-peak dips.
+        assist_w = cfg.get(
+            CONF_PROBE_BATTERY_ASSIST_W, DEFAULT_PROBE_BATTERY_ASSIST_W
+        )
+        # Read the excess sensor's diagnostic attributes:
+        #  - pmax: nameplate Pmax → headroom ceiling (STABLE, auto-scales to any
+        #    inverter; the probe can never get more solar than the array can make).
+        #  - untapped (current_max_power − pv_power): the live curtailed-headroom
+        #    estimate, used as the start-gate so the probe won't chase a load far
+        #    bigger than the plausible surplus. Valid while a device is OFF.
+        #  - forecast_untapped (max(0, forecast − pv)): when a PV-production
+        #    forecast is configured, the probe's growth TARGET — it grows toward the
+        #    forecast and the battery validates it, instead of probing blind.
+        max_headroom = PROBE_MAX_HEADROOM_W
+        untapped = None
+        forecast_untapped = None
+        ex_state = hass.states.get(excess_sensor_id)
+        if ex_state is not None:
+            try:
+                max_headroom = float(ex_state.attributes.get("pmax"))
+            except (TypeError, ValueError):
+                pass
+            try:
+                cmax = float(ex_state.attributes.get("current_max_power"))
+                pvp = float(ex_state.attributes.get("pv_power"))
+                untapped = max(0.0, cmax - pvp)
+            except (TypeError, ValueError):
+                untapped = None
+            try:
+                forecast_untapped = float(ex_state.attributes.get("forecast_untapped_w"))
+            except (TypeError, ValueError):
+                forecast_untapped = None
+        # Start-gate basis: under curtailment the MPPT `untapped` (cmp − pv) collapses
+        # to near-zero — the very underestimate Phase D exists to bypass — which would
+        # gate every large load out (a 700 W AC vs 3 × 43 W). When a forecast is present
+        # use the larger of the two as the plausible-headroom basis so the start-gate
+        # trusts the forecast (battery-validated downstream), not the curtailed estimate.
+        gate_untapped = untapped
+        if forecast_untapped is not None:
+            gate_untapped = (
+                forecast_untapped
+                if untapped is None
+                else max(untapped, forecast_untapped)
+            )
+        has_target = probe.growth_target_present(
+            entry_data.get("device_status", {}).values(), untapped_w=gate_untapped
+        )
+        # A forecast both guides mppt_probe (sets the target) AND enables probe-style
+        # growth in the cautious `mppt` method. The headroom feeds the speculative
+        # extra_pool only (gated per device by allow_probe), so opt-out loads always
+        # stay on the cautious excess — the forecast never lifts the published value.
+        forecast_present = forecast_untapped is not None
+        enabled = probe.is_probe_enabled(method) or (
+            method == CALC_METHOD_MPPT and forecast_present
+        )
+        target = probe.forecast_target_w(forecast_untapped, max_headroom)
+        # Watts of probe-eligible load already running: the probe floors its budget to
+        # this so a device adopted from manual control (or held through an excess dip)
+        # is never dropped to be rediscovered — the running load is the measured ceiling.
+        floor_w = probe.running_controllable_floor_w(
+            entry_data.get("device_status", {}), entry_data.get("device_on_state", {})
+        )
+        new_state = probe.plan_headroom(
+            enabled=enabled,
+            has_target=has_target,
+            battery_soc=soc,
+            net_charge_w=net_charge,
+            discharge_tolerance_w=assist_w,
+            sharing_soc=cfg.get(CONF_BATTERY_SHARING_SOC, 0),
+            state=entry_data.get("probe_state"),
+            now_ts=now.timestamp(),
+            max_headroom_w=max_headroom,
+            target_w=target,
+            approach_fraction=PROBE_FORECAST_APPROACH_FRACTION,
+            floor_w=floor_w,
+        )
+        entry_data["probe_state"] = new_state
+        prev = float(entry_data.get("probe_headroom_w", 0.0) or 0.0)
+        entry_data["probe_headroom_w"] = new_state["headroom_w"]
+        # Cache battery health for the allocator's race-free floor (see
+        # process_excess_power): a manual→auto transition allocates before the next
+        # probe tick, so the allocator re-applies the running-load floor itself, but
+        # only while the probe is active and the battery is not discharging.
+        entry_data["probe_battery_healthy"] = bool(enabled) and net_charge >= -assist_w
+
+        # Always re-run allocation on this periodic tick — NOT only when the headroom
+        # changed. The excess sensor's write-deadband can leave excess stable for a
+        # long time, and allocation is otherwise triggered only by an excess state
+        # change; without a periodic run the device status freezes and stale refusals
+        # (an entity that was unavailable at restart, a schedule window that opened)
+        # never clear, and a load can stay on draining the battery. Re-running is
+        # cheap: device commands are skipped when the entity is already in the
+        # desired state. The watchdog-alerted early-return above still protects the
+        # fail-safe.
+        state = hass.states.get(excess_sensor_id)
+        excess_val = 0.0
+        if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            try:
+                excess_val = float(state.state)
+            except (ValueError, TypeError):
+                excess_val = 0.0
+        if new_state["headroom_w"] != prev:
+            log_debug(
+                "[probe] headroom %.0f -> %.0f W (net=%.0f soc=%s tgt=%s has_target=%s)",
+                prev, new_state["headroom_w"], net_charge, soc, target, has_target,
+            )
+        await _queue_process_excess_power(hass, config_entry, entry_data, excess_val)
+
+    # Start the probe from a clean slate on every (re)setup so a stale headroom or
+    # ceiling from a previous session/method can't inflate the first allocation.
+    entry_data["probe_headroom_w"] = 0.0
+    entry_data.pop("probe_state", None)
+    entry_data["unsub_probe_timer"] = async_track_time_interval(
+        hass, _probe_timer_callback, timedelta(seconds=PROBE_DWELL_S)
+    )
+
     entry_data["initial_pass_task"] = hass.async_create_task(
         _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor_id)
     )
@@ -562,6 +744,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigType):
             "unsub_auto_control",
             "unsub_mode_listener",
             "unsub_watchdog_timer",
+            "unsub_probe_timer",
             "unsub_restore_listener",
             "unsub_ha_start",
         ],

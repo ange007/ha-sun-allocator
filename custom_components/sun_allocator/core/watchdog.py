@@ -32,6 +32,10 @@ async def _enforce_all_off(hass, config_entry, reason: str):
         device_on_state[_device_id] = False
     # Also clear manual overrides — watchdog takes priority over everything
     entry_data.pop("manual_overrides", None)
+    # Stand the probe down: drop any discovered headroom so it cannot re-inflate
+    # the budget and re-enable devices while the fail-safe OFF is in force.
+    entry_data["probe_headroom_w"] = 0.0
+    entry_data.pop("probe_state", None)
 
     devices_cfg = config_entry.data.get("devices", [])
     for dev in devices_cfg:

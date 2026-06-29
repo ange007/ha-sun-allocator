@@ -123,6 +123,51 @@ above the reserve, which becomes available to devices. The reserve is modulated 
 **Share Surplus Above SOC** threshold (below it the battery keeps everything). A negative or
 zero result means nothing is turned on.
 
+### Calculation Method (mppt · mppt_probe · export)
+
+The formula above is the **`mppt`** method (the default). A selectable **Calculation Method**
+(Advanced Settings) lets you match the estimate to your inverter topology:
+
+- **`mppt` (cautious, default)** — the untapped-headroom calculation described above. Safe, but
+  it *underestimates* available solar on a load-following hybrid inverter when the battery is at
+  its charge limit and the house load is low: the inverter then **curtails** the panels to match
+  load, so `pv_power` tracks consumption and the model reads the curtailed output as "low
+  irradiance". The `curtailment_detected` attribute flags when this is happening (meaningful
+  headroom, battery not discharging, battery not accepting charge).
+
+- **`mppt_probe` (MPPT + active probing)** — publishes the same cautious excess as `mppt`, plus a
+  controller that recovers the curtailed energy the estimate cannot see. When curtailment is
+  detected and a device is waiting only for more surplus, the probe grows a small *headroom*
+  budget so the allocator turns the device on, then watches the battery: if the battery stays
+  out of discharge the added load was free (covered by previously-curtailed PV) and the budget
+  grows further; if the battery starts discharging the load was not free, so the budget backs off
+  below that level and a cooldown prevents immediate retry (so an on/off load such as an AC
+  compressor is not cycled). Device priority, partial fill and min-thresholds are all handled by
+  the normal allocator consuming the inflated budget. "Battery at its charge limit" is detected
+  from charge *power* near zero, **not** SOC — many inverters cap charging below 100 %.
+
+- **`export` (energy balance)** — for **grid-export** inverters where `pv_power` reflects true
+  generation rather than load-following output. Excess is a direct energy balance:
+  ```
+  excess_power_W = pv_power_W - house_consumption_W - inverter_self_consumption_W
+                 - reserved_battery_charge_W
+  ```
+  Battery charge above the reserve falls through into the available surplus. This method does not
+  use the MPPT I-V curve (the curve sensors remain only as diagnostics).
+
+**Optional: forecast-guided probe.** If you set a **PV Forecast Sensor** (Settings — e.g.
+Forecast.Solar or Open-Meteo, combined into one entity for multi-slope arrays), the probe uses the
+forecast as its growth **target** instead of probing blind: it grows the headroom toward
+`forecast − pv_power`, closing about 25 % of the remaining gap each tick, and the battery validates
+every step exactly as above — a discharge *before* the target is reached means the forecast was
+optimistic, so the budget backs off below that level and a cooldown follows (effectively distrusting
+the forecast until it recovers). A forecast also enables this probe-style growth in the cautious
+`mppt` method; there the recovered headroom feeds only the **speculative** budget that devices with
+*Allow Active Probing* may consume, so opt-out loads (e.g. an AC you don't want cycled) always stay
+on the plain cautious excess. The published `excess_power` value is **never** lifted by the forecast
+— it surfaces only through the `forecast_potential_w`, `forecast_untapped_w` and `probe_headroom_w`
+diagnostic attributes.
+
 ### Step 2 — Filter Devices
 
 Before any device is considered for allocation, it must pass several checks:
