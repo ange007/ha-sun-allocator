@@ -15,6 +15,7 @@ from custom_components.sun_allocator.const import (
     CONF_BATTERY_POWER,
     CONF_BATTERY_SOC_SENSOR,
     CONF_BATTERY_SHARING_SOC,
+    CONF_CALCULATION_METHOD,
     CONF_CONSUMPTION,
     CONF_MPPT_INPUTS,
     CONF_PANEL_CONFIGURATION,
@@ -26,6 +27,7 @@ from custom_components.sun_allocator.const import (
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     PANEL_CONFIG_SERIES,
+    DEFAULT_CALCULATION_METHOD,
 )
 from custom_components.sun_allocator.core.migrations import ConfigEntryMigrator
 from custom_components.sun_allocator.sensor.sensors.base import (
@@ -105,6 +107,7 @@ async def test_migrate_idempotent():
             CONF_PV_POWER: "sensor.pv_power",
             CONF_PANEL_VMP: 44.3,
         }],
+        CONF_CALCULATION_METHOD: DEFAULT_CALCULATION_METHOD,
         "devices": [],
     }
     entry = _entry(entry_data)
@@ -117,7 +120,7 @@ async def test_migrate_idempotent():
 async def test_migrate_no_solar_config_is_noop():
     """Entries lacking ``pv_power`` are left alone."""
     hass = _hass()
-    entry = _entry({"devices": []})
+    entry = _entry({CONF_CALCULATION_METHOD: DEFAULT_CALCULATION_METHOD, "devices": []})
     changed = await ConfigEntryMigrator(hass, entry).run()
     assert changed is False
 
@@ -126,7 +129,11 @@ async def test_migrate_no_solar_config_is_noop():
 async def test_migrate_empty_pv_power_string_is_noop():
     """Empty string ``pv_power`` is treated as absent."""
     hass = _hass()
-    entry = _entry({CONF_PV_POWER: "", "devices": []})
+    entry = _entry({
+        CONF_PV_POWER: "",
+        CONF_CALCULATION_METHOD: DEFAULT_CALCULATION_METHOD,
+        "devices": [],
+    })
     changed = await ConfigEntryMigrator(hass, entry).run()
     assert changed is False
 
@@ -205,6 +212,7 @@ def test_entity_ids_for_two_mppts():
     sensor._consumption = config[CONF_CONSUMPTION]
     sensor._battery_power = None
     sensor._battery_soc_sensor = None
+    sensor._pv_forecast_sensor = None
 
     ids = sensor._get_entity_ids_to_listen()
     assert "sensor.mppt1_power" in ids

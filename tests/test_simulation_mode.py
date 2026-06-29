@@ -40,6 +40,7 @@ def _sensor(config):
     sensor._consumption = None
     sensor._battery_power = None
     sensor._battery_soc_sensor = None
+    sensor._pv_forecast_sensor = None
     sensor._mppt_inputs = list(config.get(CONF_MPPT_INPUTS, []))
     return sensor
 
