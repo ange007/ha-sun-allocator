@@ -22,7 +22,18 @@ jobs:
             exit 1
           fi
 
+      - name: Extract changelog section
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]")==1 {flag=1; next}
+            /^## \[/ {if (flag) exit}
+            flag {print}
+          ' CHANGELOG.md > release_notes.md
+          test -s release_notes.md || echo "(no CHANGELOG section for $VERSION)" > release_notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          body_path: release_notes.md
           generate_release_notes: true
