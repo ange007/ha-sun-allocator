@@ -31,6 +31,8 @@ from ..const import (
     CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
+    CONF_CALCULATION_METHOD,
+    DEFAULT_CALCULATION_METHOD,
     SCHEDULE_MODE_DISABLED,
     SCHEDULE_MODE_STANDARD,
 )
@@ -57,6 +59,7 @@ class ConfigEntryMigrator:
         # below the integration's minimum supported install age.
         data = self._migrate_schedule_enabled_to_mode(data)
         data = self._migrate_flat_solar_to_mppt_inputs(data)
+        data = self._migrate_add_calculation_method(data)
 
         if self.changed:
             self.hass.config_entries.async_update_entry(self.entry, data=data)
@@ -102,6 +105,23 @@ class ConfigEntryMigrator:
                 new_dev[CONF_DEVICE_SCHEDULE_MODE],
             )
         return {**data, CONF_DEVICES: new_devices}
+
+    def _migrate_add_calculation_method(self, data: dict) -> dict:
+        """Added in v1.2.0.
+
+        Backfill the new ``calculation_method`` selector with the default
+        (``mppt``) so existing installs keep their current behaviour and the
+        Advanced Settings form pre-fills correctly. No-op once the key exists.
+        """
+        if CONF_CALCULATION_METHOD in data:
+            return data
+        data = {**data, CONF_CALCULATION_METHOD: DEFAULT_CALCULATION_METHOD}
+        self.changed = True
+        log_info(
+            "[migrate v1.2.0] added calculation_method=%s (default)",
+            DEFAULT_CALCULATION_METHOD,
+        )
+        return data
 
     def _migrate_flat_solar_to_mppt_inputs(self, data: dict) -> dict:
         """Added in v1.0.8.

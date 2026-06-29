@@ -15,6 +15,7 @@
 
 - Calculates untapped potential solar energy (excess) and panel usage percentage.
 - Estimates maximum possible power at the current voltage based on MPPT principles.
+- **Three selectable excess-calculation methods** — `mppt` (cautious, default), `mppt_probe` (active battery-validated probing to recover curtailed solar), and `export` (energy-balance for grid-export inverters). Chosen in Advanced Settings.
 - Automatic, priority-based control of multiple loads (switches, lights, climate entities, ESPHome relays).
 - Supports both on/off and proportional (dimmer-style) device control.
 - Configurable debounce, hysteresis, and minimum on-time to protect appliances from rapid cycling.
@@ -28,6 +29,9 @@
 - **Turn off on auto-control disable** — optionally send a turn-off command to a device when its auto-control switch is disabled.
 - **Battery SOC gating** — optionally block new device starts until the battery reaches a configured charge level (% per device, with hysteresis to prevent rapid cycling).
 - **Battery charge priority** (`battery_sharing_soc`) — below a configurable SOC threshold the battery takes absolute charge priority; above it the configured watt-reserve applies and surplus reaches your devices. Set to 0 to disable.
+- **Active probing** (`mppt_probe`) — when the battery is at its charge limit and the inverter curtails the panels (so the MPPT estimate under-reports the true potential), gently grows a controllable load and validates it against the battery, recovering otherwise-wasted solar. Per-device opt-out (`allow_probe`).
+- **PV production forecast** (optional) — feed an external forecast sensor (e.g. Forecast.Solar / Open-Meteo); surfaced as diagnostic attributes (`forecast_potential_w`, `forecast_untapped_w`) and, when set, used as the probe's battery-validated growth target. The published excess always stays cautious.
+- **Curtailment detection** — `curtailment_detected` diagnostic flag indicating the inverter is throttling the panels.
 - **Per-device actual power sensor** — feed a device's real power draw back to the allocator for a more accurate remaining-power budget; below an `idle` threshold the device reports `idle` instead of `active`.
 - **Max on-time per day** — cap a device's total daily runtime; it is turned off and blocked once the budget is hit.
 - **Usable-condition template** — gate a device with an arbitrary Jinja template (e.g. tank temperature) on top of its schedule.

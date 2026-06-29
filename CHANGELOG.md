@@ -8,6 +8,45 @@ is approximate. This project tracks its version in
 `custom_components/sun_allocator/manifest.json` (used by HACS) and, from
 `1.1.0` onward, in matching `vX.Y.Z` git release tags.
 
+## [1.2.0] — 2026-06-29
+
+### Added
+- **Selectable excess-calculation method** (Advanced Settings): `mppt` (cautious,
+  default), `mppt_probe` (active probing), `export` (energy-balance for grid-export
+  inverters). Existing setups are migrated to `mppt`.
+- **Active probe controller** (`mppt_probe`) — discovers curtailed solar empirically
+  by growing a headroom budget and validating it against the battery, recovering the
+  potential the cautious estimate leaves on the table when the battery is full and the
+  house load is low. Per-device opt-out via `allow_probe`.
+- **PV production forecast sensor** (optional) — surfaces `forecast_potential_w` /
+  `forecast_untapped_w`, and when set becomes the probe's battery-validated growth
+  target. The published excess stays cautious in every method.
+- **Curtailment detection** — `curtailment_detected` diagnostic attribute on the
+  excess sensor.
+- **Probe battery-assist tolerance** (`probe_battery_assist_w`, default 100 W) — how
+  much battery draw a probe-driven load may use before backing off, kept separate from
+  the strict base excess discharge guard.
+- **Hub device metadata** — model, software version (read from `manifest.json`),
+  service entry type and icon.
+
+### Changed
+- **Probe trusts the forecast at the start-gate** — under curtailment the MPPT
+  back-estimate collapses, so the probe now sizes the start-gate from the forecast
+  (when present); a large load such as an air conditioner is no longer gated out by
+  the curtailed under-estimate.
+- **Probe adopts an already-running load** — a device kept on by manual control (or
+  held through a transient excess dip) is floored into the budget instead of being
+  dropped and rediscovered.
+- **Probe charge handling aligned with battery-sharing SOC** — at/above the sharing
+  threshold a charge no longer stands the probe down (solar covers the load and tops
+  up the battery); below it the battery keeps absolute priority. Only a discharge ever
+  backs the headroom off.
+- **Manual-override lockout** shortened from 300 s to 120 s, so a manual toggle (or a
+  self-cycling device whose switch flip reads as user-initiated) no longer suppresses
+  auto-control for long.
+- Probe settle interval between steps lengthened 20 s → 30 s.
+- `VERSION` is now read from `manifest.json` at runtime instead of being hardcoded.
+
 ## [1.1.1] — 2026-06-25
 
 ### Added

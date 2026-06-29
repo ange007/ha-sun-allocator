@@ -11,7 +11,9 @@ from ...core.logger import journal_event, log_error, log_info
 from ...core.solar_optimizer import calculate_current_max_power
 from ..utils import (
     calculate_excess_power_mppt,
+    calculate_excess_power_export,
     calculate_usage_percentage,
+    detect_curtailment,
 )
 
 from ...const import (
@@ -25,6 +27,12 @@ from ...const import (
     CONF_INVERTER_SELF_CONSUMPTION,
     CONF_BATTERY_DISCHARGE_TOLERANCE_W,
     DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W,
+    CONF_CALCULATION_METHOD,
+    DEFAULT_CALCULATION_METHOD,
+    CALC_METHOD_MPPT,
+    CALC_METHOD_MPPT_PROBE,
+    CALC_METHOD_EXPORT,
+    CONF_PV_FORECAST_SENSOR,
     CONF_PANEL_VMP,
     CONF_PANEL_IMP,
     KEY_CALCULATION_REASON,
@@ -40,6 +48,8 @@ from ...const import (
 
 class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
     """Sensor for excess power (untapped potential), aggregated across MPPTs."""
+
+    _attr_icon = "mdi:solar-power-variant"
 
     # Deadband for state writes: suppress fluctuations smaller than max(absolute,
     # relative * current_max_power). Cuts recorder/listener churn (real data showed
@@ -115,6 +125,12 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             CONF_INVERTER_SELF_CONSUMPTION, 0
         )
         has_consumption_sensor = self._config.get(CONF_CONSUMPTION) is not None
+        method = self._config.get(
+            CONF_CALCULATION_METHOD, DEFAULT_CALCULATION_METHOD
+        )
+        discharge_tolerance_w = self._config.get(
+            CONF_BATTERY_DISCHARGE_TOLERANCE_W, DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W
+        )
 
         if not mppt_readings:
             log_error(
@@ -191,22 +207,44 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         avg_voc = sum(voc_ratios) / len(voc_ratios) if voc_ratios else 0.0
         aggregate_relative_voltage = 2.0 if any_above_mpp else 0.0
 
-        excess = calculate_excess_power_mppt(
-            current_max_power=total_cmp,
+        # Branch on the selected calculation method. mppt / mppt_probe publish the
+        # same cautious MPPT value (probe acts only in the controller); export uses
+        # the energy-balance formula for grid-export inverters.
+        if method == CALC_METHOD_EXPORT:
+            excess = calculate_excess_power_export(
+                pv_power=total_pv_power,
+                consumption=consumption if has_consumption_sensor else None,
+                battery_power=battery_power,
+                battery_power_reversed=battery_power_reversed,
+                configured_reserve=configured_reserve,
+                inverter_self_consumption=inverter_self_consumption,
+                battery_soc=battery_soc,
+                sharing_soc=sharing_soc,
+                battery_discharge_tolerance_w=discharge_tolerance_w,
+            )
+        else:
+            excess = calculate_excess_power_mppt(
+                current_max_power=total_cmp,
+                pv_power=total_pv_power,
+                consumption=consumption if has_consumption_sensor else None,
+                battery_power=battery_power,
+                battery_power_reversed=battery_power_reversed,
+                configured_reserve=configured_reserve,
+                inverter_self_consumption=inverter_self_consumption,
+                relative_voltage=aggregate_relative_voltage,
+                energy_harvesting_possible=any_harvesting,
+                untapped_power_override=total_untapped,
+                battery_soc=battery_soc,
+                sharing_soc=sharing_soc,
+                battery_discharge_tolerance_w=discharge_tolerance_w,
+            )
+
+        curtailment_detected = detect_curtailment(
             pv_power=total_pv_power,
-            consumption=consumption if has_consumption_sensor else None,
+            current_max_power=total_cmp,
             battery_power=battery_power,
             battery_power_reversed=battery_power_reversed,
-            configured_reserve=configured_reserve,
-            inverter_self_consumption=inverter_self_consumption,
-            relative_voltage=aggregate_relative_voltage,
-            energy_harvesting_possible=any_harvesting,
-            untapped_power_override=total_untapped,
-            battery_soc=battery_soc,
-            sharing_soc=sharing_soc,
-            battery_discharge_tolerance_w=self._config.get(
-                CONF_BATTERY_DISCHARGE_TOLERANCE_W, DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W
-            ),
+            discharge_tolerance_w=discharge_tolerance_w,
         )
 
         usage = calculate_usage_percentage(total_pv_power, total_cmp)
@@ -234,14 +272,45 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
                 if len(mppt_readings) > 1
                 else per_mppt[0].get(KEY_CALCULATION_REASON, "")
             ),
+            calculation_method=method,
+            curtailment_detected=curtailment_detected,
             mppt_count=len(mppt_readings),
             mppt_breakdown=per_mppt,
         )
 
+        # Optional external forecast — diagnostic metric only (does NOT affect the
+        # excess value or control). Published only when a forecast sensor is set
+        # and readable; otherwise the attributes are omitted entirely.
+        pv_forecast = sensor_values.get(CONF_PV_FORECAST_SENSOR)
+        if pv_forecast is not None:
+            self._update_attributes(
+                forecast_potential_w=round(float(pv_forecast), 1),
+                forecast_untapped_w=round(max(0.0, float(pv_forecast) - total_pv_power), 1),
+            )
+
+        # Speculative probe budget (extra_pool) — diagnostic only, does NOT change
+        # the excess value. The probe controller grows this on top of the cautious
+        # excess; only devices with allow_probe may consume it. Shown when the config
+        # can grow it (mppt_probe, or mppt with a forecast target). Guarded for
+        # setup/teardown and for the unit tests that run without a hass.
+        probe_active_config = method == CALC_METHOD_MPPT_PROBE or (
+            method == CALC_METHOD_MPPT and pv_forecast is not None
+        )
+        if probe_active_config and self.hass and self._entry_id:
+            entry = (self.hass.data.get(DOMAIN, {}) or {}).get(self._entry_id)
+            if entry is not None:
+                self._update_attributes(
+                    probe_headroom_w=round(
+                        float(entry.get("probe_headroom_w", 0.0) or 0.0), 1
+                    ),
+                )
+
         journal_event(
             "excess_power_calc",
             {
-                "mode": "mppt_with_consumption" if has_consumption_sensor else "mppt",
+                "method": method,
+                "has_consumption": has_consumption_sensor,
+                "curtailment": curtailment_detected,
                 "excess": excess,
                 "total_pv": total_pv_power,
                 "total_cmp": total_cmp,

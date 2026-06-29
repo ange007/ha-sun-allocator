@@ -28,9 +28,10 @@ from ..const import (
     DEFAULT_STANDARD_TEMPERATURE,
     DEFAULT_VOC_COEFFICIENT,
     DEFAULT_PMAX_COEFFICIENT,
-    PASSIVE_CHARGING_THRESHOLD_W,
     INTERNAL_CURVE_FACTOR_K,
     INTERNAL_EFFICIENCY_CORRECTION_FACTOR,
+    CURTAILMENT_UNTAPPED_MARGIN_W,
+    BATTERY_CHARGE_IDLE_W,
 )
 
 
@@ -321,47 +322,89 @@ def cleanup_sensor_listeners(unsub_listeners: list) -> None:
     unsub_listeners.clear()
 
 
-def calculate_excess_power_parallel(
+def _battery_net_charge_w(battery_power: float, battery_power_reversed: bool) -> float:
+    """Return battery net charge in W (positive = charging), sign-convention-independent."""
+    return -battery_power if battery_power_reversed else battery_power
+
+
+def _effective_reserve(
+    configured_reserve: float, battery_soc: float | None, sharing_soc: float
+) -> float:
+    """SOC-modulated reserve: below ``sharing_soc`` the battery takes absolute
+    charge priority (reserve forced to 0 → all charge protected). At/above it, or
+    when ``sharing_soc`` is disabled (0) or SOC unknown, the configured reserve
+    applies as-is."""
+    if sharing_soc > 0 and battery_soc is not None and battery_soc < sharing_soc:
+        return 0.0
+    return configured_reserve
+
+
+def detect_curtailment(
     pv_power: float,
-    consumption: float,
+    current_max_power: float,
+    battery_power: float,
+    battery_power_reversed: bool = False,
+    discharge_tolerance_w: float = 0.0,
+    charge_idle_w: float = BATTERY_CHARGE_IDLE_W,
+) -> bool:
+    """Return True when the inverter is curtailing PV — i.e. the MPPT untapped
+    estimate is a known underestimate.
+
+    Curtailment is inferred when there is meaningful headroom between the estimated
+    max and the actual output, the battery is not discharging beyond tolerance, and
+    the battery is at its charge limit (charge power ≤ ``charge_idle_w``). The
+    charge-power signal is used instead of SOC because many inverters cap charging
+    below 100% (SOC limit, stop-charging voltage, preserve mode), so an SOC test
+    would never fire on those systems. A hybrid inverter in this state throttles
+    the panels to match load, so a waiting device could be fed for free (see the
+    ``mppt_probe`` method)."""
+    if (float(current_max_power) - float(pv_power)) <= CURTAILMENT_UNTAPPED_MARGIN_W:
+        return False
+    net_charge_w = _battery_net_charge_w(battery_power, battery_power_reversed)
+    if net_charge_w < -discharge_tolerance_w:
+        return False  # discharging
+    # Battery still actively absorbing charge → it is not "done"; not curtailment.
+    return net_charge_w <= charge_idle_w
+
+
+def calculate_excess_power_export(
+    pv_power: float,
+    consumption: float | None,
     battery_power: float,
     battery_power_reversed: bool,
-    configured_reserve: float,
+    configured_reserve: float = 0.0,
     inverter_self_consumption: float = 0.0,
+    battery_soc: float | None = None,
+    sharing_soc: float = 0.0,
+    battery_discharge_tolerance_w: float = 0.0,
 ) -> float:
-    """Calculate excess power using the simple parallel distribution method."""
+    """Energy-balance excess for grid-export inverters where ``pv_power`` reflects
+    true generation (not load-following curtailed output).
 
-    # Adjust battery power direction (positive = charging)
-    if battery_power_reversed:
-        battery_power = -battery_power
+    ``excess = pv − consumption − inverter_self − battery_load`` where
+    ``battery_load`` is the reserve-modulated charge (``min(charge, reserve)``).
+    Battery charge above the reserve is divertible surplus, so it is NOT
+    subtracted — it falls through into the available excess. Shares the discharge
+    guard + tolerance and SOC-modulated reserve with the MPPT method.
+    """
+    net_charge_w = _battery_net_charge_w(battery_power, battery_power_reversed)
+    if net_charge_w < -battery_discharge_tolerance_w:
+        return 0.0
+    battery_charge_w = max(0.0, net_charge_w)
+    effective_reserve = _effective_reserve(configured_reserve, battery_soc, sharing_soc)
+    battery_load = min(battery_charge_w, effective_reserve)
 
-    if configured_reserve > 0:
-        # --- Budgeting Mode ---
-        effective_reserve = configured_reserve
-        # Check for passive charging
-        if 0 < battery_power < PASSIVE_CHARGING_THRESHOLD_W:
-            effective_reserve = min(configured_reserve, battery_power)
-            log_debug(
-                f"Passive charging detected ({battery_power}W < {PASSIVE_CHARGING_THRESHOLD_W}W). "
-                f"Effective reserve adjusted from {configured_reserve}W to {effective_reserve}W."
-            )
-
-        excess = float(pv_power) - float(consumption) - float(effective_reserve) - float(inverter_self_consumption)
-        log_debug(
-            f"Parallel Distribution (Budgeting): PV={pv_power}W, Consumption={consumption}W, "
-            f"Effective Reserve={effective_reserve}W, Inverter Self-Consumption={inverter_self_consumption}W -> Excess={excess}W"
-        )
-
-    else:
-        # --- Battery Priority Mode (reserve = 0) ---
-        battery_charge_w = max(0, battery_power)
-        excess = float(pv_power) - float(consumption) - float(battery_charge_w) - float(inverter_self_consumption)
-        log_debug(
-            f"Parallel Distribution (Priority): PV={pv_power}W, Consumption={consumption}W, "
-            f"Battery Charge={battery_charge_w}W, Inverter Self-Consumption={inverter_self_consumption}W -> Excess={excess}W"
-        )
-
-    return max(0, excess)
+    excess = (
+        float(pv_power)
+        - float(consumption or 0.0)
+        - float(inverter_self_consumption)
+        - float(battery_load)
+    )
+    log_debug(
+        "Export: PV=%sW, Consumption=%sW, Self=%sW, BatteryLoad=%sW -> Excess=%sW",
+        pv_power, consumption, inverter_self_consumption, battery_load, excess,
+    )
+    return max(0.0, excess)
 
 
 def calculate_excess_power_mppt(
@@ -398,7 +441,7 @@ def calculate_excess_power_mppt(
     """
     # 1. Discharge Guard with tolerance.
     # net_charge_w: positive = charging, negative = discharging (sign-convention-independent).
-    net_charge_w = (-battery_power if battery_power_reversed else battery_power)
+    net_charge_w = _battery_net_charge_w(battery_power, battery_power_reversed)
     if net_charge_w < -battery_discharge_tolerance_w:
         return 0.0
 
@@ -428,10 +471,7 @@ def calculate_excess_power_mppt(
     # 6. SOC-modulated reserve: below sharing_soc the battery gets absolute
     # priority (reserve forced to 0 → all charge protected); at/above it the
     # configured reserve applies. Disabled (sharing_soc=0) or unknown SOC → as-is.
-    if sharing_soc > 0 and battery_soc is not None and battery_soc < sharing_soc:
-        effective_reserve = 0.0
-    else:
-        effective_reserve = configured_reserve
+    effective_reserve = _effective_reserve(configured_reserve, battery_soc, sharing_soc)
 
     # 7. Calculate battery load and battery_excess
     if effective_reserve > 0:

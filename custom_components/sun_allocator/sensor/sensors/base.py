@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.typing import StateType
 
@@ -22,12 +23,14 @@ from ..utils import (
 
 from ...const import (
     DOMAIN,
+    VERSION,
     CONF_MPPT_INPUTS,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_CONSUMPTION,
     CONF_BATTERY_POWER,
     CONF_BATTERY_POWER_REVERSED,
+    CONF_PV_FORECAST_SENSOR,
     CONF_PANEL_VMP,
     CONF_PANEL_IMP,
     CONF_PANEL_VOC,
@@ -107,6 +110,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
         self._consumption = config.get(CONF_CONSUMPTION)
         self._battery_power = config.get(CONF_BATTERY_POWER)
         self._battery_soc_sensor = config.get(CONF_BATTERY_SOC_SENSOR)
+        self._pv_forecast_sensor = config.get(CONF_PV_FORECAST_SENSOR)
 
         self._state = 0.0
         self._attr_extra_state_attributes = self._get_default_attributes()
@@ -137,6 +141,9 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             identifiers={(DOMAIN, self._entry_id)},
             name=name,
             manufacturer="Sun Allocator",
+            model="Solar Excess Controller",
+            sw_version=VERSION,
+            entry_type=DeviceEntryType.SERVICE,
         )
 
 
@@ -207,6 +214,9 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
 
         if self._battery_soc_sensor:
             entity_ids.append(self._battery_soc_sensor)
+
+        if self._pv_forecast_sensor:
+            entity_ids.append(self._pv_forecast_sensor)
 
         if self._config.get(CONF_TEMPERATURE_COMPENSATION_ENABLED, False):
             temp_sensor = self._config.get(CONF_TEMPERATURE_SENSOR)
@@ -282,6 +292,16 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             ):
                 battery_soc = soc_value
 
+        # Optional external PV-production forecast (W). Diagnostic only — stays
+        # None when unconfigured or unavailable.
+        pv_forecast = None
+        if self._pv_forecast_sensor:
+            fc_value, fc_ok = get_sensor_state_safely(
+                self._hass, self._pv_forecast_sensor, "PV Forecast"
+            )
+            if fc_ok:
+                pv_forecast = fc_value
+
         if self._config.get(CONF_SIM_ENABLED):
             if self._config.get(CONF_SIM_OVERRIDE_CONSUMPTION):
                 consumption = float(
@@ -300,6 +320,7 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             CONF_CONSUMPTION: consumption,
             CONF_BATTERY_POWER: battery_power,
             CONF_BATTERY_SOC_SENSOR: battery_soc,
+            CONF_PV_FORECAST_SENSOR: pv_forecast,
         }
 
 

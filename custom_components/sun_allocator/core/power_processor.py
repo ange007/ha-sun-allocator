@@ -17,6 +17,7 @@ from .logger import log_debug, log_warning
 from .schedule import is_device_in_schedule
 from .settings import COUNTER_DEBOUNCE_FRACTION
 from .device_restore import persist_grace_state
+from .probe import running_controllable_floor_w
 from .constants_internal import SUPPORTED_DOMAINS
 from .entity_control import (
     is_entity_on,
@@ -66,6 +67,8 @@ from ..const import (
     DEFAULT_ACTUAL_POWER_THRESHOLD_W,
     CONF_DEVICE_CHECK_USABLE_TEMPLATE,
     CONF_DEVICE_MAX_ON_TIME_PER_DAY,
+    CONF_DEVICE_ALLOW_PROBE,
+    DEFAULT_DEVICE_ALLOW_PROBE,
 )
 from ..sensor.utils import get_sensor_state_safely, is_reading_stale
 
@@ -416,6 +419,7 @@ def _initialize_status_entry(hass, device):
         CONF_DEVICE_MIN_EXPECTED_W: min_expected_w,
         CONF_DEVICE_MAX_EXPECTED_W: max_expected_w,
         CONF_DEVICE_MIN_ON_TIME: float(device.get(CONF_DEVICE_MIN_ON_TIME, 0) or 0),
+        "allow_probe": bool(device.get(CONF_DEVICE_ALLOW_PROBE, DEFAULT_DEVICE_ALLOW_PROBE)),
         "refusal_reasons": [],
     }
 
@@ -574,7 +578,9 @@ def _finalize_device_status(entry_data):
 
 # --- Manual override / retry tunables -----------------------------------------------
 # Time window during which a user-initiated state change suppresses auto-control.
-MANUAL_OVERRIDE_TTL_SECONDS = 300
+# Kept short so a manual toggle (or a self-cycling device whose switch flip is read
+# as user-initiated) does not lock auto-control out for long.
+MANUAL_OVERRIDE_TTL_SECONDS = 120
 # Throttle between retry attempts when an entity ignored our last command.
 RETRY_INTERVAL_SECONDS = 30
 # After this many failed ON attempts we give up (and notify the user once).
@@ -1036,7 +1042,35 @@ async def process_excess_power(
         if _sensor and _sensor not in device_sensor_cache:
             device_sensor_cache[_sensor] = get_sensor_state_safely(hass, _sensor, "Actual Power")
 
-    remaining_power = excess_power
+    # Probe budget (mppt_probe). ABSOLUTE model: probe_headroom_w is the discovered
+    # sustainable controllable-load budget, NOT an increment on the (volatile)
+    # cautious excess. We split it into two pools:
+    #   real_pool  = cautious excess — genuinely available, usable by ALL devices.
+    #   extra_pool = probe-discovered surplus beyond the cautious excess — usable
+    #                ONLY by devices that allow probing.
+    # The total (real + extra) equals max(excess, headroom). Using max (not sum)
+    # keeps the budget stable when a probe-driven load turns on and de-curtails the
+    # panels: the cautious excess then drops to ~0, but the headroom holds the
+    # budget at the load level so the device is not immediately dropped (which is
+    # what excess+headroom did → cycling). Both pools are 0/negative-safe.
+    probe_headroom_w = float(entry_data.get("probe_headroom_w", 0.0) or 0.0)
+    # Race-free floor: a manual→auto transition (or an external switch-on) allocates
+    # in THIS cycle, before the next probe tick recomputes probe_headroom_w. While the
+    # probe is active and the battery is healthy (flag set by the probe tick), keep the
+    # budget at the already-running probe load so an adopted device is not dropped for a
+    # cycle then rediscovered. Gated on battery health so a fresh discharge still drops
+    # it (the probe backs the stored headroom off within a tick).
+    if entry_data.get("probe_battery_healthy"):
+        probe_headroom_w = max(
+            probe_headroom_w,
+            running_controllable_floor_w(
+                entry_data.get("device_status", {}),
+                entry_data.get("device_on_state", {}),
+            ),
+        )
+    real_pool = max(0.0, excess_power)
+    extra_pool = max(0.0, probe_headroom_w - real_pool)
+    starting_budget = real_pool + extra_pool  # == max(excess, headroom); finalize total
     strategy = cfg.get(CONF_DEVICE_ALLOCATION_STRATEGY, STRATEGY_FILL_ONE_BY_ONE)
     battery_soc = _read_battery_soc(hass, cfg)
     battery_soc_configured = bool(cfg.get(CONF_BATTERY_SOC_SENSOR))
@@ -1045,27 +1079,36 @@ async def process_excess_power(
         proportional_allocations = _compute_proportional_allocations(
             auto_control_devices,
             entry_data["device_status"],
-            remaining_power,
+            starting_budget,
             dict(entry_data["device_on_state"]),
             {k: dict(v) for k, v in entry_data["device_debounce_state"].items()},
             cfg, now,
         )
 
     for device in auto_control_devices:
+        status_entry = entry_data["device_status"].get(device.get(CONF_DEVICE_ID))
+        allow_probe = status_entry.get("allow_probe", True) if status_entry else True
+        # Opt-out devices may draw only from the real (cautious) pool, never from
+        # speculative probe headroom.
+        device_budget = real_pool + (extra_pool if allow_probe else 0.0)
         power_used = await _control_one_device(
             hass, config_entry, device,
             cfg=cfg, entry_data=entry_data, now=now, strategy=strategy,
             proportional_allocations=proportional_allocations,
-            remaining_power=remaining_power,
+            remaining_power=device_budget,
             battery_soc=battery_soc,
             battery_soc_configured=battery_soc_configured,
             device_sensor_cache=device_sensor_cache,
         )
-        remaining_power -= power_used
+        # Consume the real pool first, then (for probe-allowed devices) the extra.
+        from_real = min(power_used, real_pool)
+        real_pool -= from_real
+        if allow_probe:
+            extra_pool = max(0.0, extra_pool - (power_used - from_real))
         log_debug(
             f"Power used by {device.get(CONF_DEVICE_ID)}: {power_used}, "
-            f"remaining_power: {remaining_power}"
+            f"real_pool: {real_pool}, extra_pool: {extra_pool}"
         )
 
-    _finalize_run(entry_data, excess_power, remaining_power)
+    _finalize_run(entry_data, starting_budget, real_pool + extra_pool)
     async_dispatcher_send(hass, f"{SIGNAL_POWER_DISTRIBUTION_UPDATED}_{config_entry.entry_id}")
