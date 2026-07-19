@@ -9,8 +9,11 @@ cards:
         secondary_info: last-changed
       - type: attribute
         entity: sensor.sun_allocator_power_distribution
+        # total_power = the allocation budget = max(cautious excess, probe headroom).
+        # Under curtailment this exceeds the raw excess sensor by the probe-discovered
+        # surplus, so label it as the budget, not "available power".
         attribute: total_power
-        name: Total Available Power
+        name: Allocation Budget (excess + probe)
       - type: attribute
         entity: sensor.sun_allocator_power_distribution
         attribute: remaining_power
@@ -38,7 +41,8 @@ cards:
           <div>
             <b>{{ alloc.get(id, 0)|round(1) }} W</b> ({{ percent[id]|default(0)|round(1) }}%)
             <br>
-            <small>{{ reasons.get(id) or '-' }}</small>
+            {% set r = reasons.get(id, {}) %}
+            <small>{{ r.get('status', '-') }}{% if r.get('refusals') %} — {{ r.refusals | join(', ') }}{% endif %}</small>
           </div>
           <hr />
         </div>
@@ -74,7 +78,10 @@ cards:
       - entity: sensor.sun_allocator_power_distribution
         name: Allocated Power
       - entity: sensor.sun_allocator_excess_power
-        name: Available Power
+        # Cautious excess — under curtailment (battery full, low load) this
+        # UNDER-reports the true harvestable surplus; the probe budget on the
+        # power_distribution sensor (total_power) reflects the fuller picture.
+        name: Excess (cautious)
     hours_to_show: 24
     points_per_hour: 4
     line_width: 2

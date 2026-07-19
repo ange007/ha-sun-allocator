@@ -39,25 +39,31 @@ def log_error(msg, *args, **kwargs):
 
 
 def journal_event(event_type, data=None):
-    """Log a journal event."""
+    """Log a journal event.
+
+    Emitted at DEBUG: the journal is a per-cycle diagnostic trail (e.g. an
+    ``excess_power_calc`` line every recalculation), so it must stay silent at normal
+    levels — logging it at INFO floods the log with a JSON line every few seconds. It
+    reappears when the integration logger is explicitly set to ``debug``.
+    """
     if not ENABLE_JOURNAL:
         return
     msg = {
         "event": event_type,
         "data": data or {},
     }
-    _JOURNAL_LOGGER.info("[JOURNAL] %s", json.dumps(msg, ensure_ascii=False))
+    _JOURNAL_LOGGER.debug("[JOURNAL] %s", json.dumps(msg, ensure_ascii=False))
 
 
 def audit_action(action, details=None):
-    """Log an audit action."""
+    """Log an audit action (DEBUG — see ``journal_event``)."""
     if not ENABLE_JOURNAL:
         return
     msg = {
         "action": action,
         "details": details or {},
     }
-    _JOURNAL_LOGGER.info("[AUDIT] %s", json.dumps(msg, ensure_ascii=False))
+    _JOURNAL_LOGGER.debug("[AUDIT] %s", json.dumps(msg, ensure_ascii=False))
 
 
 def log_exception(context, exc):

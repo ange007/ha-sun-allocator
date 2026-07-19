@@ -13,7 +13,7 @@ from custom_components.sun_allocator.const import (
     CONF_DEVICE_ACTUAL_POWER_SENSOR,
     CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
     CONF_DEVICE_MAX_ON_TIME_PER_DAY,
-    CONF_DEVICE_MIN_BATTERY_SOC,
+    CONF_DEVICE_START_BATTERY_SOC,
     CONF_DEVICE_NAME,
     DEFAULT_BATTERY_SOC_HYSTERESIS,
 )
@@ -30,7 +30,7 @@ from custom_components.sun_allocator.sensor.utils import (
 # --- Battery SOC gate -------------------------------------------------------
 
 def _gate(min_soc, soc, configured, *, is_active=True, prev_on=False, gate_state=None):
-    device = {CONF_DEVICE_MIN_BATTERY_SOC: min_soc, CONF_DEVICE_NAME: "x"}
+    device = {CONF_DEVICE_START_BATTERY_SOC: min_soc, CONF_DEVICE_NAME: "x"}
     status = {"refusal_reasons": []}
     gs = gate_state if gate_state is not None else {}
     res = pp._apply_battery_soc_gate(
@@ -107,6 +107,48 @@ def test_soc_gate_blocked_clears_at_recovery():
 def test_soc_gate_inactive_candidate_unchanged():
     # not is_active → returned unchanged (gate only blocks would-be starts).
     res, _, _ = _gate(80, 10.0, True, is_active=False)
+    assert res is False
+
+
+# --- Discharge-side stop floor (_apply_battery_stop_floor) ------------------
+
+def _stop_gate(stop_soc, soc, discharging, *, protection=0.0, is_active=True, gate_state=None):
+    from custom_components.sun_allocator.const import CONF_DEVICE_STOP_BATTERY_SOC
+    device = {CONF_DEVICE_STOP_BATTERY_SOC: stop_soc, CONF_DEVICE_NAME: "x"}
+    status = {"refusal_reasons": []}
+    gs = gate_state if gate_state is not None else {}
+    res = pp._apply_battery_stop_floor(
+        device, "d", is_active, soc, True, discharging, protection, gs, status
+    )
+    return res, status, gs
+
+
+def test_stop_floor_default_100_sheds_running_on_discharge():
+    res, status, gs = _stop_gate(100, 90.0, True)
+    assert res is False
+    assert gs.get("d") is True
+    assert any("Battery protection" in r for r in status["refusal_reasons"])
+
+
+def test_stop_floor_not_discharging_keeps_running():
+    res, _, gs = _stop_gate(100, 50.0, False)
+    assert res is True
+    assert "d" not in gs
+
+
+def test_stop_floor_above_floor_keeps_running():
+    res, _, _ = _stop_gate(60, 65.0, True)
+    assert res is True
+
+
+def test_stop_floor_protection_is_absolute_any_direction():
+    # Below the global hard floor forces off even while charging (not discharging).
+    res, _, _ = _stop_gate(0, 35.0, False, protection=40.0)
+    assert res is False
+
+
+def test_stop_floor_inactive_unchanged():
+    res, _, _ = _stop_gate(100, 10.0, True, is_active=False)
     assert res is False
 
 

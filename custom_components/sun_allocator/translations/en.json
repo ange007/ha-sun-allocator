@@ -8,18 +8,27 @@
         "data": {
           "mppt_count": "Number of MPPT trackers",
           "advanced_settings_enabled": "Enable Advanced Settings",
-          "battery_power_reversed": "Reverse Battery Power Values",
           "temperature_compensation_enabled": "Enable Temperature Compensation",
           "consumption": "Consumption Sensor",
-          "battery_power": "Battery Power Sensor",
-          "battery_soc_sensor": "Battery SOC Sensor",
-          "battery_sharing_soc": "Share Surplus Above SOC (%)",
           "pv_forecast_sensor": "PV Forecast Sensor (W, guides probe)"
+        }
+      },
+      "battery": {
+        "title": "Battery",
+        "description": "Battery sensors and the reserve / sharing / protection thresholds. Reserve = watts always held for charging; Sharing SOC = release surplus only above this; Protection floor = below this every device is forced off.",
+        "data": {
+          "battery_power": "Battery Power Sensor",
+          "battery_power_reversed": "Reverse Battery Power Values",
+          "battery_soc_sensor": "Battery SOC Sensor",
+          "reserve_battery_power": "Battery Power Reserve (W, held for charging)",
+          "battery_sharing_soc": "Share Surplus Above SOC (%)",
+          "battery_protection_soc": "Battery Protection Floor SOC (%, all off below)",
+          "battery_discharge_tolerance_w": "Battery Discharge Tolerance (W)"
         }
       },
       "mppt_input": {
         "title": "MPPT Tracker {index} of {total}",
-        "description": "Configure power/voltage sensors and panel parameters for tracker {index} of {total}.",
+        "description": "Configure power/voltage sensors and panel parameters for tracker {index} of {total}. Enter the values from your panel's datasheet (no example defaults are prefilled).",
         "data": {
           "pv_power": "PV Power Sensor",
           "pv_voltage": "PV Voltage Sensor",
@@ -44,10 +53,9 @@
         "data": {
           "mppt_count": "Number of MPPT trackers",
           "advanced_settings_enabled": "Enable Advanced Settings",
-          "battery_power_reversed": "Reverse Battery Power Values",
           "temperature_compensation_enabled": "Enable Temperature Compensation",
           "consumption": "Consumption Sensor",
-          "battery_power": "Battery Power Sensor"
+          "pv_forecast_sensor": "PV Forecast Sensor (W, guides probe)"
         }
       },
       "manage_devices": {
@@ -68,39 +76,37 @@
       },
       "device_name_type": {
         "title": "Device Configuration",
-        "description": "Configure device name and type",
+        "description": "Configure device name and select the entity to control. Dimmable lights and ESPHome relays appear twice — pick (Switch) for on/off or (Dimmer) for proportional control.",
         "data": {
           "device_name": "Device Name",
-          "device_type": "Device Type"
-        }
-      },
-      "device_selection": {
-        "title": "Device Selection",
-        "description": "Select the device to control",
-        "data": {
-          "device_entity": "Device Entity",
-          "esphome_mode_select_entity": "ESPHome Mode Select Entity"
+          "device_entity": "Device Entity"
         }
       },
       "device_basic_settings": {
         "title": "Basic Device Settings",
-        "description": "Configure basic device parameters",
+        "description": "The essentials — everything else is on the Advanced step.",
         "data": {
           "auto_control_enabled": "Enable Auto Control",
           "turn_off_on_auto_control_disable": "Turn Off When Auto Control Disabled",
-          "allow_probe": "Allow Active Probing (MPPT + probe)",
-          "min_battery_soc": "Minimum Battery SOC (%)",
+          "priority": "Device Priority",
+          "min_expected_w": "Minimum Expected Load (W)",
+          "max_expected_w": "Maximum Expected Load (W)",
+          "schedule_mode": "Schedule Mode"
+        }
+      },
+      "device_advanced": {
+        "title": "Advanced Device Settings",
+        "description": "Fine-tuning: timing, probing, per-device battery SOC, actual-power sensor, usability. Note: Start SOC has no effect below the global share-surplus SOC ({sharing_soc}%); Stop SOC 0 = use the global protection floor ({protection_soc}%).",
+        "data": {
+          "debounce_time": "Debounce Time (s)",
+          "min_on_time": "Minimum On-Time (s)",
+          "allow_probe": "Allow Speculative Surplus (probe or forecast headroom)",
+          "start_battery_soc": "Start Above Battery SOC (%, charge-side)",
+          "stop_battery_soc": "Stop Below Battery SOC (%, discharge-side; 0=use protection floor, 100=never discharge)",
           "actual_power_sensor": "Actual Power Sensor",
           "actual_power_threshold_w": "Active Power Threshold (W)",
           "max_on_time_per_day": "Max On Time Per Day (min)",
-          "check_usable_template": "Usable Condition Template",
-          "min_excess_power": "Minimum Excess Power",
-          "min_expected_w": "Minimum Expected Load (W)",
-          "max_expected_w": "Maximum Expected Load (W)",
-          "priority": "Device Priority",
-          "debounce_time": "Debounce Time (s)",
-          "min_on_time": "Minimum On-Time (s)",
-          "schedule_mode": "Schedule Mode"
+          "check_usable_template": "Usable Condition Template"
         }
       },
       "device_schedule": {
@@ -139,15 +145,10 @@
         "description": "Configure advanced MPPT and control parameters",
         "data": {
           "calculation_method": "Excess Calculation Method",
-          "reserve_battery_power": "Battery Power Reserve (W)",
           "inverter_self_consumption": "Inverter Self-Consumption (W)",
           "device_allocation_strategy": "Device Allocation Strategy",
           "min_inverter_voltage": "Minimum Inverter Voltage (V)",
-          "ramp_up_step": "Ramp Up Step (% per tick)",
-          "ramp_down_step": "Ramp Down Step (% per tick)",
-          "ramp_deadband": "Ramp Deadband (%)",
           "hysteresis_w": "Hysteresis (W)",
-          "battery_discharge_tolerance_w": "Battery Discharge Tolerance (W)",
           "probe_battery_assist_w": "Probe Battery Assist (W)"
         }
       },
@@ -170,6 +171,7 @@
       "invalid_min_expected_w": "Minimum expected load must be a non-negative number",
       "invalid_max_expected_w": "Maximum expected load must be a non-negative number",
       "duplicate_entity_id": "This entity is already used by another device",
+      "stop_soc_below_protection": "Stop SOC must be 0 (inherit) or at least the global battery protection floor",
       "invalid_time_format": "Invalid time format. Please use HH:MM",
       "voc_equal_to_vmp": "Voc cannot be equal to Vmp",
       "invalid_values": "Invalid values provided",
@@ -181,10 +183,6 @@
       "invalid_curve_factor": "Curve factor must be between 0 and 1",
       "invalid_efficiency_factor": "Efficiency factor must be between 1.0 and 1.5",
       "invalid_min_voltage": "Minimum voltage must be non-negative",
-      "invalid_ramp_up_step": "Ramp up step must be between 0 and 100",
-      "invalid_ramp_down_step": "Ramp down step must be between 0 and 100",
-      "invalid_ramp_deadband": "Ramp deadband must be between 0 and 10",
-      "invalid_default_min_start_w": "Default min start must be between 0 and 5000",
       "invalid_hysteresis_w": "Hysteresis must be between 0 and 5000",
       "temperature_sensor_required": "Temperature sensor is required when compensation is enabled"
     }
@@ -204,18 +202,27 @@
         "data": {
           "mppt_count": "Number of MPPT trackers",
           "advanced_settings_enabled": "Enable Advanced Settings",
-          "battery_power_reversed": "Reverse Battery Power Values",
           "temperature_compensation_enabled": "Enable Temperature Compensation",
           "consumption": "Consumption Sensor",
-          "battery_power": "Battery Power Sensor",
-          "battery_soc_sensor": "Battery SOC Sensor",
-          "battery_sharing_soc": "Share Surplus Above SOC (%)",
           "pv_forecast_sensor": "PV Forecast Sensor (W, guides probe)"
+        }
+      },
+      "battery": {
+        "title": "Battery",
+        "description": "Battery sensors and the reserve / sharing / protection thresholds. Reserve = watts always held for charging; Sharing SOC = release surplus only above this; Protection floor = below this every device is forced off.",
+        "data": {
+          "battery_power": "Battery Power Sensor",
+          "battery_power_reversed": "Reverse Battery Power Values",
+          "battery_soc_sensor": "Battery SOC Sensor",
+          "reserve_battery_power": "Battery Power Reserve (W, held for charging)",
+          "battery_sharing_soc": "Share Surplus Above SOC (%)",
+          "battery_protection_soc": "Battery Protection Floor SOC (%, all off below)",
+          "battery_discharge_tolerance_w": "Battery Discharge Tolerance (W)"
         }
       },
       "mppt_input": {
         "title": "MPPT Tracker {index} of {total}",
-        "description": "Configure power/voltage sensors and panel parameters for tracker {index} of {total}.",
+        "description": "Configure power/voltage sensors and panel parameters for tracker {index} of {total}. Enter the values from your panel's datasheet (no example defaults are prefilled).",
         "data": {
           "pv_power": "PV Power Sensor",
           "pv_voltage": "PV Voltage Sensor",
@@ -244,40 +251,37 @@
       },
       "device_name_type": {
         "title": "Device Configuration",
-        "description": "Configure device name and type",
+        "description": "Configure device name and select the entity to control. Dimmable lights and ESPHome relays appear twice — pick (Switch) for on/off or (Dimmer) for proportional control.",
         "data": {
           "device_name": "Device Name",
-          "device_type": "Device Type"
-        }
-      },
-      "device_selection": {
-        "title": "Device Selection",
-        "description": "Select the device to control",
-        "data": {
-          "device_entity": "Device Entity",
-          "esphome_mode_select_entity": "ESPHome Mode Select Entity",
-          "no_devices_found": "No compatible devices found"
+          "device_entity": "Device Entity"
         }
       },
       "device_basic_settings": {
         "title": "Basic Device Settings",
-        "description": "Configure basic device parameters",
+        "description": "The essentials — everything else is on the Advanced step.",
         "data": {
           "auto_control_enabled": "Enable Auto Control",
           "turn_off_on_auto_control_disable": "Turn Off When Auto Control Disabled",
-          "allow_probe": "Allow Active Probing (MPPT + probe)",
-          "min_battery_soc": "Minimum Battery SOC (%)",
+          "priority": "Device Priority",
+          "min_expected_w": "Minimum Expected Load (W)",
+          "max_expected_w": "Maximum Expected Load (W)",
+          "schedule_mode": "Schedule Mode"
+        }
+      },
+      "device_advanced": {
+        "title": "Advanced Device Settings",
+        "description": "Fine-tuning: timing, probing, per-device battery SOC, actual-power sensor, usability. Note: Start SOC has no effect below the global share-surplus SOC ({sharing_soc}%); Stop SOC 0 = use the global protection floor ({protection_soc}%).",
+        "data": {
+          "debounce_time": "Debounce Time (s)",
+          "min_on_time": "Minimum On-Time (s)",
+          "allow_probe": "Allow Speculative Surplus (probe or forecast headroom)",
+          "start_battery_soc": "Start Above Battery SOC (%, charge-side)",
+          "stop_battery_soc": "Stop Below Battery SOC (%, discharge-side; 0=use protection floor, 100=never discharge)",
           "actual_power_sensor": "Actual Power Sensor",
           "actual_power_threshold_w": "Active Power Threshold (W)",
           "max_on_time_per_day": "Max On Time Per Day (min)",
-          "check_usable_template": "Usable Condition Template",
-          "min_excess_power": "Minimum Excess Power",
-          "min_expected_w": "Minimum Expected Load (W)",
-          "max_expected_w": "Maximum Expected Load (W)",
-          "priority": "Device Priority",
-          "debounce_time": "Debounce Time (s)",
-          "min_on_time": "Minimum On-Time (s)",
-          "schedule_mode": "Schedule Mode"
+          "check_usable_template": "Usable Condition Template"
         }
       },
       "device_schedule": {
@@ -316,15 +320,10 @@
         "description": "Configure advanced MPPT and control parameters",
         "data": {
           "calculation_method": "Excess Calculation Method",
-          "reserve_battery_power": "Battery Power Reserve (W)",
           "inverter_self_consumption": "Inverter Self-Consumption (W)",
           "device_allocation_strategy": "Device Allocation Strategy",
           "min_inverter_voltage": "Minimum Inverter Voltage (V)",
-          "ramp_up_step": "Ramp Up Step (% per tick)",
-          "ramp_down_step": "Ramp Down Step (% per tick)",
-          "ramp_deadband": "Ramp Deadband (%)",
           "hysteresis_w": "Hysteresis (W)",
-          "battery_discharge_tolerance_w": "Battery Discharge Tolerance (W)",
           "probe_battery_assist_w": "Probe Battery Assist (W)"
         }
       },
@@ -355,6 +354,7 @@
       "invalid_min_expected_w": "Minimum expected load must be a non-negative number",
       "invalid_max_expected_w": "Maximum expected load must be a non-negative number",
       "duplicate_entity_id": "This entity is already used by another device",
+      "stop_soc_below_protection": "Stop SOC must be 0 (inherit) or at least the global battery protection floor",
       "invalid_time_format": "Invalid time format. Please use HH:MM",
       "voc_equal_to_vmp": "Voc cannot be equal to Vmp",
       "invalid_values": "Invalid values provided",
@@ -366,9 +366,6 @@
       "invalid_curve_factor": "Curve factor must be between 0 and 1",
       "invalid_efficiency_factor": "Efficiency factor must be between 1.0 and 1.5",
       "invalid_min_voltage": "Minimum voltage must be non-negative",
-      "invalid_ramp_up_step": "Ramp up step must be between 0 and 100",
-      "invalid_ramp_down_step": "Ramp down step must be between 0 and 100",
-      "invalid_ramp_deadband": "Ramp deadband must be between 0 and 10",
       "invalid_hysteresis_w": "Hysteresis must be between 0 and 5000",
       "temperature_sensor_required": "Temperature sensor is required when compensation is enabled"
     }
@@ -462,6 +459,14 @@
     "switch": {
       "auto_control": {
         "name": "Auto Control"
+      },
+      "manual_switch": {
+        "name": "Switch"
+      }
+    },
+    "number": {
+      "timed_run": {
+        "name": "Run Timer (min)"
       }
     },
     "sensor": {
@@ -771,6 +776,12 @@
       "device_power_percent": {
         "name": "Power Percent"
       },
+      "runtime": {
+        "name": "Run Time (today)"
+      },
+      "timer_remaining": {
+        "name": "Time Until Off"
+      },
       "device_status": {
         "name": "Status",
         "state": {
@@ -781,10 +792,12 @@
           "debouncing_off": "Debouncing (turning off)",
           "auto_control_off": "Auto control off",
           "manual_override": "Manual override",
+          "manual_active": "Manual (on)",
+          "manual_timer": "Manual (timer)",
           "filtered": "Filtered",
           "trying_on": "Trying to turn on",
           "trying_off": "Trying to turn off",
-          "failed_on": "Failed to turn on"
+          "unreachable": "Unreachable"
         },
         "state_attributes": {
           "priority": {

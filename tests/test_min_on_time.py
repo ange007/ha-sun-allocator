@@ -33,12 +33,16 @@ def _apply(state, status, *, is_active, prev_on, now, min_on_time, device=None):
     )
 
 
-def test_records_last_on_time_on_turn_on():
+def test_does_not_record_session_start_on_turn_on():
+    # R1.2: the session/grace START recording moved OUT of _apply_min_on_time to the end
+    # of _control_one_device (only after every gate confirms the start survives). So this
+    # helper must NOT write last_on_time on a fresh turn-on — otherwise an SOC/max gate
+    # that later vetoes the start leaves a phantom session + grace-persist flash churn.
     state, status, now = {}, {"refusal_reasons": []}, _now()
     res = _apply(state, status, is_active=True, prev_on=False, now=now, min_on_time=2)
     assert res is True
-    assert state["d"]["last_on_time"] == now
-    assert status["last_on_time"] == now
+    assert state.get("d", {}).get("last_on_time") is None
+    assert "last_on_time" not in status
 
 
 def test_blocks_turn_off_before_min_elapsed():

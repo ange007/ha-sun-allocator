@@ -27,6 +27,7 @@ from ...const import (
     CONF_INVERTER_SELF_CONSUMPTION,
     CONF_BATTERY_DISCHARGE_TOLERANCE_W,
     DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W,
+    DEFAULT_EXCESS_DISCHARGE_STREAK,
     CONF_CALCULATION_METHOD,
     DEFAULT_CALCULATION_METHOD,
     CALC_METHOD_MPPT,
@@ -132,6 +133,27 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             CONF_BATTERY_DISCHARGE_TOLERANCE_W, DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W
         )
 
+        # Sustained-discharge damping: the raw battery reading is noisy (±80 W around
+        # zero under curtailment). A single-tick dip below -tolerance must NOT zero the
+        # excess — that flickered excess 400↔0 and flapped devices. Only count the
+        # discharge once it persists DEFAULT_EXCESS_DISCHARGE_STREAK ticks; until then
+        # present the battery as neutral (clamped to the tolerance edge) to the excess /
+        # curtailment calc so a transient dip is ignored. A real, sustained discharge
+        # still zeroes the excess within a few seconds.
+        net_charge = (
+            -float(battery_power or 0) if battery_power_reversed else float(battery_power or 0)
+        )
+        if net_charge < -discharge_tolerance_w:
+            self._discharge_streak = getattr(self, "_discharge_streak", 0) + 1
+        else:
+            self._discharge_streak = 0
+        discharge_confirmed = self._discharge_streak >= DEFAULT_EXCESS_DISCHARGE_STREAK
+        effective_battery_power = battery_power
+        if net_charge < -discharge_tolerance_w and not discharge_confirmed:
+            effective_battery_power = (
+                discharge_tolerance_w if battery_power_reversed else -discharge_tolerance_w
+            )
+
         if not mppt_readings:
             log_error(
                 "No MPPT inputs configured. Cannot calculate excess power."
@@ -214,7 +236,7 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
             excess = calculate_excess_power_export(
                 pv_power=total_pv_power,
                 consumption=consumption if has_consumption_sensor else None,
-                battery_power=battery_power,
+                battery_power=effective_battery_power,
                 battery_power_reversed=battery_power_reversed,
                 configured_reserve=configured_reserve,
                 inverter_self_consumption=inverter_self_consumption,
@@ -227,7 +249,7 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
                 current_max_power=total_cmp,
                 pv_power=total_pv_power,
                 consumption=consumption if has_consumption_sensor else None,
-                battery_power=battery_power,
+                battery_power=effective_battery_power,
                 battery_power_reversed=battery_power_reversed,
                 configured_reserve=configured_reserve,
                 inverter_self_consumption=inverter_self_consumption,
@@ -242,15 +264,14 @@ class SunAllocatorExcessSensor(BaseSunAllocatorSensor):
         curtailment_detected = detect_curtailment(
             pv_power=total_pv_power,
             current_max_power=total_cmp,
-            battery_power=battery_power,
+            battery_power=effective_battery_power,
             battery_power_reversed=battery_power_reversed,
             discharge_tolerance_w=discharge_tolerance_w,
         )
 
         usage = calculate_usage_percentage(total_pv_power, total_cmp)
-        battery_discharging = (
-            battery_power > 0 if battery_power_reversed else battery_power < 0
-        )
+        # Report the CONFIRMED (streak-debounced) discharge, not a single-tick dip.
+        battery_discharging = discharge_confirmed
 
         self._update_attributes(
             pv_power=round(total_pv_power, 1),

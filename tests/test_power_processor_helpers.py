@@ -1,6 +1,6 @@
 """Unit tests for the small helpers extracted from process_excess_power."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -72,6 +72,36 @@ def test_sync_initial_skips_unavailable_entities():
     assert state == {}
 
 
+def test_sync_initial_seeds_fresh_session_for_device_already_on():
+    """A device found ON across a restart continues its on-time session from `now`,
+    on top of whatever daily total was separately restored (load_on_time_state)."""
+    now = datetime(2026, 7, 3, 18, 0, 0, tzinfo=timezone.utc)
+    hass = MagicMock()
+    hass.states.get.return_value = _state("on")
+    devices = [{CONF_DEVICE_ID: "d1", CONF_DEVICE_ENTITY: "switch.x"}]
+    state: dict = {}
+    on_time_state = {"d1": {"on_time_day": now.date(), "on_time_accum_sec": 120.0}}
+
+    pp._sync_initial_device_states(hass, devices, state, {}, on_time_state, now)
+
+    assert state == {"d1": True}
+    assert on_time_state["d1"]["last_on_time"] == now
+    assert on_time_state["d1"]["on_time_accum_sec"] == 120.0  # restored total untouched
+
+
+def test_sync_initial_does_not_seed_session_for_device_off():
+    now = datetime(2026, 7, 3, 18, 0, 0, tzinfo=timezone.utc)
+    hass = MagicMock()
+    hass.states.get.return_value = _state("off")
+    devices = [{CONF_DEVICE_ID: "d1", CONF_DEVICE_ENTITY: "switch.x"}]
+    state: dict = {}
+    on_time_state: dict = {}
+
+    pp._sync_initial_device_states(hass, devices, state, {}, on_time_state, now)
+
+    assert "d1" not in on_time_state
+
+
 def test_compute_proportional_allocations_distributes_by_max_w(monkeypatch):
     """Two active proportional devices share remaining_power weighted by max_expected_w."""
     monkeypatch.setattr(pp, "_calculate_device_state", lambda *args, **kw: (True, True))
@@ -122,3 +152,175 @@ def test_compute_proportional_allocations_skips_non_custom():
 def test_compute_proportional_allocations_returns_empty_when_pool_empty():
     out = pp._compute_proportional_allocations([], {}, 500.0, {}, {}, {}, datetime.now(tz=timezone.utc))
     assert out == {}
+
+
+# --- daily on-time accounting -----------------------------------------------
+
+def test_daily_on_time_sec_zero_when_never_started():
+    now = datetime(2026, 7, 3, 12, 0, 0, tzinfo=timezone.utc)
+    assert pp._daily_on_time_sec({}, "d1", now, currently_on=True) == 0.0
+
+
+def test_daily_on_time_sec_adds_in_progress_session():
+    now = datetime(2026, 7, 3, 12, 5, 0, tzinfo=timezone.utc)
+    state = {"d1": {"on_time_day": now.date(), "on_time_accum_sec": 60.0,
+                     "last_on_time": now - timedelta(minutes=2)}}
+    # 60s already accumulated today + a 2-minute session still running.
+    assert pp._daily_on_time_sec(state, "d1", now, currently_on=True) == pytest.approx(180.0)
+
+
+def test_daily_on_time_sec_excludes_in_progress_session_when_off():
+    now = datetime(2026, 7, 3, 12, 5, 0, tzinfo=timezone.utc)
+    state = {"d1": {"on_time_day": now.date(), "on_time_accum_sec": 60.0,
+                     "last_on_time": now - timedelta(minutes=2)}}
+    assert pp._daily_on_time_sec(state, "d1", now, currently_on=False) == 60.0
+
+
+def test_daily_on_time_sec_resets_on_new_day():
+    now = datetime(2026, 7, 3, 0, 5, 0, tzinfo=timezone.utc)
+    state = {"d1": {"on_time_day": now.date() - timedelta(days=1), "on_time_accum_sec": 500.0}}
+    assert pp._daily_on_time_sec(state, "d1", now, currently_on=False) == 0.0
+
+
+def test_accumulate_daily_on_time_folds_session_into_accumulator():
+    now = datetime(2026, 7, 3, 12, 5, 0, tzinfo=timezone.utc)
+    state = {"d1": {"last_on_time": now - timedelta(minutes=3)}}
+    pp._accumulate_daily_on_time(state, "d1", now)
+    assert state["d1"]["on_time_accum_sec"] == pytest.approx(180.0)
+
+
+def test_accumulate_daily_on_time_noop_when_never_started():
+    now = datetime(2026, 7, 3, 12, 5, 0, tzinfo=timezone.utc)
+    state = {"d1": {}}
+    pp._accumulate_daily_on_time(state, "d1", now)
+    assert state["d1"].get("on_time_accum_sec") is None
+
+
+# --- _close_on_time_session (R1.1: consistent on→off close) ------------------
+
+def test_close_on_time_session_folds_and_clears():
+    now = datetime(2026, 7, 3, 12, 5, 0, tzinfo=timezone.utc)
+    state = {"d1": {"on_time_day": now.date(), "on_time_accum_sec": 60.0,
+                     "last_on_time": now - timedelta(minutes=3)}}
+    pp._close_on_time_session(state, "d1", now)
+    assert state["d1"].get("last_on_time") is None          # session closed
+    assert state["d1"]["last_off_time"] == now
+    assert state["d1"]["on_time_accum_sec"] == pytest.approx(240.0)  # 60 + 180
+
+
+def test_close_on_time_session_noop_when_no_open_session():
+    now = datetime(2026, 7, 3, 12, 5, 0, tzinfo=timezone.utc)
+    state = {"d1": {"on_time_day": now.date(), "on_time_accum_sec": 60.0}}  # no last_on_time
+    pp._close_on_time_session(state, "d1", now)
+    assert state["d1"]["on_time_accum_sec"] == 60.0     # untouched
+    assert "last_off_time" not in state["d1"]
+
+
+def test_close_on_time_session_noop_when_device_absent():
+    now = datetime(2026, 7, 3, 12, 5, 0, tzinfo=timezone.utc)
+    state: dict = {}
+    pp._close_on_time_session(state, "d1", now)  # must not raise
+    assert state == {}
+
+
+def test_max_on_time_gate_closes_session_when_forcing_off():
+    # A running device over its daily budget is forced off and its session closed here
+    # (the gate bypasses _apply_min_on_time's off-branch).
+    from custom_components.sun_allocator.const import (
+        CONF_DEVICE_MAX_ON_TIME_PER_DAY, CONF_DEVICE_NAME,
+    )
+    now = datetime(2026, 7, 3, 12, 0, 0, tzinfo=timezone.utc)
+    device = {CONF_DEVICE_NAME: "x", CONF_DEVICE_MAX_ON_TIME_PER_DAY: 60}  # 60 min/day
+    # 55 min accumulated + a 10-min running session = 65 min > 60 → force off.
+    state = {"d1": {"on_time_day": now.date(), "on_time_accum_sec": 55 * 60.0,
+                     "last_on_time": now - timedelta(minutes=10)}}
+    status = {"refusal_reasons": []}
+    res = pp._apply_max_on_time_gate(device, "d1", True, True, state, now, status)
+    assert res is False                                  # forced off
+    assert state["d1"].get("last_on_time") is None       # session closed
+    assert state["d1"]["on_time_accum_sec"] == pytest.approx(65 * 60.0)
+
+
+# --- _detect_external_change: restart-safe last_controlled_at ---------------
+# Regression: last_controlled_at is purely in-memory (never persisted). A HA restart
+# mid-session wipes it while device_on_state/manual_overrides/grace deadlines resync
+# or restore from storage. A missing timestamp must NOT default to "user toggled it" —
+# that misattributed a stale post-restart mismatch as deliberate user action, sticking
+# a phantom manual override (observed live: a device forced OFF seconds after its own
+# startup-grace window began, right after a HA restart).
+
+def _relay_state(value, last_changed):
+    s = MagicMock()
+    s.state = value
+    s.last_changed = last_changed
+    return s
+
+
+def _hass_with_relay(state):
+    hass = MagicMock()
+    hass.states.get.return_value = state
+    return hass
+
+
+def test_no_last_controlled_at_is_not_user_initiated():
+    now = datetime(2026, 7, 3, 17, 0, 0, tzinfo=timezone.utc)
+    old_change = now - timedelta(hours=16)  # entity hasn't changed since way earlier
+    hass = _hass_with_relay(_relay_state("off", old_change))
+    device = {CONF_DEVICE_ENTITY: "light.x"}
+    entry_data = {}  # fresh post-restart entry_data: no last_controlled_at at all
+    device_on_state = {"d1": True}  # we believe it's on (e.g. restored/synced)
+    status_entry = {}
+
+    pp._detect_external_change(hass, device, "d1", entry_data, status_entry, device_on_state, now)
+
+    assert "d1" not in entry_data.get("manual_overrides", {})
+
+
+def test_stale_last_controlled_at_is_not_user_initiated():
+    """We commanded it before the entity's last real change → still catching up, not user."""
+    now = datetime(2026, 7, 3, 17, 0, 0, tzinfo=timezone.utc)
+    old_change = now - timedelta(hours=16)
+    hass = _hass_with_relay(_relay_state("off", old_change))
+    device = {CONF_DEVICE_ENTITY: "light.x"}
+    entry_data = {"last_controlled_at": {"d1": now - timedelta(seconds=5)}}
+    device_on_state = {"d1": True}
+    status_entry = {}
+
+    pp._detect_external_change(hass, device, "d1", entry_data, status_entry, device_on_state, now)
+
+    assert "d1" not in entry_data.get("manual_overrides", {})
+
+
+def test_fresh_actual_change_after_our_command_is_user_initiated():
+    """The entity changed AFTER we last commanded it → a genuine user toggle."""
+    now = datetime(2026, 7, 3, 17, 0, 0, tzinfo=timezone.utc)
+    hass = _hass_with_relay(_relay_state("off", now - timedelta(seconds=1)))
+    device = {CONF_DEVICE_ENTITY: "light.x"}
+    entry_data = {"last_controlled_at": {"d1": now - timedelta(seconds=30)}}
+    device_on_state = {"d1": True}
+    status_entry = {}
+
+    pp._detect_external_change(hass, device, "d1", entry_data, status_entry, device_on_state, now)
+
+    ov = entry_data["manual_overrides"]["d1"]
+    assert ov["state"] is False
+
+
+def test_stale_mismatch_after_long_dormant_gap_is_not_user_initiated():
+    """Regression (confirmed live 2026-07-04): a device dormant for hours (near-zero
+    excess overnight, so the control loop barely runs) can have BOTH last_controlled_at
+    and the entity's last_changed frozen from the previous evening. Their mere relative
+    order — one a few seconds "newer" than the other, both ancient — must not read as
+    "the user just toggled it" the instant the loop wakes up hours later."""
+    last_controlled = datetime(2026, 7, 3, 22, 54, 44, tzinfo=timezone.utc)
+    actual_last_changed = last_controlled + timedelta(seconds=15)  # a same-value flicker
+    now = datetime(2026, 7, 4, 10, 32, 19, tzinfo=timezone.utc)  # ~11.5h later
+    hass = _hass_with_relay(_relay_state("off", actual_last_changed))
+    device = {CONF_DEVICE_ENTITY: "light.x"}
+    entry_data = {"last_controlled_at": {"d1": last_controlled}}
+    device_on_state = {"d1": True}
+    status_entry = {}
+
+    pp._detect_external_change(hass, device, "d1", entry_data, status_entry, device_on_state, now)
+
+    assert "d1" not in entry_data.get("manual_overrides", {})

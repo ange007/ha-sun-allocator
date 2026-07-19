@@ -52,10 +52,6 @@ from ..const import (
     CONF_DEVICE_MIN_EXPECTED_W,
 )
 
-# device_status ENUM key meaning "would run, but there isn't enough surplus".
-_STATUS_INSUFFICIENT_POWER = "insufficient_power"
-
-
 def is_probe_enabled(method: Optional[str]) -> bool:
     """True when the configured calculation method enables active probing."""
     return method == CALC_METHOD_MPPT_PROBE
@@ -64,21 +60,6 @@ def is_probe_enabled(method: Optional[str]) -> bool:
 def battery_net_charge_w(battery_power: float, battery_power_reversed: bool) -> float:
     """Battery net charge in W (positive = charging), sign-convention-independent."""
     return -battery_power if battery_power_reversed else battery_power
-
-
-def has_growth_target(statuses: Iterable[str]) -> bool:
-    """True when at least one device is waiting only for more surplus.
-
-    Used to stop the headroom growing once nothing more could consume it. A
-    proportional device still below its max reports ``active`` (not
-    ``insufficient_power``); the orchestrator adds that case separately.
-    """
-    return any(s == _STATUS_INSUFFICIENT_POWER for s in statuses)
-
-
-def effective_excess(excess: float, headroom_w: float) -> float:
-    """Budget the allocator should use: cautious excess plus discovered headroom."""
-    return float(excess) + max(0.0, float(headroom_w))
 
 
 def growth_target_present(

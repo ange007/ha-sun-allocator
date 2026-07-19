@@ -31,6 +31,8 @@ from .core.device_restore import (
     restore_entity_state,
     restore_all_devices,
     load_grace_state,
+    load_manual_overrides,
+    load_on_time_state,
     _load_restore_data,
 )
 from .core.services import handle_set_relay_mode, handle_set_relay_power, rebuild_device_index
@@ -55,7 +57,7 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
     CONF_DEVICE_PRIORITY,
-    CONF_DEVICE_TYPE,
+    CONF_DEVICE_CONTROL_MODE,
     CONF_POWER_ALLOCATION,
     CONF_CALCULATION_METHOD,
     DEFAULT_CALCULATION_METHOD,
@@ -311,7 +313,7 @@ async def _initial_pass_with_retry(hass, config_entry, entry_data, excess_sensor
 # (e.g. "<entry>_excess") never match, so reconciliation can't touch them.
 _DEVICE_UID_TAIL_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-    r"_(?:power_percent|power|status|auto_control)$"
+    r"_(?:power_percent|power|status|auto_control|manual_switch|timed_run|runtime|timer_remaining)$"
 )
 
 
@@ -395,10 +397,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
             log_info("[Startup] Loaded %d devices from config:", len(devices))
             for dev in devices:
                 log_info(
-                    "[Startup] Device: id=%s, name=%s, type=%s, entity=%s",
+                    "[Startup] Device: id=%s, name=%s, mode=%s, entity=%s",
                     dev.get(CONF_DEVICE_ID),
                     dev.get(CONF_DEVICE_NAME),
-                    dev.get(CONF_DEVICE_TYPE),
+                    dev.get(CONF_DEVICE_CONTROL_MODE),
                     dev.get(CONF_DEVICE_ENTITY),
                 )
         else:
@@ -420,7 +422,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
     _fix_power_percent_entity_ids(hass, config_entry)
 
     await _setup_entity_state_listeners(hass, config_entry, entry_data)
-    await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor", "switch"])
+    await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor", "switch", "number"])
 
     root = hass.data[DOMAIN]
     root.setdefault("_entry_count", 0)
@@ -502,6 +504,24 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
                 "[grace] Restored startup grace for %s until %s (%.0fs remaining)",
                 device_id, deadline, (deadline - now_utc).total_seconds(),
             )
+
+    # Restore sticky manual-control overrides so a HA restart doesn't drop a
+    # manual_active/manual_off choice (the daily-rollover clear still applies at runtime).
+    manual_overrides = await load_manual_overrides(hass, config_entry)
+    if manual_overrides:
+        entry_data["manual_overrides"] = manual_overrides
+        log_info("[manual] Restored %d manual override(s) after restart", len(manual_overrides))
+
+    # Restore today's accumulated on-time per device so a restart mid-day doesn't reset
+    # the runtime sensor / max_on_time_per_day gate to 0. A device still physically running
+    # across the restart gets a fresh in-progress session seeded on top of this total —
+    # see _sync_initial_device_states.
+    on_time_restored = await load_on_time_state(hass, config_entry)
+    if on_time_restored:
+        device_on_time_state = entry_data.setdefault("device_on_time_state", {})
+        for device_id, st in on_time_restored.items():
+            device_on_time_state.setdefault(device_id, {}).update(st)
+        log_info("[on_time] Restored today's on-time total for %d device(s)", len(on_time_restored))
 
     watchdog_period = timedelta(seconds=60)
     entry_data["watchdog_last_seen"] = dt_util.utcnow()
@@ -734,6 +754,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigType):
     """Unload a config entry."""
     await hass.config_entries.async_forward_entry_unload(config_entry, "sensor")
     await hass.config_entries.async_forward_entry_unload(config_entry, "switch")
+    await hass.config_entries.async_forward_entry_unload(config_entry, "number")
 
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
 

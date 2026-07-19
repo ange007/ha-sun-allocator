@@ -12,6 +12,7 @@ from tests.const import MOCK_CONFIG
 
 from custom_components.sun_allocator.const import (
     DOMAIN,
+    CONF_DEVICES,
     CONF_PV_POWER,
     CONF_PV_VOLTAGE,
     CONF_CONSUMPTION,
@@ -23,9 +24,8 @@ from custom_components.sun_allocator.const import (
     CONF_PANEL_ISC,
     CONF_PANEL_COUNT,
     CONF_PANEL_CONFIGURATION,
-    CONF_RESERVE_BATTERY_POWER,
-    CONF_RAMP_UP_STEP,
-    CONF_RAMP_DOWN_STEP,
+    CONF_HYSTERESIS_W,
+    CONF_CALCULATION_METHOD,
     CONF_ACTION,
     PANEL_CONFIG_SERIES,
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
@@ -71,14 +71,16 @@ async def test_form_user(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_create_entry(hass: HomeAssistant) -> None:
-    """Test we can create a config entry from the handler."""
+    """The terminal _create_entry() produces a real CREATE_ENTRY result.
+
+    Regression: the previous version patched _create_entry (the method under test) and
+    asserted on the mock's own canned return, validating nothing. Here we call the REAL
+    method and assert on the real flow result.
+    """
     from custom_components.sun_allocator.config_flow import SunAllocatorConfigFlow
 
-    # Initialize the flow handler directly
     flow = SunAllocatorConfigFlow()
     flow.hass = hass
-
-    # Set the solar config with test data
     flow._solar_config = {
         CONF_PV_POWER: "sensor.test_pv_power",
         CONF_PV_VOLTAGE: "sensor.test_pv_voltage",
@@ -95,24 +97,68 @@ async def test_create_entry(hass: HomeAssistant) -> None:
         CONF_ADVANCED_SETTINGS_ENABLED: False,
     }
 
-    # Call the _create_entry method directly (we need to implement this in the actual code)
-    with patch.object(flow, "_create_entry") as mock_create_entry:
-        mock_create_entry.return_value = {
-            "type": FlowResultType.CREATE_ENTRY,
-            "title": "Sun Allocator",
-            "data": flow._solar_config,
-            "options": {},
-            "version": 1,
-        }
+    result = flow._create_entry()  # REAL terminal step, no mock
 
-        result = flow._create_entry()
-
-    # Check that the correct data is in the result
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Sun Allocator"
     assert result["data"][CONF_PV_POWER] == "sensor.test_pv_power"
-    assert "version" in result
-    assert "options" in result
+    assert result["data"][CONF_DEVICES] == []  # devices list initialised empty
+
+
+@pytest.mark.asyncio
+async def test_full_config_flow_creates_entry(hass: HomeAssistant) -> None:
+    """End-to-end: walk the initial wizard (user → battery → mppt_input) to CREATE_ENTRY.
+
+    Covers the whole happy path the isolated step tests never traverse. With both
+    optional sections toggled off and mppt_count=1, one panel step finalizes the entry.
+    """
+    hass.states.async_set(
+        "sensor.pv_power", "1000", {"device_class": "power", "unit_of_measurement": "W"}
+    )
+    hass.states.async_set(
+        "sensor.pv_voltage", "230", {"device_class": "voltage", "unit_of_measurement": "V"}
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "user"
+
+    # Hub step → battery.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "mppt_count": 1,
+            CONF_TEMPERATURE_COMPENSATION_ENABLED: False,
+            CONF_ADVANCED_SETTINGS_ENABLED: False,
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "battery"
+
+    # Battery step (all optional) → first mppt_input.
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "mppt_input"
+
+    # Single panel step finalizes (count reached, no temp/advanced sections).
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_PV_POWER: "sensor.pv_power",
+            CONF_PV_VOLTAGE: "sensor.pv_voltage",
+            CONF_PANEL_VMP: 36.0,
+            CONF_PANEL_IMP: 8.0,
+            CONF_PANEL_VOC: 40.0,
+            CONF_PANEL_ISC: 8.5,
+            CONF_PANEL_COUNT: 1,
+            CONF_PANEL_CONFIGURATION: PANEL_CONFIG_SERIES,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PANEL_VMP] == 36.0
+    assert result["data"][CONF_DEVICES] == []
 
 
 @pytest.mark.asyncio
@@ -183,9 +229,8 @@ async def test_advanced_settings_step(hass: HomeAssistant) -> None:
 
     # Call the method with test data
     user_input = {
-        CONF_RESERVE_BATTERY_POWER: 100,
-        CONF_RAMP_UP_STEP: 5,
-        CONF_RAMP_DOWN_STEP: 5,
+        CONF_CALCULATION_METHOD: "mppt",
+        CONF_HYSTERESIS_W: 40,
     }
 
     # Mock methods that would be called
@@ -202,7 +247,7 @@ async def test_advanced_settings_step(hass: HomeAssistant) -> None:
         await flow.async_step_advanced_settings(user_input)
 
     # Verify the solar config was updated
-    assert CONF_RESERVE_BATTERY_POWER in flow._solar_config
+    assert CONF_HYSTERESIS_W in flow._solar_config
 
 
 @pytest.mark.asyncio

@@ -10,8 +10,6 @@
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/ange007/ha-sun-allocator/issues",
-  "requirements": [
-    "voluptuous"
-  ],
-  "version": "1.2.0"
+  "requirements": [],
+  "version": "1.3.0"
 }

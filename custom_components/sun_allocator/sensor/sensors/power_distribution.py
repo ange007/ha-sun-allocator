@@ -21,7 +21,7 @@ from ...const import (
     SIGNAL_POWER_DISTRIBUTION_UPDATED,
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
-    CONF_DEVICE_TYPE,
+    CONF_DEVICE_CONTROL_MODE,
     CONF_DEVICE_ENTITY,
     CONF_AUTO_CONTROL_ENABLED,
 )
@@ -104,7 +104,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
             for dev in all_devices:
                 dev_id = dev.get(CONF_DEVICE_ID)
                 entity_id = dev.get(CONF_DEVICE_ENTITY)
-                device_type = dev.get(CONF_DEVICE_TYPE)
+                control_mode = dev.get(CONF_DEVICE_CONTROL_MODE)
                 name = dev.get(CONF_DEVICE_NAME)
 
                 reason = None
@@ -119,7 +119,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                     "device_id": dev_id,
                     "name": name,
                     "entity_id": entity_id,
-                    "type": device_type,
+                    "control_mode": control_mode,
                     "auto_control": dev.get(CONF_AUTO_CONTROL_ENABLED, "missing"),
                     "in_device_status": (dev_id in device_status) if dev_id else False,
                     "reason": reason,
@@ -133,7 +133,7 @@ class SunAllocatorPowerDistributionSensor(SensorEntity):
                         "id": dev_id,
                         "name": device_status[dev_id].get(CONF_DEVICE_NAME),
                         "entity_id": device_status[dev_id].get(CONF_DEVICE_ENTITY),
-                        "type": device_status[dev_id].get(CONF_DEVICE_TYPE),
+                        "control_mode": device_status[dev_id].get(CONF_DEVICE_CONTROL_MODE),
                         "in_device_status": True,
                         "reason": None,
                     })

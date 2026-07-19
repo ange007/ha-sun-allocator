@@ -13,7 +13,6 @@ from ...core.logger import log_error, log_warning, journal_event
 from ...core.solar_optimizer import get_panel_parameters_with_fallbacks
 from ..utils import (
     get_sensor_state_safely,
-    is_reading_stale,
     get_temperature_compensation_data,
     create_sensor_attributes,
     setup_sensor_listeners,
@@ -41,7 +40,6 @@ from ...const import (
     CONF_TEMPERATURE_COMPENSATION_ENABLED,
     CONF_TEMPERATURE_SENSOR,
     CONF_BATTERY_SOC_SENSOR,
-    DEFAULT_SOC_MAX_AGE_S,
     CONF_SIM_ENABLED,
     CONF_SIM_PV_POWER,
     CONF_SIM_PV_VOLTAGE,
@@ -280,16 +278,16 @@ class BaseSunAllocatorSensor(SensorEntity, ABC):
             if battery_ok and not self._config.get(CONF_SIM_ENABLED):
                 self._check_battery_sign(battery_power)
 
-        # SOC stays None when unconfigured, unavailable or STALE so the reserve
-        # modulation fails open (configured reserve as-is) rather than to 0%.
+        # SOC stays None only when unconfigured or unavailable/unknown (handled by
+        # get_sensor_state_safely). A stale timestamp is NOT treated as unavailable:
+        # SOC sensors report only on value change, so a flat SOC legitimately freezes
+        # its timestamps for hours — trust the last known value (see _read_battery_soc).
         battery_soc = None
         if self._battery_soc_sensor:
             soc_value, soc_ok = get_sensor_state_safely(
                 self._hass, self._battery_soc_sensor, "Battery SOC"
             )
-            if soc_ok and not is_reading_stale(
-                self._hass, self._battery_soc_sensor, DEFAULT_SOC_MAX_AGE_S
-            ):
+            if soc_ok:
                 battery_soc = soc_value
 
         # Optional external PV-production forecast (W). Diagnostic only — stays

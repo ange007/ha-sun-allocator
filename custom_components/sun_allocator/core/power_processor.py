@@ -16,14 +16,16 @@ from homeassistant.const import (
 from .logger import log_debug, log_warning
 from .schedule import is_device_in_schedule
 from .settings import COUNTER_DEBOUNCE_FRACTION
-from .device_restore import persist_grace_state
-from .probe import running_controllable_floor_w
+from .device_restore import persist_grace_state, persist_manual_overrides, persist_on_time_state
+from .timed_run import is_expired as is_timed_run_expired
+from .probe import running_controllable_floor_w, battery_net_charge_w
 from .constants_internal import SUPPORTED_DOMAINS
 from .entity_control import (
     is_entity_on,
     turn_on_entity,
     turn_off_entity,
     set_power_for_entity,
+    set_mode_for_entity,
     parse_relay_entity,
 )
 
@@ -34,9 +36,6 @@ from ..const import (
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
     CONF_DEVICE_PRIORITY,
-    CONF_DEVICE_TYPE,
-    DEVICE_TYPE_STANDARD,
-    DEVICE_TYPE_CUSTOM,
     CONF_DEVICE_MIN_ON_TIME,
     CONF_DEVICE_MIN_EXPECTED_W,
     CONF_DEVICE_MAX_EXPECTED_W,
@@ -50,8 +49,12 @@ from ..const import (
     CONF_DEVICE_DEBOUNCE_TIME,
     DEFAULT_DEBOUNCE_TIME,
     RELAY_MODE_ON,
+    RELAY_MODE_OFF,
     RELAY_MODE_PROPORTIONAL,
     CONF_ESPHOME_MODE_SELECT_ENTITY,
+    CONF_DEVICE_CONTROL_MODE,
+    CONTROL_MODE_PROPORTIONAL,
+    DOMAIN_CLIMATE,
     CONF_AUTO_CONTROL_ENABLED,
     CONF_DEVICE_ALLOCATION_STRATEGY,
     STRATEGY_FILL_ONE_BY_ONE,
@@ -59,9 +62,13 @@ from ..const import (
     KEY_STARTUP_GRACE_PERIOD,
     DEFAULT_STARTUP_GRACE_PERIOD,
     CONF_BATTERY_SOC_SENSOR,
-    CONF_DEVICE_MIN_BATTERY_SOC,
-    DEFAULT_BATTERY_SOC_HYSTERESIS,
-    DEFAULT_SOC_MAX_AGE_S,
+    CONF_BATTERY_PROTECTION_SOC,
+    CONF_BATTERY_POWER,
+    CONF_BATTERY_POWER_REVERSED,
+    CONF_BATTERY_DISCHARGE_TOLERANCE_W,
+    DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W,
+    CONF_DEVICE_STOP_BATTERY_SOC,
+    DEFAULT_DEVICE_STOP_BATTERY_SOC,
     CONF_DEVICE_ACTUAL_POWER_SENSOR,
     CONF_DEVICE_ACTUAL_POWER_THRESHOLD_W,
     DEFAULT_ACTUAL_POWER_THRESHOLD_W,
@@ -70,7 +77,7 @@ from ..const import (
     CONF_DEVICE_ALLOW_PROBE,
     DEFAULT_DEVICE_ALLOW_PROBE,
 )
-from ..sensor.utils import get_sensor_state_safely, is_reading_stale
+from ..sensor.utils import get_sensor_state_safely
 
 def _initialize_run(entry_data, devices_config):
     """Initialize states for the processing run."""
@@ -80,6 +87,19 @@ def _initialize_run(entry_data, devices_config):
 
     entry_data.setdefault("device_status", {})
     entry_data["device_filter_reasons"] = {}
+
+    # Drop leftover per-device state for devices no longer configured, so removed
+    # devices don't leak entries (and stale state can't resurface if an id is reused).
+    valid_ids = {d.get(CONF_DEVICE_ID) for d in devices_config}
+    for _key in (
+        "device_debounce_state", "device_on_time_state", "battery_soc_gate_state",
+        "battery_stop_gate_state", "manual_overrides", "command_retries",
+        "last_controlled_at",
+    ):
+        _d = entry_data.get(_key)
+        if isinstance(_d, dict):
+            for _stale in [k for k in _d if k not in valid_ids]:
+                _d.pop(_stale, None)
 
     auto_control_devices = [
         d for d in devices_config if d.get(CONF_AUTO_CONTROL_ENABLED, False)
@@ -92,19 +112,21 @@ def _initialize_run(entry_data, devices_config):
 
 
 def _read_battery_soc(hass, cfg) -> float | None:
-    """Return current battery SOC % from the configured sensor, or None if unavailable."""
+    """Return current battery SOC % from the configured sensor, or None if unavailable.
+
+    Genuine sensor death is surfaced by HA as ``unavailable``/``unknown`` (this
+    inverter does so on comms loss) and handled below. A *stale* timestamp is NOT
+    treated as unavailable: SOC sensors report only on value change, so a battery
+    resting at a flat value (e.g. 100% all afternoon) legitimately freezes every
+    timestamp for hours. Discarding that as "stale" would fail-safe-block every
+    SOC-gated start exactly when the battery is fullest — so trust the last known
+    numeric value instead.
+    """
     soc_sensor = cfg.get(CONF_BATTERY_SOC_SENSOR)
     if not soc_sensor:
         return None
     state = hass.states.get(soc_sensor)
     if not state or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-        return None
-    # Stale SOC is treated as unavailable so the per-device gate fails safe.
-    if is_reading_stale(hass, soc_sensor, DEFAULT_SOC_MAX_AGE_S):
-        log_debug(
-            "Battery SOC '%s' is stale (>%ss old) — ignoring",
-            soc_sensor, int(DEFAULT_SOC_MAX_AGE_S),
-        )
         return None
     try:
         return float(state.state)
@@ -112,122 +134,21 @@ def _read_battery_soc(hass, cfg) -> float | None:
         return None
 
 
-def _apply_battery_soc_gate(
-    device, device_id, is_active, prev_on, battery_soc, soc_configured, gate_state, status_entry
-) -> bool:
-    """Block new device starts when battery SOC is below per-device threshold.
-
-    Only NEW starts are gated; running devices (prev_on=True) are never turned off.
-
-    Hysteresis (sticky-state band ``[min, min + DEFAULT_BATTERY_SOC_HYSTERESIS]``):
-      - allow a start at SOC >= ``min`` while the device has not been blocked;
-      - once SOC drops below ``min`` the device is marked blocked and must climb back
-        to ``min + hysteresis`` (the recovery threshold) before it may start again.
-      ``gate_state`` (a per-entry dict keyed by device_id) carries the blocked flag
-      between cycles, since ``status_entry`` is rebuilt each run.
-
-    Fail behaviour when the device has a ``min_battery_soc`` requirement:
-      - no hub SOC sensor configured at all → fail-open (requirement is meaningless
-        without a sensor; don't permanently block a device over a forgotten config).
-      - sensor configured but currently unavailable → fail-safe (block; we cannot
-        verify charge, so don't risk draining the battery).
-    """
-    if prev_on:
-        # Running device: never gated, and clear any sticky block.
-        gate_state.pop(device_id, None)
-        return is_active
-    if not is_active:
-        return is_active  # not a start candidate this cycle — leave block state as-is
-
-    min_soc = float(device.get(CONF_DEVICE_MIN_BATTERY_SOC, 0) or 0)
-    if min_soc <= 0:
-        gate_state.pop(device_id, None)
-        return is_active  # device opted out of SOC gating
-
-    if not soc_configured:
-        return is_active  # fail-open: per-device min with no hub sensor
-
-    if battery_soc is None:
-        # Sensor configured but unavailable → fail-safe block, and stay sticky so a
-        # full recovery is required once the sensor returns.
-        gate_state[device_id] = True
-        status_entry["refusal_reasons"].append(
-            "Battery SOC sensor unavailable — start blocked (fail-safe)"
-        )
-        log_debug(
-            f"[soc_gate] Blocking start for {device.get(CONF_DEVICE_NAME)}: "
-            "SOC sensor unavailable (fail-safe)"
-        )
-        return False
-
-    recovery = min(100.0, min_soc + DEFAULT_BATTERY_SOC_HYSTERESIS)
-    was_blocked = bool(gate_state.get(device_id))
-
-    if was_blocked and battery_soc < recovery:
-        status_entry["refusal_reasons"].append(
-            f"Battery SOC {battery_soc:.1f}% < recovery threshold {recovery:.1f}%"
-            f" (was blocked below min {min_soc:.1f}%)"
-        )
-        log_debug(
-            f"[soc_gate] Holding block for {device.get(CONF_DEVICE_NAME)}: "
-            f"SOC={battery_soc:.1f}% < recovery {recovery:.1f}%"
-        )
-        return False
-
-    if battery_soc < min_soc:
-        gate_state[device_id] = True
-        status_entry["refusal_reasons"].append(
-            f"Battery SOC {battery_soc:.1f}% < minimum {min_soc:.1f}%"
-        )
-        log_debug(
-            f"[soc_gate] Blocking start for {device.get(CONF_DEVICE_NAME)}: "
-            f"SOC={battery_soc:.1f}% < min {min_soc:.1f}%"
-        )
-        return False
-
-    # SOC at or above the applicable threshold → clear sticky block and allow.
-    gate_state.pop(device_id, None)
-    return is_active
-
-
-def _accumulate_daily_on_time(device_on_time_state, device_id, now) -> None:
-    """Fold the just-finished ON session into today's accumulated on-time.
-
-    Called when a device transitions OFF. Resets the accumulator first if the day
-    rolled over, then adds ``now - last_on_time`` for the session that just ended.
-    """
-    entry = device_on_time_state.get(device_id)
-    if not entry:
-        return
-    today = now.date()
-    if entry.get("on_time_day") != today:
-        entry["on_time_day"] = today
-        entry["on_time_accum_sec"] = 0.0
-    last_on = entry.get("last_on_time")
-    if last_on is not None:
-        entry["on_time_accum_sec"] = entry.get("on_time_accum_sec", 0.0) + max(
-            0.0, (now - last_on).total_seconds()
-        )
-
-
-def _daily_on_time_sec(device_on_time_state, device_id, now, currently_on) -> float:
-    """Return seconds the device has run today (completed sessions + current one).
-
-    Resets the per-day accumulator when the calendar day changes. ``currently_on``
-    adds the in-progress session (``now - last_on_time``).
-    """
-    entry = device_on_time_state.get(device_id, {})
-    today = now.date()
-    if entry.get("on_time_day") != today:
-        # Stale/absent day → nothing counted yet today.
-        accum = 0.0
-    else:
-        accum = entry.get("on_time_accum_sec", 0.0)
-    if currently_on:
-        last_on = entry.get("last_on_time")
-        if last_on is not None:
-            accum += max(0.0, (now - last_on).total_seconds())
-    return accum
+# Battery-SOC gates live in their own module; re-exported for import back-compat.
+from .battery_gates import (  # noqa: E402
+    _apply_battery_soc_gate,
+    decide_battery_soc_stop,
+    _effective_stop_soc,
+    _apply_battery_stop_floor,
+)
+# On-time accounting lives in its own module; re-exported for import back-compat
+# (_accumulate_daily_on_time has no direct caller here but is part of the public
+# surface — manual_switch / tests reference it via power_processor).
+from .device_timing import (  # noqa: E402, F401
+    _accumulate_daily_on_time,
+    _close_on_time_session,
+    _daily_on_time_sec,
+)
 
 
 def _apply_max_on_time_gate(
@@ -253,11 +174,9 @@ def _apply_max_on_time_gate(
         )
         if prev_on:
             # We force a running device off here, bypassing _apply_min_on_time's
-            # turn-off branch — so fold this session into the accumulator and clear
-            # last_on_time, otherwise the session would go uncounted and the device
-            # could immediately restart.
-            _accumulate_daily_on_time(device_on_time_state, device_id, now)
-            device_on_time_state.get(device_id, {}).pop("last_on_time", None)
+            # turn-off branch — so close the session now, otherwise it would go
+            # uncounted and the device could immediately restart.
+            _close_on_time_session(device_on_time_state, device_id, now)
         return False
     return is_active
 
@@ -312,10 +231,6 @@ def _calculate_device_state(
     """Calculate the desired state (on/off) for a device based on power, hysteresis, and debounce."""
     device_id = device.get(CONF_DEVICE_ID)
     device_name = device.get(CONF_DEVICE_NAME)
-
-    log_debug(f"[STATE_DEBUG] Device {device_name}: Starting state calculation")
-    log_debug(f"[STATE_DEBUG] Current device_on_state: {device_on_state.get(device_id)}")
-    log_debug(f"[STATE_DEBUG] Current debounce_state: {device_debounce_state.get(device_id)}")
 
     min_expected_w = float(device.get(CONF_DEVICE_MIN_EXPECTED_W, 0) or 0)
     hysteresis_w = float(cfg.get(CONF_HYSTERESIS_W, DEFAULT_HYSTERESIS_W))
@@ -392,6 +307,11 @@ def _calculate_device_state(
     return is_active, is_active_candidate
 
 
+def _is_proportional(device) -> bool:
+    """True when the device is driven proportionally (dimmer or ESPHome Proportional)."""
+    return device.get(CONF_DEVICE_CONTROL_MODE) == CONTROL_MODE_PROPORTIONAL
+
+
 def _initialize_status_entry(hass, device):
     """Initialize the status dictionary for a device."""
     min_expected_w = float(device.get(CONF_DEVICE_MIN_EXPECTED_W, 0) or 0)
@@ -399,13 +319,10 @@ def _initialize_status_entry(hass, device):
     if max_expected_w <= min_expected_w:
         max_expected_w = min_expected_w * 1.1
 
-    mode = None
-    if device.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_CUSTOM:
-        mode_select_entity = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
-        if mode_select_entity:
-            mode_state = hass.states.get(mode_select_entity)
-            if mode_state:
-                mode = mode_state.state
+    # Proportional devices (native dimmer or ESPHome) flow through the proportional
+    # allocator; on/off devices have no relay "mode". The live ESPHome select state
+    # is not read here — SunAllocator drives the select itself per control_mode.
+    mode = RELAY_MODE_PROPORTIONAL if _is_proportional(device) else None
 
     return {
         "name": device.get(CONF_DEVICE_NAME),
@@ -484,17 +401,27 @@ def _resolve_standard_power_used(
 
 async def _control_standard_device(
     hass, device, is_active, prev_on, remaining_power, cfg, status_entry, device_on_state,
-    device_sensor_cache=None, device_on_time_state=None, now=None,
+    device_sensor_cache=None, device_on_time_state=None, now=None, entry_data=None,
 ):
-    """Control logic for a standard (on/off) device."""
+    """Control logic for a standard (on/off) device (also used for climate).
+
+    Owns the ON-command retry policy: the first command on a fresh ON decision goes
+    out immediately; while the relay stays OFF (unresponsive) we re-send at most once
+    per ``COMMAND_RETRY_INTERVAL_SECONDS`` and never permanently give up. After
+    ``UNREACHABLE_AFTER_RETRIES`` unanswered re-sends the device is surfaced as
+    ``unreachable`` (suppressed for climate, whose OFF is usually a satisfied thermostat).
+    """
     power_used = 0.0
     relay_entity, hvac_mode = parse_relay_entity(device.get(CONF_DEVICE_ENTITY))
     device_id = device.get(CONF_DEVICE_ID)
     device_name = device.get(CONF_DEVICE_NAME)
     service_domain = relay_entity.split(".")[0] if relay_entity else ""
+    is_climate = service_domain == DOMAIN_CLIMATE
 
     actual_state = hass.states.get(relay_entity)
     is_actually_on = is_entity_on(service_domain, actual_state) if actual_state else False
+
+    retries = entry_data.setdefault("command_retries", {}) if entry_data is not None else None
 
     # is_enabled = relay commanded ON this cycle. Tracked separately from allocated
     # power so the status sensor can distinguish a powered-but-idle device (relay on,
@@ -505,9 +432,44 @@ async def _control_standard_device(
         if device_id:
             device_on_state[device_id] = True
 
-        if not prev_on or not is_actually_on:
+        if not prev_on:
+            # Fresh ON decision → command immediately and (re)start the retry clock so
+            # the first re-send waits a full interval.
             log_debug(f"Turning on standard device {device_name} (prev_on={prev_on}, actual={actual_state.state if actual_state else 'N/A'})")
             await turn_on_entity(hass, relay_entity, hvac_mode, device_name)
+            if retries is not None and device_id:
+                retries[device_id] = {
+                    "expected": True, "last_command_at": now, "count": 0, "notified": False,
+                }
+        elif not is_actually_on and retries is not None and device_id:
+            # Commanded before but the relay is still OFF (unresponsive). Re-send at most
+            # once per COMMAND_RETRY_INTERVAL_SECONDS; never permanently give up.
+            r = retries.get(device_id)
+            if r is None or r.get("expected") is not True:
+                r = {"expected": True, "last_command_at": None, "count": 0, "notified": False}
+            last = r.get("last_command_at")
+            due = (
+                last is None
+                or now is None
+                or (now - last).total_seconds() >= COMMAND_RETRY_INTERVAL_SECONDS
+            )
+            if due:
+                log_debug(f"[retry] Re-sending ON for {device_name} (attempt {r['count'] + 1})")
+                await turn_on_entity(hass, relay_entity, hvac_mode, device_name)
+                r["last_command_at"] = now
+                r["count"] += 1
+                if not is_climate and r["count"] >= UNREACHABLE_AFTER_RETRIES and not r["notified"]:
+                    r["notified"] = True
+                    _send_retry_notification(hass, device_name or device_id, device_id, True, r["count"])
+            retries[device_id] = r
+            status_entry["retry_count"] = r["count"]
+            status_entry["retry_expected_on"] = True
+            if not is_climate and r["count"] >= UNREACHABLE_AFTER_RETRIES:
+                status_entry["unreachable"] = True
+        elif is_actually_on and retries is not None and device_id and device_id in retries:
+            # Relay confirmed ON → clear retry bookkeeping + any pending notification.
+            retries.pop(device_id, None)
+            _dismiss_retry_notification(hass, device_id)
 
         power_used = _resolve_standard_power_used(
             hass, device, status_entry, device_on_time_state or {}, device_id, now,
@@ -520,6 +482,10 @@ async def _control_standard_device(
         if prev_on or is_actually_on:
             log_debug(f"Turning off standard device {device_name} (remaining={remaining_power}W)")
             await turn_off_entity(hass, relay_entity, device_name)
+        # No longer expecting ON → drop any pending ON-retry bookkeeping.
+        if retries is not None and device_id and device_id in retries:
+            retries.pop(device_id, None)
+            _dismiss_retry_notification(hass, device_id)
 
         status_entry.pop("is_idle", None)
         status_entry.update({"percent_target": 0.0, "percent_actual": 0.0, "allocated_w": 0.0})
@@ -530,37 +496,120 @@ async def _control_standard_device(
 async def _control_custom_device(
     hass, device, is_active, prev_on, power_to_allocate, cfg, status_entry, device_on_state
 ):
-    """Control logic for a custom (ESPHome) device."""
+    """Proportional control for an ESPHome relay (mode select + light brightness).
+
+    SunAllocator drives the paired mode-select entity itself: ``Proportional``
+    while active (then sets brightness on the light), ``Off`` when inactive.
+    """
     power_used = 0.0
     device_name = device.get(CONF_DEVICE_NAME)
+    device_id = device.get(CONF_DEVICE_ID)
     relay_entity, _ = parse_relay_entity(device.get(CONF_DEVICE_ENTITY))
+    mode_select = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
 
     if not relay_entity or "." not in relay_entity:
         log_warning(f"Device {device_name} has no valid entity_id, skipping control")
         return 0.0, status_entry
 
-    if status_entry.get("mode") == RELAY_MODE_PROPORTIONAL:
-        if is_active:
-            max_w = status_entry["max_expected_w"]
-            target_percent = 0.0
-            if max_w <= 0:
-                log_warning(f"Device {device_name} in Proportional has no max_expected_w; forcing 0%/OFF")
-            else:
-                target_percent = min(MAX_PERCENTAGE, max(5, (power_to_allocate / max_w) * 100))
-            log_debug(f"Proportional target for {device_name}: {target_percent}% ({power_to_allocate}W)")
-            status_entry["percent_target"] = float(target_percent)
-            await set_power_for_entity(hass, relay_entity, target_percent)
-            power_used = min(power_to_allocate, max_w * (target_percent / MAX_PERCENTAGE))
-            status_entry["allocated_w"] = float(power_used)
+    if is_active:
+        max_w = status_entry["max_expected_w"]
+        target_percent = 0.0
+        if max_w <= 0:
+            log_warning(f"Device {device_name} in Proportional has no max_expected_w; forcing 0%/OFF")
         else:
-            log_debug(f"Proportional below threshold for {device_name} -> target 0 / OFF")
-            if prev_on:
-                await turn_off_entity(hass, relay_entity, device_name)
+            target_percent = min(MAX_PERCENTAGE, max(5, (power_to_allocate / max_w) * 100))
+        log_debug(f"Proportional target for {device_name}: {target_percent}% ({power_to_allocate}W)")
+        status_entry["percent_target"] = float(target_percent)
+        if mode_select:
+            await set_mode_for_entity(hass, mode_select, RELAY_MODE_PROPORTIONAL)
+        await set_power_for_entity(hass, relay_entity, target_percent)
+        power_used = min(power_to_allocate, max_w * (target_percent / MAX_PERCENTAGE))
+        status_entry["allocated_w"] = float(power_used)
+        if device_id:
+            device_on_state[device_id] = True
+    else:
+        log_debug(f"Proportional below threshold for {device_name} -> target 0 / OFF")
+        if mode_select:
+            await set_mode_for_entity(hass, mode_select, RELAY_MODE_OFF)
+        elif prev_on:
+            await turn_off_entity(hass, relay_entity, device_name)
+        if device_id:
+            device_on_state[device_id] = False
+        status_entry.update({"percent_target": 0.0, "percent_actual": 0.0, "allocated_w": 0.0})
 
-    elif status_entry.get("mode") == RELAY_MODE_ON:
-        power_used, status_entry = await _control_standard_device(
-            hass, device, is_active, prev_on, power_to_allocate, cfg, status_entry, device_on_state
+    return power_used, status_entry
+
+
+async def _control_esphome_onoff(
+    hass, device, is_active, prev_on, remaining_power, cfg, status_entry, device_on_state,
+    device_sensor_cache=None, device_on_time_state=None, now=None,
+):
+    """On/off control for an ESPHome relay via its mode select (``On`` / ``Off``)."""
+    power_used = 0.0
+    device_name = device.get(CONF_DEVICE_NAME)
+    device_id = device.get(CONF_DEVICE_ID)
+    mode_select = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
+
+    status_entry["is_enabled"] = bool(is_active)
+
+    if is_active:
+        if device_id:
+            device_on_state[device_id] = True
+        if not prev_on:
+            log_debug(f"ESPHome on/off {device_name}: select -> On")
+            await set_mode_for_entity(hass, mode_select, RELAY_MODE_ON)
+        power_used = _resolve_standard_power_used(
+            hass, device, status_entry, device_on_time_state or {}, device_id, now,
+            device_sensor_cache,
         )
+        status_entry.update({"allocated_w": float(power_used), "percent_target": 100.0, "percent_actual": 100.0})
+    else:
+        if device_id:
+            device_on_state[device_id] = False
+        if prev_on:
+            log_debug(f"ESPHome on/off {device_name}: select -> Off")
+            await set_mode_for_entity(hass, mode_select, RELAY_MODE_OFF)
+        status_entry.pop("is_idle", None)
+        status_entry.update({"percent_target": 0.0, "percent_actual": 0.0, "allocated_w": 0.0})
+
+    return power_used, status_entry
+
+
+async def _control_native_dimmer_device(
+    hass, device, is_active, prev_on, power_to_allocate, cfg, status_entry, device_on_state
+):
+    """Proportional control for a native HA dimmable light (brightness via light.turn_on)."""
+    power_used = 0.0
+    device_name = device.get(CONF_DEVICE_NAME)
+    device_id = device.get(CONF_DEVICE_ID)
+    relay_entity, _ = parse_relay_entity(device.get(CONF_DEVICE_ENTITY))
+
+    if not relay_entity or "." not in relay_entity:
+        log_warning(f"Native dimmer {device_name} has no valid entity_id, skipping")
+        return 0.0, status_entry
+
+    if is_active:
+        max_w = float(status_entry.get(CONF_DEVICE_MAX_EXPECTED_W, 0) or 0)
+        if max_w <= 0:
+            log_warning(f"Native dimmer {device_name} has no max_expected_w; skipping")
+            return 0.0, status_entry
+        target_percent = min(MAX_PERCENTAGE, max(5.0, (power_to_allocate / max_w) * 100))
+        log_debug(
+            f"Native dimmer {device_name}: {target_percent:.1f}% "
+            f"({power_to_allocate:.0f}W / {max_w:.0f}W max)"
+        )
+        status_entry["percent_target"] = float(target_percent)
+        await set_power_for_entity(hass, relay_entity, target_percent)
+        power_used = min(power_to_allocate, max_w * (target_percent / MAX_PERCENTAGE))
+        status_entry["allocated_w"] = float(power_used)
+        if device_id:
+            device_on_state[device_id] = True
+    else:
+        if prev_on:
+            await turn_off_entity(hass, relay_entity, device_name)
+        if device_id:
+            device_on_state[device_id] = False
+        status_entry.update({"percent_target": 0.0, "percent_actual": 0.0, "allocated_w": 0.0})
 
     return power_used, status_entry
 
@@ -576,15 +625,25 @@ def _finalize_device_status(entry_data):
             status["startup_until"] = status["startup_until"].isoformat()
 
 
-# --- Manual override / retry tunables -----------------------------------------------
-# Time window during which a user-initiated state change suppresses auto-control.
-# Kept short so a manual toggle (or a self-cycling device whose switch flip is read
-# as user-initiated) does not lock auto-control out for long.
-MANUAL_OVERRIDE_TTL_SECONDS = 120
-# Throttle between retry attempts when an entity ignored our last command.
-RETRY_INTERVAL_SECONDS = 30
-# After this many failed ON attempts we give up (and notify the user once).
-RETRY_MAX_ATTEMPTS = 3
+# --- Retry tunables ------------------------------------------------------------------
+# When we command a device ON but the relay stays OFF (unresponsive / offline), the
+# first command goes out immediately; subsequent re-sends are throttled to at most one
+# per this interval. We never permanently give up — we keep retrying slowly so the
+# device recovers on its own once it comes back (e.g. cloud/Tuya reconnects).
+COMMAND_RETRY_INTERVAL_SECONDS = 120
+# After this many throttled re-sends still go unanswered, surface the device as
+# "unreachable" (suppressed for climate, whose reported OFF is usually a satisfied
+# thermostat rather than a comms failure).
+UNREACHABLE_AFTER_RETRIES = 2
+# A mismatch is only "user-initiated" if the entity's last real change is THIS recent
+# relative to now. Without a freshness bound, a long-dormant device (e.g. overnight with
+# zero excess, so the control loop barely runs) can have BOTH last_controlled_at and the
+# entity's last_changed frozen for hours; their mere relative order (one a few seconds
+# "newer" than the other, both ancient) would otherwise still read as "the user just
+# toggled it" the instant the loop wakes up — confirmed live: last_controlled=22:54:44,
+# actual_last_changed=22:54:59 (a same-value flicker seconds later), both from the
+# previous evening, misfired the next morning at 10:32 when excess finally rose again.
+EXTERNAL_CHANGE_FRESHNESS_SECONDS = 120
 
 
 def _send_retry_notification(hass, device_name: str, device_id: str, expected_on: bool, count: int) -> None:
@@ -620,13 +679,14 @@ def _detect_external_change(
 ):
     """Reconcile the desired state with the actual entity state.
 
-    Returns ``"give_up"`` when an unresponsive device should be skipped this
-    cycle, otherwise ``None``. Mutates ``manual_overrides``, ``command_retries``
-    and ``device_retry_failed`` in ``entry_data`` as side effects.
+    Only distinguishes a *user* toggle (→ sticky manual override) from an
+    *unresponsive* device; it never sends commands and never "gives up". The
+    throttled re-send + ``unreachable`` escalation live next to the actual
+    service call in the per-capability control coroutine. Always returns
+    ``None``; mutates ``manual_overrides`` / ``command_retries`` as side effects.
     """
     manual_overrides = entry_data.setdefault("manual_overrides", {})
     command_retries = entry_data.setdefault("command_retries", {})
-    retry_failed = entry_data.setdefault("device_retry_failed", {})
 
     relay_entity, _ = parse_relay_entity(device.get(CONF_DEVICE_ENTITY))
     actual_state = hass.states.get(relay_entity) if relay_entity else None
@@ -645,89 +705,65 @@ def _detect_external_change(
 
     if actual_on == expected_on:
         # Aligned: clear any pending retry bookkeeping.
-        was_failed = retry_failed.pop(device_id, False)
-        if device_id in command_retries or was_failed:
+        if device_id in command_retries:
             command_retries.pop(device_id, None)
             _dismiss_retry_notification(hass, device_id)
         return None
 
+    # last_controlled_at is purely in-memory (never persisted) — a HA restart wipes it
+    # while device_on_state/manual_overrides/grace deadlines resync or restore from
+    # storage. A missing timestamp defaulting to "user-initiated" would misattribute a
+    # slow-to-confirm command (or a mismatch surviving a restart) as a deliberate user
+    # toggle, sticking a phantom manual override — so treat "never recorded controlling
+    # this device" as unresponsive/unknown, not as evidence of a user action.
     last_controlled = entry_data.get("last_controlled_at", {}).get(device_id)
+    is_recent = (now - actual_state.last_changed).total_seconds() <= EXTERNAL_CHANGE_FRESHNESS_SECONDS
     user_initiated = (
-        last_controlled is None or actual_state.last_changed >= last_controlled
+        last_controlled is not None and actual_state.last_changed >= last_controlled and is_recent
     )
 
     if user_initiated:
-        # User flipped the entity → trigger a manual override window.
-        if device_id not in manual_overrides:
+        # User flipped the entity → start/refresh a sticky manual-control entry. Always
+        # update the recorded state (and re-stamp the day) so an on→off / off→on flip is
+        # reflected; the entry persists until the auto-control switch is re-toggled, the
+        # day rolls over, or (for ON) battery protection trips — see decide_manual_state.
+        prev = manual_overrides.get(device_id)
+        if prev is None or prev.get("state") != actual_on:
             log_debug(
-                f"[manual_override] External state change for {device_id}: "
+                f"[manual] User state change for {device_id}: "
                 f"expected={expected_on}, actual={actual_on}"
             )
-            manual_overrides[device_id] = {"since": now, "state": actual_on}
-            device_on_state[device_id] = actual_on
-        command_retries.pop(device_id, None)
-        retry_failed.pop(device_id, None)
+        manual_overrides[device_id] = {"since": now, "state": actual_on}
+        device_on_state[device_id] = actual_on
+        if device_id in command_retries:
+            command_retries.pop(device_id, None)
+            _dismiss_retry_notification(hass, device_id)
         return None
 
-    # Unresponsive device — throttle retries.
-    retry = command_retries.get(device_id)
-    if retry is None or retry.get("expected") != expected_on:
-        retry = {"count": 0, "expected": expected_on, "last_retry_at": None, "notified": False}
-
-    last_retry = retry.get("last_retry_at")
-    retry_due = last_retry is None or (now - last_retry).total_seconds() >= RETRY_INTERVAL_SECONDS
-
-    if retry_due:
-        retry["count"] += 1
-        retry["last_retry_at"] = now
-        log_debug(
-            f"[retry] Device {device_id} unresponsive, retry {retry['count']} "
-            f"(expected={'ON' if expected_on else 'OFF'})"
-        )
-
-        if retry["count"] >= RETRY_MAX_ATTEMPTS and not retry["notified"]:
-            retry["notified"] = True
-            _send_retry_notification(
-                hass, device.get(CONF_DEVICE_NAME, device_id), device_id, expected_on, retry["count"],
-            )
-
-        # ON: give up after RETRY_MAX_ATTEMPTS; OFF: keep retrying.
-        if expected_on and retry["count"] >= RETRY_MAX_ATTEMPTS:
-            log_warning(
-                f"[retry] Giving up ON for {device_id} after {retry['count']} retries"
-            )
-            retry_failed[device_id] = True
-            device_on_state[device_id] = actual_on
-            command_retries.pop(device_id, None)
-            return "give_up"
-
-    status_entry["retry_count"] = retry["count"]
-    status_entry["retry_expected_on"] = expected_on
-    command_retries[device_id] = retry
+    # Unresponsive (we commanded a state, the entity hasn't matched, and the user
+    # didn't touch it). Don't count / give up here — the control coroutine owns the
+    # throttled re-send and the unreachable escalation, keeping the retry cadence next
+    # to the actual service call.
     return None
 
 
-def _apply_manual_override(entry_data, device_id, status_entry, device_on_state, now) -> bool:
-    """Return True when an active manual override should skip control this cycle."""
-    manual_overrides = entry_data.get("manual_overrides", {})
-    if device_id not in manual_overrides:
-        return False
-    override = manual_overrides[device_id]
-    elapsed = (now - override["since"]).total_seconds()
-    if elapsed > MANUAL_OVERRIDE_TTL_SECONDS:
-        log_debug(f"[manual_override] Override expired for {device_id} after {elapsed:.0f}s")
-        del manual_overrides[device_id]
-        return False
-    status_entry["manual_override"] = True
-    status_entry["refusal_reasons"].append(
-        f"Manual override ({int(MANUAL_OVERRIDE_TTL_SECONDS - elapsed)}s remaining)"
-    )
-    device_on_state[device_id] = override["state"]
-    log_debug(
-        f"[manual_override] Skipping auto-control for {device_id}, "
-        f"override active for {elapsed:.0f}s"
-    )
-    return True
+def decide_manual_state(override) -> str:
+    """Pure classification of a device's manual-control state this cycle.
+
+    ``override`` is the ``entry_data["manual_overrides"]`` entry (``{"state", "since"}``)
+    or ``None``. The daily rollover / clearing is handled by the caller; battery-protection
+    force-off is handled separately by ``decide_battery_soc_stop`` (applied to a ``manual_on``
+    device by the caller), so this function only classifies the entry:
+
+    * ``"auto"``       — no override → auto-control runs normally.
+    * ``"manual_off"`` — user forced the device OFF (sticky; auto won't re-enable).
+    * ``"manual_on"``  — user forced ON, keep it (and account its draw).
+    """
+    if not override:
+        return "auto"
+    if not override.get("state"):
+        return "manual_off"
+    return "manual_on"
 
 
 def _finalize_run(entry_data, excess_power, remaining_power):
@@ -748,12 +784,18 @@ def _finalize_run(entry_data, excess_power, remaining_power):
     }
 
 
-def _sync_initial_device_states(hass, devices, device_on_state, entry_data) -> None:
+def _sync_initial_device_states(
+    hass, devices, device_on_state, entry_data, device_on_time_state=None, now=None,
+) -> None:
     """First-run-after-startup sync of ``device_on_state`` from actual HA entity states.
 
     Without this, every device defaults to ``False`` (off) on a fresh
     integration load and the hysteresis thresholds for ``prev_on=True`` would
     never trigger correctly. Runs at most once per integration setup.
+
+    A device found already ON across the restart gets a fresh on-time session seeded
+    from ``now`` (continuing on top of the persisted daily total — see
+    ``load_on_time_state``) rather than losing the in-progress session entirely.
     """
     if entry_data.get("_device_on_state_initialized"):
         return
@@ -768,6 +810,11 @@ def _sync_initial_device_states(hass, devices, device_on_state, entry_data) -> N
         _domain = _relay.split(".")[0]
         _is_on = is_entity_on(_domain, _state)
         device_on_state[_dev_id] = _is_on
+        if (
+            _is_on and _dev_id and device_on_time_state is not None and now is not None
+            and device_on_time_state.get(_dev_id, {}).get("last_on_time") is None
+        ):
+            device_on_time_state.setdefault(_dev_id, {})["last_on_time"] = now
         log_debug(f"[init] Synced device_on_state[{_dev_id}] = {_is_on} from actual state")
     entry_data["_device_on_state_initialized"] = True
 
@@ -787,8 +834,7 @@ def _compute_proportional_allocations(
         device_id = device.get(CONF_DEVICE_ID)
         status_entry = device_status.get(device_id)
         if (
-            device.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_CUSTOM
-            and status_entry
+            status_entry
             and status_entry.get("mode") == RELAY_MODE_PROPORTIONAL
         ):
             is_active, _ = _calculate_device_state(
@@ -825,15 +871,13 @@ def _apply_min_on_time(
     hass, config_entry, device, device_id, device_on_time_state, status_entry,
     is_active, prev_on_before_calc, now, min_on_time,
 ):
-    """Enforce min-on-time and record off-time bookkeeping. Returns possibly-updated ``is_active``."""
-    if is_active and not prev_on_before_calc:
-        log_debug(f"[min_on_time] Device {device_id} just turned ON, recording last_on_time={now}")
-        device_on_time_state.setdefault(device_id, {})["last_on_time"] = now
-        status_entry["last_on_time"] = now
-        startup_grace = float(device.get(KEY_STARTUP_GRACE_PERIOD, DEFAULT_STARTUP_GRACE_PERIOD))
-        if startup_grace > 0:
-            _record_grace_deadline(hass, config_entry, device_on_time_state, device_id, now, startup_grace)
+    """Enforce min-on-time and close the on-time session on an off-transition.
 
+    NOTE: the session/grace START is recorded at the END of ``_control_one_device``
+    (only after every gate has confirmed the start survives), NOT here — recording it
+    here would write ``last_on_time`` and a per-cycle-refreshed grace deadline for a
+    device that the SOC/max gates then veto (phantom state + Store flash churn).
+    """
     if not (prev_on_before_calc and not is_active):
         return is_active
 
@@ -847,11 +891,9 @@ def _apply_min_on_time(
             log_debug(f"[min_on_time] Keeping {device_id} ON (min_on_time not elapsed)")
             return True
 
-    # Fold the finished session into today's on-time budget before clearing last_on_time.
-    _accumulate_daily_on_time(device_on_time_state, device_id, now)
-    device_on_time_state.setdefault(device_id, {})["last_off_time"] = now
-    device_on_time_state[device_id].pop("last_on_time", None)
-    device_on_time_state[device_id].pop("startup_until", None)
+    # Off-transition: close the session and clear the (persisted) grace deadline.
+    _close_on_time_session(device_on_time_state, device_id, now)
+    device_on_time_state.setdefault(device_id, {}).pop("startup_until", None)
     hass.async_create_task(persist_grace_state(hass, config_entry, device_id, None))
     status_entry["last_off_time"] = now
     return is_active
@@ -892,38 +934,47 @@ def _apply_startup_grace(
 async def _dispatch_device_control(
     hass, device, is_active, prev_on, status_entry, cfg, device_on_state,
     strategy, proportional_allocations, remaining_power, device_sensor_cache=None,
-    device_on_time_state=None, now=None,
+    device_on_time_state=None, now=None, entry_data=None,
 ):
-    """Forward to the per-type control coroutine and return ``(power_used, status_entry)``."""
+    """Forward to the per-capability control coroutine and return ``(power_used, status_entry)``."""
     device_id = device.get(CONF_DEVICE_ID)
-    device_type = device.get(CONF_DEVICE_TYPE)
+    mode_select = device.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
 
-    if device_type == DEVICE_TYPE_STANDARD:
-        return await _control_standard_device(
+    if _is_proportional(device):
+        # Proportional: native dimmer (brightness) or ESPHome relay (select + brightness).
+        if strategy == STRATEGY_DISTRIBUTE_EVENLY:
+            power_to_allocate = proportional_allocations.get(device_id, 0.0)
+        else:
+            power_to_allocate = proportional_allocations.get(device_id, remaining_power)
+        if mode_select:
+            return await _control_custom_device(
+                hass, device, is_active, prev_on, power_to_allocate, cfg, status_entry, device_on_state,
+            )
+        return await _control_native_dimmer_device(
+            hass, device, is_active, prev_on, power_to_allocate, cfg, status_entry, device_on_state,
+        )
+
+    if mode_select:
+        # ESPHome relay driven on/off via its mode select (On / Off).
+        return await _control_esphome_onoff(
             hass, device, is_active, prev_on, remaining_power, cfg, status_entry,
             device_on_state, device_sensor_cache=device_sensor_cache,
             device_on_time_state=device_on_time_state, now=now,
         )
 
-    if device_type == DEVICE_TYPE_CUSTOM:
-        # Under DISTRIBUTE_EVENLY a device not pre-allocated as proportional must
-        # NOT consume the entire remaining budget. Under FILL_ONE_BY_ONE the next
-        # device greedily takes whatever is still left.
-        if strategy == STRATEGY_DISTRIBUTE_EVENLY:
-            power_to_allocate = proportional_allocations.get(device_id, 0.0)
-        else:
-            power_to_allocate = proportional_allocations.get(device_id, remaining_power)
-        return await _control_custom_device(
-            hass, device, is_active, prev_on, power_to_allocate, cfg, status_entry, device_on_state,
-        )
-
-    return 0.0, status_entry
+    # Standard on/off device
+    return await _control_standard_device(
+        hass, device, is_active, prev_on, remaining_power, cfg, status_entry,
+        device_on_state, device_sensor_cache=device_sensor_cache,
+        device_on_time_state=device_on_time_state, now=now, entry_data=entry_data,
+    )
 
 
 async def _control_one_device(
     hass, config_entry, device, *,
     cfg, entry_data, now, strategy, proportional_allocations, remaining_power, battery_soc,
     battery_soc_configured=False, device_sensor_cache=None,
+    discharging=False, protection_soc=0.0,
 ):
     """Run the full per-device control pipeline for one cycle.
 
@@ -942,27 +993,124 @@ async def _control_one_device(
     device_debounce_state = entry_data["device_debounce_state"]
     device_on_time_state = entry_data["device_on_time_state"]
 
+    # Reconcile expected vs actual FIRST — before any schedule/usable filter. The
+    # filter turns the relay off when out of schedule / not usable; if it ran first it
+    # would erase a user's manual toggle before _detect_external_change could record it,
+    # so a manual ON could never override the schedule. This only detects a user toggle
+    # vs an unresponsive device; the throttled re-send lives in the control coroutine.
+    _detect_external_change(
+        hass, device, device_id, entry_data, status_entry, device_on_state, now
+    )
+
+    # Manual control: a user toggle is sticky (no time-out) for the rest of the local
+    # day, or until the auto-control switch is re-toggled / battery protection trips.
+    # A manual choice overrides the schedule and check_usable filters (handled below,
+    # only for the auto path); only battery protection (SOC) forces a manual ON off.
+    manual_overrides = entry_data.setdefault("manual_overrides", {})
+    override = manual_overrides.get(device_id)
+    if (
+        override
+        and override.get("since") is not None
+        and now.date() != override["since"].date()
+    ):
+        # Daily rollover → the manual choice expired; resume auto-control.
+        log_debug(f"[manual] Daily rollover cleared manual state for {device_id}")
+        del manual_overrides[device_id]
+        override = None
+
+    # Timed-run expiry → release the override entirely; auto-control decides from here
+    # on (matches the manual-switch OFF release semantics — a timed run is a temporary
+    # override, not a standing manual_on once its window is over). device_on_state stays
+    # True (still physically on), so the auto gates below see an accurate prev_on and
+    # decide fresh whether to keep the device running.
+    if is_timed_run_expired(override, now):
+        log_debug(f"[manual] Timed run expired for {device_id} → released to auto")
+        del manual_overrides[device_id]
+        override = None
+
+    decision = decide_manual_state(override)
+    if decision == "manual_off":
+        # Close out any in-progress on-time session — this path returns before the auto
+        # gates (_apply_min_on_time) ever see the on→off transition, so nobody else will.
+        _close_on_time_session(device_on_time_state, device_id, now)
+        device_on_state[device_id] = False
+        status_entry["manual_override"] = True
+        status_entry["refusal_reasons"].append("Manual control (off)")
+        if device_id:
+            entry_data[CONF_POWER_ALLOCATION][device_id] = 0.0
+        return 0.0
+    stop_gate = entry_data.setdefault("battery_stop_gate_state", {})
+    if decision == "manual_on":
+        # Battery protection can still force a manual ON off (discharge-side stop floor or
+        # the absolute protection floor) — the only exception to a sticky manual choice.
+        # A timed run with ignore_battery bypasses this entirely (full SOC override).
+        if not override.get("ignore_battery") and decide_battery_soc_stop(
+            battery_soc=battery_soc,
+            soc_configured=battery_soc_configured,
+            discharging=discharging,
+            stop_soc=device.get(CONF_DEVICE_STOP_BATTERY_SOC, DEFAULT_DEVICE_STOP_BATTERY_SOC),
+            protection_soc=protection_soc,
+            was_blocked=bool(stop_gate.get(device_id)),
+        ):
+            stop_gate[device_id] = True
+            floor = _effective_stop_soc(device, protection_soc)
+            log_debug(
+                f"[manual] Battery protection: forcing OFF {device_id} "
+                f"(SOC {battery_soc} < {floor})"
+            )
+            relay_entity, _ = parse_relay_entity(device.get(CONF_DEVICE_ENTITY))
+            if relay_entity:
+                await turn_off_entity(hass, relay_entity, device.get(CONF_DEVICE_NAME, ""))
+            manual_overrides.pop(device_id, None)
+            _close_on_time_session(device_on_time_state, device_id, now)
+            device_on_state[device_id] = False
+            status_entry["refusal_reasons"].append(
+                f"Battery protection (SOC {float(battery_soc):.0f}% < {floor:.0f}%)"
+            )
+            entry_data.setdefault("last_controlled_at", {})[device_id] = now
+            if device_id:
+                entry_data[CONF_POWER_ALLOCATION][device_id] = 0.0
+            return 0.0
+        stop_gate.pop(device_id, None)
+        device_on_state[device_id] = True
+        status_entry["manual_active"] = True
+        status_entry["manual_override"] = True
+        status_entry["percent_actual"] = 100.0
+        # Start (or continue) today's on-time session — this path bypasses the auto
+        # gates (_apply_min_on_time normally does this), so the runtime sensor would
+        # otherwise never see last_on_time for a manually/timer-driven device.
+        if device_on_time_state.get(device_id, {}).get("last_on_time") is None:
+            device_on_time_state.setdefault(device_id, {})["last_on_time"] = now
+        # Timed run → distinct status so the card shows "Manual (timer)" not plain manual;
+        # the remaining minutes are surfaced by the dedicated timer sensor / number field.
+        if override.get("until") is not None:
+            status_entry["manual_timer"] = True
+        # Account the user-forced draw against the budget (do NOT re-command the relay —
+        # the user owns it); other auto devices then see the real remaining surplus.
+        power_used = _resolve_standard_power_used(
+            hass, device, status_entry, device_on_time_state, device_id, now, device_sensor_cache
+        )
+        if device_id:
+            entry_data[CONF_POWER_ALLOCATION][device_id] = power_used
+        return power_used
+
+    # Auto-control path only: apply the schedule / usability filter now. A manual
+    # override returned above and therefore bypasses this (manual beats schedule +
+    # check_usable; only battery protection forces a manual ON off).
     filter_reason = await _filter_device(hass, device, now)
     log_debug(f"Filter reason for {device_id}: {filter_reason}")
-
-    if entry_data.get("device_retry_failed", {}).get(device_id):
-        status_entry["retry_failed"] = True
-
     if filter_reason:
         if device_id:
             entry_data["device_filter_reasons"][device_id] = filter_reason
-            status_entry["refusal_reasons"] = [filter_reason]
+            status_entry["refusal_reasons"].append(filter_reason)
             entry_data.setdefault("command_retries", {}).pop(device_id, None)
-            entry_data.setdefault("device_retry_failed", {}).pop(device_id, None)
-        return 0.0
-
-    # Reconcile expected vs actual; "give_up" = unresponsive ON beyond max retries.
-    if _detect_external_change(
-        hass, device, device_id, entry_data, status_entry, device_on_state, now
-    ) == "give_up":
-        return 0.0
-
-    if _apply_manual_override(entry_data, device_id, status_entry, device_on_state, now):
+            # The filter just turned the relay off — close any running on-time session
+            # (this path returns before the auto gates that would otherwise close it),
+            # and record that OFF as OUR command so a later user toggle is detected as
+            # user-initiated (not a spurious manual OFF / "unresponsive device" fight).
+            _close_on_time_session(device_on_time_state, device_id, now)
+            device_on_state[device_id] = False
+            entry_data.setdefault("last_controlled_at", {})[device_id] = now
         return 0.0
 
     # Save prev_on BEFORE _calculate_device_state — that mutates device_on_state.
@@ -992,19 +1140,45 @@ async def _control_one_device(
         device, device_id, is_active, prev_on_before_calc, battery_soc,
         battery_soc_configured, gate_state, status_entry
     )
+    # Discharge-side battery protection — CAN turn off a running device (unlike the
+    # start gate above). Shares the manual path's sticky gate-state for hysteresis.
+    is_active = _apply_battery_stop_floor(
+        device, device_id, is_active, battery_soc, battery_soc_configured,
+        discharging, protection_soc, stop_gate, status_entry,
+    )
     is_active = _apply_max_on_time_gate(
         device, device_id, is_active, prev_on_before_calc, device_on_time_state, now, status_entry
     )
+
+    # On-time session bookkeeping — AFTER every gate (so a start any gate vetoed records
+    # no phantom session/grace: R1.2) but BEFORE dispatch (so _resolve_standard_power_used
+    # sees startup_until this same cycle for the startup-reserve). The close also covers a
+    # running device shed by the discharge stop-floor (R1.1); the per-gate closes above are
+    # idempotent with it.
+    if prev_on_before_calc and not is_active:
+        _close_on_time_session(device_on_time_state, device_id, now)
+    elif is_active and not prev_on_before_calc:
+        device_on_time_state.setdefault(device_id, {})["last_on_time"] = now
+        status_entry["last_on_time"] = now
+        startup_grace = float(device.get(KEY_STARTUP_GRACE_PERIOD, DEFAULT_STARTUP_GRACE_PERIOD))
+        if startup_grace > 0:
+            _record_grace_deadline(hass, config_entry, device_on_time_state, device_id, now, startup_grace)
 
     log_debug(f"Control logic for {device_id}: prev_on={prev_on}, prev_on_before_calc={prev_on_before_calc}")
     power_used, _ = await _dispatch_device_control(
         hass, device, is_active, prev_on, status_entry, cfg, device_on_state,
         strategy, proportional_allocations, remaining_power,
         device_sensor_cache=device_sensor_cache,
-        device_on_time_state=device_on_time_state, now=now,
+        device_on_time_state=device_on_time_state, now=now, entry_data=entry_data,
     )
 
-    if device_id and is_active != prev_on_before_calc:
+    # Stamp our command time whenever we drive the device ON (every active cycle), not
+    # only on a transition. Otherwise, if we command ON but the entity stays OFF (a
+    # not-yet-committed/failing turn-on, or a template-light propagation lag), the stale
+    # last_controlled_at makes _detect_external_change misread the persistent OFF as a
+    # USER manual-OFF and record a phantom sticky override. Stamping each active cycle
+    # routes "commanded ON but still OFF" to the retry (unresponsive) path instead.
+    if device_id and (is_active or is_active != prev_on_before_calc):
         entry_data.setdefault("last_controlled_at", {})[device_id] = now
     if device_id:
         entry_data[CONF_POWER_ALLOCATION][device_id] = power_used
@@ -1023,10 +1197,12 @@ async def process_excess_power(
 
     device_on_state = entry_data.setdefault("device_on_state", {})
     entry_data.setdefault("device_debounce_state", {})
-    entry_data.setdefault("device_on_time_state", {})
+    device_on_time_state = entry_data.setdefault("device_on_time_state", {})
 
     auto_control_devices = _initialize_run(entry_data, cfg.get(CONF_DEVICES, []))
-    _sync_initial_device_states(hass, auto_control_devices, device_on_state, entry_data)
+    _sync_initial_device_states(
+        hass, auto_control_devices, device_on_state, entry_data, device_on_time_state, now,
+    )
     log_debug(f"auto_control_devices: {auto_control_devices}")
 
     for device in auto_control_devices:
@@ -1074,6 +1250,19 @@ async def process_excess_power(
     strategy = cfg.get(CONF_DEVICE_ALLOCATION_STRATEGY, STRATEGY_FILL_ONE_BY_ONE)
     battery_soc = _read_battery_soc(hass, cfg)
     battery_soc_configured = bool(cfg.get(CONF_BATTERY_SOC_SENSOR))
+    protection_soc = float(cfg.get(CONF_BATTERY_PROTECTION_SOC, 0) or 0)
+    # Battery net charge → discharge flag for the discharge-side stop floor. Reuse the
+    # excess discharge tolerance so minor jitter is not read as a real discharge.
+    net_charge = 0.0
+    bp_entity = cfg.get(CONF_BATTERY_POWER)
+    if bp_entity:
+        _bp_val, _bp_ok = get_sensor_state_safely(hass, bp_entity, "Battery Power")
+        if _bp_ok:
+            net_charge = battery_net_charge_w(_bp_val, cfg.get(CONF_BATTERY_POWER_REVERSED, False))
+    discharge_tol = float(
+        cfg.get(CONF_BATTERY_DISCHARGE_TOLERANCE_W, DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W)
+    )
+    battery_discharging = net_charge < -discharge_tol
     proportional_allocations: dict = {}
     if strategy == STRATEGY_DISTRIBUTE_EVENLY:
         proportional_allocations = _compute_proportional_allocations(
@@ -1085,7 +1274,15 @@ async def process_excess_power(
             cfg, now,
         )
 
-    for device in auto_control_devices:
+    # Process user-forced (manual-ON) devices first so their accounted draw reduces the
+    # pool before auto devices allocate (stable sort preserves priority within groups).
+    overrides = entry_data.get("manual_overrides", {})
+    ordered_devices = sorted(
+        auto_control_devices,
+        key=lambda d: 0 if (overrides.get(d.get(CONF_DEVICE_ID)) or {}).get("state") else 1,
+    )
+
+    for device in ordered_devices:
         status_entry = entry_data["device_status"].get(device.get(CONF_DEVICE_ID))
         allow_probe = status_entry.get("allow_probe", True) if status_entry else True
         # Opt-out devices may draw only from the real (cautious) pool, never from
@@ -1099,6 +1296,8 @@ async def process_excess_power(
             battery_soc=battery_soc,
             battery_soc_configured=battery_soc_configured,
             device_sensor_cache=device_sensor_cache,
+            discharging=battery_discharging,
+            protection_soc=protection_soc,
         )
         # Consume the real pool first, then (for probe-allowed devices) the extra.
         from_real = min(power_used, real_pool)
@@ -1111,4 +1310,35 @@ async def process_excess_power(
         )
 
     _finalize_run(entry_data, starting_budget, real_pool + extra_pool)
+
+    # Persist the sticky manual overrides (only when they changed) so they survive a HA
+    # restart. Cheap: a serialized snapshot gate avoids a write every cycle.
+    overrides = entry_data.get("manual_overrides", {})
+    snapshot = {
+        did: (
+            ov.get("since").isoformat() if isinstance(ov.get("since"), dt_stdlib.datetime) else None,
+            bool(ov.get("state")),
+            ov.get("until").isoformat() if isinstance(ov.get("until"), dt_stdlib.datetime) else None,
+            bool(ov.get("ignore_battery")),
+        )
+        for did, ov in overrides.items()
+    }
+    if snapshot != entry_data.get("_manual_persisted"):
+        entry_data["_manual_persisted"] = snapshot
+        hass.async_create_task(persist_manual_overrides(hass, config_entry, overrides))
+
+    # Persist today's accumulated on-time per device (only when it changed) so a HA
+    # restart mid-day doesn't reset the runtime sensor / max_on_time_per_day gate to 0.
+    on_time_snapshot = {
+        did: (
+            st.get("on_time_day").isoformat() if hasattr(st.get("on_time_day"), "isoformat") else None,
+            round(float(st.get("on_time_accum_sec", 0.0) or 0.0), 1),
+        )
+        for did, st in device_on_time_state.items()
+        if st.get("on_time_day") is not None
+    }
+    if on_time_snapshot != entry_data.get("_on_time_persisted"):
+        entry_data["_on_time_persisted"] = on_time_snapshot
+        hass.async_create_task(persist_on_time_state(hass, config_entry, device_on_time_state))
+
     async_dispatcher_send(hass, f"{SIGNAL_POWER_DISTRIBUTION_UPDATED}_{config_entry.entry_id}")

@@ -1,6 +1,6 @@
 """Tests for device restore/persist logic."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -215,3 +215,77 @@ async def test_restore_all_restores_mode_select_first():
     # Order: mode first, then power.
     set_mode.assert_awaited_once_with(hass, "select.bulb_mode", "Proportional")
     set_power.assert_awaited_once_with(hass, "light.bulb", 70)
+
+
+# --- on-time daily total round trip -----------------------------------------
+
+@pytest.mark.asyncio
+async def test_on_time_state_round_trip():
+    hass = MagicMock()
+    cfg = _entry([])
+    storage: dict = {}
+
+    async def fake_load(_hass, _cfg):
+        import copy
+        return copy.deepcopy(storage)
+
+    async def fake_save(_hass, _cfg, data):
+        storage.clear()
+        storage.update(data)
+
+    on_time_state = {"dev1": {"on_time_day": date(2026, 7, 3), "on_time_accum_sec": 3600.0}}
+    with patch.object(dr, "_load_restore_data", new=fake_load), \
+         patch.object(dr, "_save_restore_data", new=fake_save):
+        await dr.persist_on_time_state(hass, cfg, on_time_state)
+        loaded = await dr.load_on_time_state(hass, cfg)
+
+    assert loaded == {"dev1": {"on_time_day": date(2026, 7, 3), "on_time_accum_sec": 3600.0}}
+
+
+@pytest.mark.asyncio
+async def test_on_time_state_skips_devices_never_started():
+    hass = MagicMock()
+    cfg = _entry([])
+    save_mock = AsyncMock()
+
+    with patch.object(dr, "_load_restore_data", new_callable=AsyncMock, return_value={}), \
+         patch.object(dr, "_save_restore_data", new=save_mock):
+        await dr.persist_on_time_state(hass, cfg, {"dev1": {}})
+
+    saved_data = save_mock.call_args.args[2]
+    assert saved_data[dr._ON_TIME_STORAGE_KEY] == {}
+
+
+@pytest.mark.asyncio
+async def test_on_time_state_idempotent_when_unchanged():
+    hass = MagicMock()
+    cfg = _entry([])
+    storage = {
+        dr._ON_TIME_STORAGE_KEY: {"dev1": {"on_time_day": "2026-07-03", "on_time_accum_sec": 60.0}}
+    }
+    save_mock = AsyncMock()
+
+    with patch.object(dr, "_load_restore_data", new=AsyncMock(return_value=storage)), \
+         patch.object(dr, "_save_restore_data", new=save_mock):
+        await dr.persist_on_time_state(
+            hass, cfg, {"dev1": {"on_time_day": date(2026, 7, 3), "on_time_accum_sec": 60.0}}
+        )
+
+    save_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_load_on_time_state_drops_malformed_entries():
+    hass = MagicMock()
+    cfg = _entry([])
+    storage = {
+        dr._ON_TIME_STORAGE_KEY: {
+            "ok": {"on_time_day": "2026-07-03", "on_time_accum_sec": 120.0},
+            "bad_date": {"on_time_day": "not-a-date", "on_time_accum_sec": 5.0},
+            "missing_field": {"on_time_day": "2026-07-03"},
+        }
+    }
+    with patch.object(dr, "_load_restore_data", new=AsyncMock(return_value=storage)):
+        loaded = await dr.load_on_time_state(hass, cfg)
+
+    assert list(loaded) == ["ok"]

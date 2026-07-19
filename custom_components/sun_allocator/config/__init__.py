@@ -115,7 +115,7 @@ class SunAllocatorConfigFlow(
                     CONF_ADVANCED_SETTINGS_ENABLED, False
                 )
                 audit_action("solar_hub_saved", {"config": self._solar_config})
-                return await self.async_step_mppt_input()
+                return await self.async_step_battery()
 
         schema = self._get_solar_hub_schema(self._solar_config)
 
@@ -401,7 +401,7 @@ class SunAllocatorOptionsFlowHandler(
                 self._solar_config[CONF_ADVANCED_SETTINGS_ENABLED] = user_input.get(
                     CONF_ADVANCED_SETTINGS_ENABLED, False
                 )
-                return await self.async_step_mppt_input()
+                return await self.async_step_battery()
 
         defaults = dict(self._solar_config)
         defaults.setdefault(

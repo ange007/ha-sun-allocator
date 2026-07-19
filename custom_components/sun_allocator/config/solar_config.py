@@ -5,7 +5,11 @@ from typing import Dict, Any, Optional
 import voluptuous as vol
 
 from ..core.logger import log_error, log_exception
-from .solar_config_form import build_solar_hub_schema, build_mppt_input_schema
+from .solar_config_form import (
+    build_solar_hub_schema,
+    build_mppt_input_schema,
+    build_battery_schema,
+)
 
 from ..const import (
     CONF_CONSUMPTION,
@@ -15,6 +19,7 @@ from ..const import (
     CONF_PANEL_COUNT,
     CONF_BATTERY_POWER,
     CONF_BATTERY_SOC_SENSOR,
+    STEP_BATTERY,
     NONE_OPTION,
 )
 
@@ -119,3 +124,22 @@ class SolarConfigMixin:
     ) -> vol.Schema:
         """Get the schema for a single per-MPPT input form."""
         return build_mppt_input_schema(defaults)
+
+    def _get_battery_schema(
+        self, defaults: Optional[Dict[str, Any]] = None
+    ) -> vol.Schema:
+        """Get the schema for the dedicated Battery page."""
+        return build_battery_schema(defaults)
+
+    async def async_step_battery(self, user_input=None):
+        """Dedicated Battery page (sensors + reserve / sharing / protection / tolerance).
+
+        Shared by both the initial and options flows (hub → battery → mppt_input).
+        """
+        if user_input is not None:
+            user_input = self._process_hub_config_input(user_input)
+            self._solar_config.update(user_input)
+            return await self.async_step_mppt_input()
+
+        schema = self._get_battery_schema(self._solar_config)
+        return self.async_show_form(step_id=STEP_BATTERY, data_schema=schema)

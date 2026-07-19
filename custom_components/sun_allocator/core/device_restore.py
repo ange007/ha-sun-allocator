@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_ON
@@ -26,6 +26,12 @@ STORAGE_VERSION = 1
 # Reserved (non-entity-id) key inside the per-entry restore dict for cross-entity state
 # such as device_id-keyed startup grace deadlines.
 _GRACE_STORAGE_KEY = "_grace_state"
+# Reserved key for the sticky manual-control overrides so they survive a HA restart
+# (otherwise a manual_active/manual_off choice is lost on every restart).
+_MANUAL_STORAGE_KEY = "_manual_overrides"
+# Reserved key for today's accumulated on-time per device (the runtime sensor and the
+# max_on_time_per_day gate), so a restart mid-day doesn't reset the daily total to 0.
+_ON_TIME_STORAGE_KEY = "_on_time_state"
 
 
 def _get_store(hass, config_entry) -> Store:
@@ -112,6 +118,109 @@ async def load_grace_state(hass: HomeAssistant, config_entry: ConfigEntry) -> di
             out[device_id] = datetime.fromisoformat(iso)
         except (TypeError, ValueError):
             log_debug("[grace] dropping malformed entry %s=%r", device_id, iso)
+    return out
+
+
+async def persist_manual_overrides(
+    hass: HomeAssistant, config_entry: ConfigEntry, overrides: dict
+) -> None:
+    """Persist the sticky manual-control overrides so they survive a HA restart.
+
+    ``overrides`` is ``entry_data["manual_overrides"]`` = ``{device_id: {"since": datetime,
+    "state": bool}}``. The ``since`` datetime is stored as ISO text. Idempotent — a no-op
+    when the serialized form already matches what is stored.
+    """
+    serial = {}
+    for did, ov in (overrides or {}).items():
+        since = ov.get("since")
+        until = ov.get("until")
+        serial[did] = {
+            "since": since.isoformat() if isinstance(since, datetime) else None,
+            "state": bool(ov.get("state")),
+            "until": until.isoformat() if isinstance(until, datetime) else None,
+            "ignore_battery": bool(ov.get("ignore_battery")),
+            "timer_minutes": ov.get("timer_minutes"),
+        }
+    restore_data = await _load_restore_data(hass, config_entry)
+    if restore_data.get(_MANUAL_STORAGE_KEY) == serial:
+        return
+    restore_data[_MANUAL_STORAGE_KEY] = serial
+    log_debug("--- MANUAL RESTORE ---: saving %d override(s)", len(serial))
+    await _save_restore_data(hass, config_entry, restore_data)
+
+
+async def load_manual_overrides(hass: HomeAssistant, config_entry: ConfigEntry) -> dict:
+    """Return ``{device_id: {"since": datetime, "state": bool}}`` from storage.
+
+    Malformed entries are dropped. Callers apply the daily-rollover check themselves.
+    """
+    restore_data = await _load_restore_data(hass, config_entry)
+    raw = restore_data.get(_MANUAL_STORAGE_KEY, {}) or {}
+    out: dict = {}
+    for did, ov in raw.items():
+        try:
+            entry = {"since": datetime.fromisoformat(ov["since"]), "state": bool(ov["state"])}
+        except (TypeError, ValueError, KeyError):
+            log_debug("[manual] dropping malformed override %s=%r", did, ov)
+            continue
+        # Timed-run fields are optional (older stored overrides won't have them).
+        until_iso = ov.get("until")
+        if until_iso:
+            try:
+                entry["until"] = datetime.fromisoformat(until_iso)
+                entry["ignore_battery"] = bool(ov.get("ignore_battery"))
+                if ov.get("timer_minutes") is not None:
+                    entry["timer_minutes"] = int(ov["timer_minutes"])
+            except (TypeError, ValueError):
+                pass  # keep the base manual_on, drop the unparsable timer fields
+        out[did] = entry
+    return out
+
+
+async def persist_on_time_state(hass: HomeAssistant, config_entry: ConfigEntry, on_time_state: dict) -> None:
+    """Persist today's accumulated on-time per device (``on_time_day`` + ``on_time_accum_sec``)
+    so a HA restart mid-day doesn't reset the runtime sensor / ``max_on_time_per_day`` gate to 0.
+
+    Only the daily total is persisted. ``last_on_time``/``last_off_time``/``startup_until``
+    are live-session bookkeeping a restart legitimately resets — a device already running
+    across the restart gets a fresh session seeded from the restart moment instead (see
+    ``_sync_initial_device_states``), rather than restoring a stale pre-restart timestamp.
+    """
+    serial = {}
+    for did, st in (on_time_state or {}).items():
+        day = st.get("on_time_day")
+        if day is None:
+            continue
+        serial[did] = {
+            "on_time_day": day.isoformat(),
+            "on_time_accum_sec": float(st.get("on_time_accum_sec", 0.0) or 0.0),
+        }
+    restore_data = await _load_restore_data(hass, config_entry)
+    if restore_data.get(_ON_TIME_STORAGE_KEY) == serial:
+        return
+    restore_data[_ON_TIME_STORAGE_KEY] = serial
+    log_debug("--- ON-TIME RESTORE ---: saving %d device(s)", len(serial))
+    await _save_restore_data(hass, config_entry, restore_data)
+
+
+async def load_on_time_state(hass: HomeAssistant, config_entry: ConfigEntry) -> dict:
+    """Return ``{device_id: {"on_time_day": date, "on_time_accum_sec": float}}`` from storage.
+
+    Malformed entries are dropped. A restored day older than "today" is harmless — the
+    existing day-rollover check in ``_daily_on_time_sec``/``_accumulate_daily_on_time``
+    resets it on first use.
+    """
+    restore_data = await _load_restore_data(hass, config_entry)
+    raw = restore_data.get(_ON_TIME_STORAGE_KEY, {}) or {}
+    out: dict = {}
+    for did, st in raw.items():
+        try:
+            out[did] = {
+                "on_time_day": date.fromisoformat(st["on_time_day"]),
+                "on_time_accum_sec": float(st["on_time_accum_sec"]),
+            }
+        except (TypeError, ValueError, KeyError):
+            log_debug("[on_time] dropping malformed entry %s=%r", did, st)
     return out
 
 

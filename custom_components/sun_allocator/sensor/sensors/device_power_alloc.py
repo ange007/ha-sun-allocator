@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.const import UnitOfPower
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
 from ...const import (
     DOMAIN,
@@ -23,6 +24,10 @@ class SunAllocatorDevicePowerSensor(BaseSunAllocatorDeviceSensor):
     _attr_translation_key = "device_power"
     _attr_icon = "mdi:power-plug"
     _attr_native_unit_of_measurement = UnitOfPower.WATT
+    # Power device/state class so HA formats it as a power value and records long-term
+    # statistics (parity with the runtime / power_percent per-device sensors).
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_extra_state_attributes: Dict[str, Any] | None = None
 
     def __init__(

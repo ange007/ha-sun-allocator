@@ -163,10 +163,48 @@ every step exactly as above — a discharge *before* the target is reached means
 optimistic, so the budget backs off below that level and a cooldown follows (effectively distrusting
 the forecast until it recovers). A forecast also enables this probe-style growth in the cautious
 `mppt` method; there the recovered headroom feeds only the **speculative** budget that devices with
-*Allow Active Probing* may consume, so opt-out loads (e.g. an AC you don't want cycled) always stay
+*Allow Speculative Surplus* may consume, so opt-out loads (e.g. an AC you don't want cycled) always stay
 on the plain cautious excess. The published `excess_power` value is **never** lifted by the forecast
 — it surfaces only through the `forecast_potential_w`, `forecast_untapped_w` and `probe_headroom_w`
 diagnostic attributes.
+
+**Per-device opt-in.** Whether a device may consume this speculative headroom is a per-device
+setting, *Allow Speculative Surplus* (`allow_probe`, Advanced Settings). The available surplus is
+split into two pools: a **real** pool (the cautious excess — genuinely available, usable by every
+device) and an **extra** pool (the probe/forecast-discovered headroom on top). Devices with
+*Allow Speculative Surplus* off draw only from the real pool, so a load you never want speculatively
+driven (e.g. an AC compressor) always runs on the cautious excess alone.
+
+### Battery-SOC Protection
+
+Battery protection has **two independent axes** that act on different battery phases, plus a global
+floor. All thresholds are optional (0 disables the per-device axes; the global floor and sharing
+threshold are also 0 = disabled).
+
+- **START (charge side)** — per-device `start_battery_soc`. A device may **start** only when SOC ≥
+  this. This gates new starts only; a device already running is never turned off by the start gate.
+
+- **STOP (discharge side)** — per-device `stop_battery_soc`. While the battery is **discharging**, a
+  running device is forced **off** when SOC < this. It never fires while the battery is charging or
+  neutral, so a load stays on as long as solar still covers it. Two special values:
+  - **0** — inherit the global `battery_protection_soc` floor. No extra per-device stop rule applies;
+    the device may discharge the battery all the way down to the global floor.
+  - **100** (default) — never discharge the battery for that device.
+  - Any other value must be **≥** the global protection floor and is **enforced on save** (a non-zero
+    value below the floor is rejected, not silently accepted; `0` is exempt from this check).
+
+- **Absolute floor** — global `battery_protection_soc`. Below it **every** controlled device is
+  forced off regardless of charge direction. A non-zero per-device `stop_battery_soc` must be at or
+  above this floor (validated on save); `0` is exempt and simply inherits it.
+
+- **Battery sharing** — global `battery_sharing_soc` ("Share Surplus Above SOC"). Below it the
+  battery keeps absolute charge priority (excess is held at 0); at or above it the surplus is shared
+  with devices.
+
+A **hysteresis** band of 2 % around each threshold prevents flapping at the boundary. A "discharge"
+is only counted when the battery net draw exceeds `battery_discharge_tolerance_w` (default **20 W**),
+so minor jitter — while solar still covers the load and the battery is roughly neutral — does not shed
+a running load.
 
 ### Step 2 — Filter Devices
 
@@ -175,7 +213,8 @@ Before any device is considered for allocation, it must pass several checks:
 - **Auto-control enabled**: Only devices with auto-control turned on are processed.
 - **Entity exists**: The controlled HA entity must be available in Home Assistant.
 - **Schedule check**: If the device has a schedule, the current time must be within the allowed window. If the device is currently on but outside its schedule, it is turned off immediately.
-- **Manual override**: If the device mode was manually set to `Off` or `On`, the allocator respects that and skips automatic control.
+- **Check-usable template**: If the device has a `check_usable` template, it must render truthy; otherwise the device is treated as not usable and turned off. (A broken template fails open — the device is treated as usable and a warning is logged.)
+- **Manual control**: A manual toggle (see below) is evaluated *before* the schedule and check-usable filters and **overrides both** — only battery-SOC protection can force a manually-ON device off.
 
 Devices that fail any check are skipped and their filter reason is stored for diagnostics.
 
@@ -209,11 +248,21 @@ To protect appliances (compressors, heat pumps, pumps) from rapid cycling:
 
 ### Step 5 — Power Allocation
 
+Each device is controlled in one of two **control modes**, chosen per device when you pick its
+entity (the entity picker offers a `(Switch)` row for on/off and a `(Dimmer)` row for proportional):
+
+- **On/off** — the device is either fully on or fully off. This covers a plain HA switch, a climate
+  entity, or an ESPHome relay driven on/off via its mode select (`On` / `Off`).
+- **Proportional** — the device is modulated between a floor and a cap. This is either a dimmable HA
+  light driven via its brightness (`light.turn_on` with `brightness`), or an ESPHome relay driven via
+  its mode select set to `Proportional` plus brightness. (This replaces the older "standard vs custom
+  ESPHome" device-type distinction — the capability is now chosen by control mode, not device type.)
+
 Devices are sorted by **priority** (highest first). The allocator iterates over them and assigns power from the remaining budget:
 
-#### Standard devices (On/Off)
+#### On/off devices
 
-Each active standard device is allocated exactly `min_expected_w` from the budget:
+Each active on/off device is allocated exactly `min_expected_w` from the budget:
 
 ```
 # Device gets exactly its configured minimum rated draw
@@ -223,7 +272,7 @@ remaining_solar_budget_W    -= power_allocated_to_device_W
 
 If there is not enough remaining power for a device, it is turned off.
 
-#### Custom devices (Proportional)
+#### Proportional devices
 
 The proportional target is calculated based on available power and the device's max capacity:
 
@@ -243,18 +292,18 @@ power_used_W = min(remaining_solar_budget_W, device_max_expected_W * target_perc
 - **Fill one by one**: Each device (highest priority first) gets as much as it needs. Remaining power goes to the next device.
 - **Distribute evenly**: Available power is split proportionally among all active proportional devices based on their `max_expected_w`.
 
-A ramp mechanism gradually increases or decreases the power level each cycle by `ramp_step_%`, with a deadband to prevent micro-oscillations.
-
 ### Step 6 — Apply State to Entities
 
 After all decisions are made, the allocator calls HA services:
 
 | Device / Condition | HA Service called |
 |-|-|
-| Standard switch / light → turn on | `switch.turn_on` / `light.turn_on` |
+| On/off switch / light → turn on | `switch.turn_on` / `light.turn_on` |
 | Climate entity → turn on | `climate.set_hvac_mode` with the configured HVAC mode |
-| Any device → turn off | corresponding `turn_off` / `set_hvac_mode: off` |
-| Proportional (light) → set level | `light.turn_on` with `brightness` |
+| On/off ESPHome relay → turn on | mode select → `On` |
+| Any device → turn off | corresponding `turn_off` / `set_hvac_mode: off` / mode select → `Off` |
+| Proportional (dimmable light) → set level | `light.turn_on` with `brightness` |
+| Proportional (ESPHome relay) → set level | mode select → `Proportional`, then brightness |
 
 The allocator checks the **actual HA entity state** before sending a command. If the entity is already in the desired state, the call is skipped to avoid redundant traffic.
 
@@ -283,15 +332,35 @@ The per-device `device_status` ENUM sensor exposes the current control state. Po
 | State | Meaning |
 |---|---|
 | `active` | Device is currently allocated power (>0 W) and considered ON. |
+| `idle` | Relay is commanded ON but the actual-power sensor confirms draw below its threshold (e.g. a boiler reached target temperature and the element cycled off). |
 | `insufficient_power` | Excess power is below the device's `min_expected_w`. |
 | `debouncing_on` | Device is candidate ON but still inside its debounce window. |
 | `debouncing_off` | Device is currently ON but candidate has dropped — turn-off pending. |
 | `auto_control_off` | The device's auto-control switch (or config flag) is OFF. |
-| `manual_override` | User manually changed the entity state; auto-control is suppressed for `MANUAL_OVERRIDE_TTL_SECONDS` (default 300 s). |
-| `filtered` | The device was excluded this cycle: outside schedule, entity unavailable, or unsupported domain. The `refusal_reasons` attribute carries the human-readable reason. |
+| `manual_active` | User manually turned the device **on** while auto-control is enabled; the allocator keeps it on and accounts its draw against the budget ("Manual (on)"). |
+| `manual_override` | User manually changed the entity state (a manual **off**, or an on kept pending during reconciliation); auto-control is suppressed for that device. The choice is sticky — see below. |
+| `filtered` | The device was excluded this cycle: outside schedule, not usable (template), entity unavailable, or unsupported domain. The `refusal_reasons` attribute carries the human-readable reason. |
 | `trying_on` / `trying_off` | The desired command was sent but the entity has not yet reflected it; retried every 30 s up to `RETRY_MAX_ATTEMPTS` (default 3). |
 | `failed_on` | After `RETRY_MAX_ATTEMPTS` the ON command was abandoned; the user is notified once via persistent_notification. |
 
-## Manual Override
+## Manual Control
 
-If the entity changes state outside of an allocator-issued command (e.g. you flip the switch in the Lovelace UI), the allocator opens a manual-override window. During this window auto-control is paused for that device, the `device_status` sensor reports `manual_override`, and the override expires automatically after `MANUAL_OVERRIDE_TTL_SECONDS`. Toggling the auto-control switch ON also clears any pending override immediately.
+If the entity changes state outside of an allocator-issued command (e.g. you flip the switch in the Lovelace UI) while auto-control is enabled, the allocator records that choice and makes it **sticky** — there is **no timeout**:
+
+- A manual **ON** is kept on and its draw is accounted against the budget (so other auto devices see the real remaining surplus); the `device_status` sensor reports `manual_active`.
+- A manual **OFF** stays off — auto-control will not re-enable it; the `device_status` sensor reports `manual_override`.
+
+A manual choice **overrides** the schedule window **and** the `check_usable` template: while it is in effect the device ignores both. The only thing that can force a manually-**ON** device off is **battery-SOC protection** (the discharge-side stop floor or the absolute protection floor).
+
+Besides the per-device **"Auto Control"** switch, each controlling device exposes a per-device
+**"Switch"** entity on the SunAllocator device card. This is a proxy that toggles the controlled
+entity directly and mirrors its live state, so you can command the load without leaving the
+SunAllocator card. Toggling this **"Switch"** while auto-control is on behaves exactly like flipping
+the underlying entity by hand: it is registered as a sticky manual override (`manual_active` for a
+manual on), subject to all the rules above.
+
+The sticky manual state persists until one of:
+
+1. the auto-control switch is toggled **off → on** (this resumes normal automatic control), or
+2. the local **calendar day rolls over** (the choice is cleared at midnight), or
+3. **battery-SOC protection** trips (only for a manual ON).

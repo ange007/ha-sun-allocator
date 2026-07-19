@@ -10,7 +10,7 @@ SunAllocator now supports configuring and controlling multiple ESPHome devices. 
 
 - **Add multiple devices**: Configure any number of ESPHome devices to utilize excess solar energy
 - **Priority-based power distribution**: Assign priorities to devices to control which ones get power first
-- **Individual device configuration**: Each device has its own settings for relay entity, mode, auto-control, etc.
+- **Individual device configuration**: Each device has its own settings for the controlled entity, auto-control, priority, etc.
 - **Centralized management**: Manage all devices through a single configuration interface
 
 ## Configuration
@@ -21,40 +21,48 @@ When setting up the SunAllocator integration, you'll first configure your solar 
     *   Configure your solar panel sensors, voltage/current parameters, etc. See [Detailed Configuration](./configuration.md).
 
 2.  **Device Management**:
-    *   Add, edit, or remove ESPHome devices
+    *   Add, edit, or remove devices
     *   For each device, configure:
         *   **Name**: A descriptive name for the device
-        *   **Device Type**: Choose between No Device, Standard Switch/Light, or Custom ESPHome Relay
-        *   **ESPHome Relay Entity** (optional): The light entity that controls the solid-state relay
-        *   **ESPHome Mode Select Entity** (optional): The select entity that controls the operation mode
+        *   **Entity**: Pick the controlled entity from the entity picker (see [Selecting the Entity](#selecting-the-entity) below). You no longer pick a device type or a separate mode-select entity — the control capability is chosen directly in the picker.
         *   **Auto Control Enabled**: Whether SunAllocator should automatically control this device
         *   **Min Expected Load (W)**: Device’s useful minimum. Below this threshold the device stays off (with hysteresis)
-        *   **Max Expected Load (W)**: Device’s physical/logical maximum; 100% in proportional mode corresponds to this value and allocation is capped by it
+        *   **Max Expected Load (W)**: Device’s physical/logical maximum; 100% in proportional mode corresponds to this value and allocation is capped by it. Required for proportional (Dimmer) devices with auto-control enabled
         *   **Priority**: A value from 1-100 that determines which devices get power first (higher = higher priority)
         *   **Schedule Enabled**: Whether to enable time-based scheduling for this device
         *   **Start Time**: The time when the device should start operating (if scheduling is enabled)
         *   **End Time**: The time when the device should stop operating (if scheduling is enabled)
         *   **Days of Week**: The days when the device should operate (if scheduling is enabled)
 
-> **Note**: Both the ESPHome Relay Entity and ESPHome Mode Select Entity are now optional. This allows you to create devices that only use one of these entities, or neither. For example, you could create a device that only uses the relay entity for direct power control, or a device that only uses the mode select entity to control an external system.
+> **Note**: The entity is optional. You can leave it as *None* to create a placeholder device that does not participate in any control operations (useful for planning or testing).
 
-## Device Types
+## Selecting the Entity
 
-SunAllocator supports three types of devices:
+There is no longer a separate "device type" choice or a manual "ESPHome mode select" field. You simply pick the controlled entity from the device's entity picker, and the control capability is encoded in the option you choose.
 
-1.  **No Device (Placeholder)**: A placeholder entry with no actual control entities. Useful for planning or testing.
+An ESPHome SunAllocator relay exposes a `light` entity together with a paired `select` entity (whose options include "Off", "On" and "Proportional") on the **same** device. When you open the picker and select the relay's `light` entity, SunAllocator auto-detects the paired Proportional-capable `select` via the entity/device registry (matching on the same `device_id`). Because of that, the light appears **twice** in the picker:
 
-2.  **Standard Switch/Light (On/Off only)**: A standard Home Assistant switch or light entity that only supports on/off control. These devices don't use a mode select entity and will be controlled directly based on the available excess power.
+*   **`Device — Entity (Switch)`** — drives the relay on/off only.
+*   **`Device — Entity (Dimmer)`** — drives the relay proportionally.
 
-3.  **Custom ESPHome Relay (On/Off/Proportional)**: A custom ESPHome device with both a relay entity and a mode select entity, supporting all three operation modes (Off, On, Proportional).
+Pick **(Dimmer)** for proportional control or **(Switch)** for simple on/off. The paired mode-select entity is stored automatically behind the scenes — you never select it yourself.
+
+The same two-row behaviour applies to any native dimmable `light` (one that supports brightness): it shows both a **(Switch)** and a **(Dimmer)** option. Plain on/off entities (standard switches, `input_boolean`, etc.) appear as a single row and are controlled on/off only.
+
+> **Note**: For proportional (Dimmer) control with auto-control enabled, you must set **Max Expected Load (W)** — 100% brightness corresponds to that value.
 
 ## Operation Modes
 
-Each device supports three operation modes:
+An ESPHome relay supports three operation modes, exposed through its paired `select` entity:
 
 1.  **Off**: The relay is turned off completely
 2.  **On**: The relay is turned on at full power
 3.  **Proportional**: The relay power is adjusted proportionally to the available excess power
+
+You do not set these modes manually during setup — SunAllocator drives the relay itself at runtime based on the capability you picked (Switch or Dimmer):
+
+*   **Proportional (Dimmer)**: SunAllocator sets the paired `select` to "Proportional", then sets the brightness on the `light` entity to the target percentage.
+*   **On/Off (Switch)**: SunAllocator sets the paired `select` to "On" or "Off".
 
 ## Scheduling
 
@@ -122,28 +130,22 @@ This allows you to create a hierarchy of loads. For example:
 When auto-control is enabled (Variant A), SunAllocator adjusts each device using expected load limits and hysteresis:
 
 1.  Effective start threshold: the device becomes active when available excess exceeds `max(min_expected_w, Default Min Start (W))` with hysteresis. It turns on above `+H/2` and turns off below `−H/2` around that threshold.
-2.  Proportional devices (Custom, mode = Proportional): target power percentage is scaled linearly to the device capability: `target% = clamp(5..90, 100 × available_excess / max_expected_w)`. Allocated watts are capped by `max_expected_w`.
-3.  On/Off devices (Standard or mode = On): the device turns ON when active, OFF otherwise. Allocation is capped by `max_expected_w` (if set), or by a small internal fallback cap. Percent actual is reflected as 100% when ON, 0% when OFF.
+2.  Proportional devices (Dimmer): target power percentage is scaled linearly to the device capability: `target% = clamp(5..90, 100 × available_excess / max_expected_w)`. Allocated watts are capped by `max_expected_w`. For an ESPHome relay, SunAllocator first sets the paired select to "Proportional", then sets the light brightness.
+3.  On/Off devices (Switch): the device turns ON when active, OFF otherwise. Allocation is capped by `max_expected_w` (if set), or by a small internal fallback cap. Percent actual is reflected as 100% when ON, 0% when OFF. For an ESPHome relay, SunAllocator sets the paired select to "On" / "Off".
 
-## Behavior with Optional Entities
+## Behavior with No Entity
 
-The integration handles devices with missing entities as follows:
+The integration handles a device with no entity selected as follows:
 
--   **If a device has no relay entity configured**:
-    -   The device will not receive power control commands
-    -   Services that target this device for power control will log a warning but continue for other devices
-    -   Auto-control will skip this device for power distribution
-
--   **If a device has no mode select entity configured**:
-    -   The device will not receive mode change commands
-    -   Services that target this device for mode changes will log a warning but continue for other devices
-    -   Auto-control will skip this device as it cannot determine the current mode
-
--   **If a device has neither entity configured**:
+-   **If a device has no entity configured** (the picker is left as *None*):
     -   The device will be effectively disabled
     -   It will still appear in the device list but will not participate in any control operations
+    -   Services that target this device will log a warning but continue for other devices
+    -   Auto-control will skip this device for power distribution
 
-This flexibility allows you to create placeholder devices or devices that only use one aspect of the control system.
+This lets you create placeholder devices for planning or testing.
+
+When you do pick an ESPHome relay's `light` entity, its paired mode-select entity is detected and stored automatically, so there is no separate optional mode-select field to leave empty.
 
 ## ESPHome Component Code
 

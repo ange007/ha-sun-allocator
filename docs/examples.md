@@ -241,7 +241,7 @@ cards:
       - type: attribute
         entity: sensor.sun_allocator_power_distribution
         attribute: total_power
-        name: Total Available Power
+        name: Allocation Budget (excess + probe)
       - type: attribute
         entity: sensor.sun_allocator_power_distribution
         attribute: remaining_power
@@ -282,7 +282,9 @@ entities:
   - entity: sensor.sun_allocator_power_distribution
     name: Allocated Power
   - entity: sensor.sun_allocator_excess_power
-    name: Available Power
+    # Cautious excess — under curtailment it under-reports the true harvestable
+    # surplus (the probe budget on power_distribution.total_power reflects more).
+    name: Excess (cautious)
 hours_to_show: 24
 points_per_hour: 4
 line_width: 2
@@ -317,23 +319,40 @@ automation:
 
 ### Conditional Card on Device Status
 
-Show a warning card only when an allocator-controlled device is in a problematic state:
+Show a warning card only when an allocator-controlled device is in a problematic state. `manual_active`/`manual_timer` are healthy states — a sticky manual toggle / active timed run that overrides the schedule and usable-condition template — so they are excluded alongside the other normal states. Each state to exclude needs its **own** condition (a single `state_not:` per condition; repeating the key in one mapping keeps only the last):
 
 ```yaml
 type: conditional
 conditions:
-  - entity: sensor.sun_allocator_heater_device_status
+  - condition: state
+    entity: sensor.sun_allocator_heater_device_status
     state_not: active
+  - condition: state
+    entity: sensor.sun_allocator_heater_device_status
+    state_not: idle
+  - condition: state
+    entity: sensor.sun_allocator_heater_device_status
     state_not: insufficient_power
+  - condition: state
+    entity: sensor.sun_allocator_heater_device_status
     state_not: auto_control_off
+  - condition: state
+    entity: sensor.sun_allocator_heater_device_status
+    state_not: manual_active
+  - condition: state
+    entity: sensor.sun_allocator_heater_device_status
+    state_not: manual_timer
 card:
   type: markdown
   content: |
-    ⚠️ **Heater issue:** {{ states('sensor.sun_allocator_heater_device_status') }}
+    ⚠️ **Heater issue:** {{ state_translated('sensor.sun_allocator_heater_device_status') }}
     {% if state_attr('sensor.sun_allocator_heater_device_status', 'manual_override') %}
     Manual override active.
     {% endif %}
 ```
+
+> The status sensor is an ENUM: `states(...)` returns the raw key (e.g. `insufficient_power`).
+> Use `state_translated(...)` (as above) for the localized label shown in the UI.
 
 ### Per-Device Power Gauge
 

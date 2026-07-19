@@ -17,6 +17,8 @@ from .sensors import (
 from .sensors.device_power_alloc import SunAllocatorDevicePowerSensor
 from .sensors.device_status import SunAllocatorDeviceStatusSensor
 from .sensors.device_power_percent import SunAllocatorDevicePowerPercentSensor
+from .sensors.device_runtime import SunAllocatorDeviceRuntimeSensor
+from .sensors.device_timer_remaining import SunAllocatorDeviceTimerRemainingSensor
 
 from ..const import DOMAIN, CONF_DEVICES, CONF_DEVICE_ID
 from ..core.logger import log_debug
@@ -68,6 +70,16 @@ async def async_setup_entry(
             )
             sensors.append(
                 SunAllocatorDevicePowerPercentSensor(
+                    hass, config_entry.entry_id, device_config
+                )
+            )
+            sensors.append(
+                SunAllocatorDeviceRuntimeSensor(
+                    hass, config_entry.entry_id, device_config
+                )
+            )
+            sensors.append(
+                SunAllocatorDeviceTimerRemainingSensor(
                     hass, config_entry.entry_id, device_config
                 )
             )

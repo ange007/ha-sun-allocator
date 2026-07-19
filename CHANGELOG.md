@@ -8,6 +8,114 @@ is approximate. This project tracks its version in
 `custom_components/sun_allocator/manifest.json` (used by HACS) and, from
 `1.1.0` onward, in matching `vX.Y.Z` git release tags.
 
+## [1.3.0] — 2026-07-19
+
+### Added
+- **Timed run** — a per-device **"Run Timer (min)"** number: enter minutes to force the
+  device ON for exactly that long, **ignoring the battery limits and the schedule**. When
+  the timer ends it resets to `0` and the device is released back to auto-control. Two
+  read-only companion sensors: **"Run Time (today)"** (accumulated on-time, resets at
+  local midnight, survives restarts) and **"Time Until Off"** (minutes left on an active
+  timed run). Surfaced as a distinct `manual_timer` device status.
+- **"Switch" proxy per device** — a convenience toggle that drives the controlled entity
+  on/off straight from the SunAllocator card and mirrors its live state. Turning it OFF
+  while a manual/timed override is active *releases* the override back to auto; turning it
+  OFF with no override sets a sticky manual-off.
+- **`unreachable` device status** — a device commanded ON that never confirms after
+  repeated throttled retries is surfaced as `unreachable` (instead of looking like
+  "insufficient power"); suppressed for climate, whose reported OFF is usually a satisfied
+  thermostat.
+- **On-time totals persist across restart** — the run-time sensor and the
+  `max_on_time_per_day` budget keep today's accumulated total through a HA restart.
+- **Manual-control sticky state** (`manual_active`) — a manual toggle of a
+  controlled device is now sticky for the rest of the local day (cleared on daily
+  rollover, on re-toggling auto-control, or by battery protection). While active it
+  **overrides the device's schedule and usable-condition template**; only battery-SOC
+  protection can force a manual-ON device off. Surfaced as a new device status,
+  `manual_active`.
+- **Asymmetric per-device battery-SOC thresholds** — `start_battery_soc` is the
+  charge-side START gate (begin only when SOC is at/above it; renamed from
+  `min_battery_soc`, migrated automatically). `stop_battery_soc` is the new
+  discharge-side STOP floor: while the battery is discharging a running device is
+  forced off below it (default `100` = never discharge the battery for that device).
+- **Global battery-protection floor** (`battery_protection_soc`) — an absolute SOC
+  floor: below it *every* controlled device is forced off regardless of charge
+  direction, and it is the hard minimum any per-device `stop_battery_soc` may take.
+- **Per-device "Allow Speculative Surplus"** (`allow_probe`) — gates whether a device
+  may use probe/forecast headroom. With it off the device runs only on genuine
+  (cautious) excess; with it on it can be started by the active probe or by
+  forecast-guided headroom.
+- **Dedicated Battery settings page** — battery sensors and the reserve / sharing /
+  protection / discharge-tolerance thresholds now live on their own **Battery** step.
+
+### Changed
+- **Device control mode is chosen from the entity picker** — dimmable lights and
+  ESPHome relays now appear twice in the entity list: **(Switch)** for on/off and
+  **(Dimmer)** for proportional control. The separate device-type selector
+  ("standard vs custom ESPHome") is gone; proportional control still requires
+  `max_expected_w`. ESPHome relays auto-pair their mode-select entity at save time.
+  Existing devices are migrated to a per-device `control_mode` automatically.
+- **Probe recovers curtailed solar in more setups** — the active probe (which grows a
+  controllable load and validates it against the battery to recover solar the cautious
+  MPPT excess cannot see) now runs either with `calculation_method = mppt_probe` **or**
+  with the plain `mppt` method when a PV forecast sensor is configured. In both cases
+  each device's `allow_probe` gates use of the probe/forecast headroom.
+- **Per-device configuration split into Basic + Advanced** — everyday knobs (auto
+  control, priority, expected load, schedule mode) on the **Basic** step; fine-tuning
+  (timing, `allow_probe`, per-device SOC thresholds, actual-power sensor, usability
+  template) on the **Advanced** step. The global **Advanced Settings** page now carries
+  only algorithm/probe knobs.
+
+### Removed
+- Dropped dead options that no logic reads: the legacy proportional-ramp tunables
+  `ramp_up_step`, `ramp_down_step`, `ramp_deadband`, and the orphan per-device
+  `min_excess_power`. Existing installs are migrated automatically (the keys are
+  pruned on the first launch after upgrade).
+- The legacy `device_type` shim is no longer written or read at runtime (superseded by
+  the per-device `control_mode`); diagnostics now report `control_mode`.
+
+### Fixed
+- **On-time accounting is now consistent across every off-path** — a running device shed
+  by the schedule/usable filter or the discharge stop-floor now closes its on-time
+  session (previously that time was silently dropped, under-counting the run-time sensor
+  and the `max_on_time_per_day` budget).
+- **No phantom session / grace churn on a vetoed start** — the on-time session and
+  startup-grace deadline are recorded only after every gate confirms the start survives,
+  so an SOC-blocked device no longer writes a phantom session or rewrites its grace
+  deadline to storage every cycle.
+- **Phantom manual-off eliminated** — external-change detection now requires the entity's
+  last change to be *recent*, so a stale expected/actual mismatch after a quiet period or
+  a restart is no longer misread as a user toggle that stuck a device in manual-off.
+- **Battery SOC no longer falsely "stale"** — a flat SOC reading (e.g. a full battery
+  reporting 100 % unchanged for hours) is trusted as the last known value instead of
+  being discarded, which had been fail-safe-blocking SOC-gated device starts exactly when
+  the battery was fullest. Genuine sensor loss (HA `unavailable`/`unknown`) is still handled.
+- **Command retries are throttled, not hammered** — a device commanded ON that stays OFF
+  is re-sent at most once every ~2 minutes (was every cycle) and never permanently given
+  up on, so it recovers on its own when it comes back online.
+- **Excess no longer flickers on battery noise** — a discharge must persist for several
+  ticks before it zeroes the excess, so ±noise around a full battery no longer flaps
+  excess and cycles devices.
+- **Manual / timed overrides survive a HA restart** (persisted and restored on setup).
+- `device_power` sensor now declares the power device-class + measurement state-class
+  (correct formatting + long-term statistics).
+- **Config UX:** panel spec fields (Vmp/Imp/Voc/Isc/count) no longer pre-fill misleading
+  example values — you enter your own datasheet numbers; the Schedule-Helper picker now
+  accepts `input_boolean` / `switch` helpers, not only `schedule`.
+- Documentation and the example cards were corrected (current device-status list, the
+  `reasons` attribute shape, honest labelling of the cautious excess vs the probe budget,
+  and a broken conditional-card example).
+
+### Internal
+- Split the oversized modules for maintainability: excess-power math moved to
+  `sensor/excess_math.py`; battery-SOC gates to `core/battery_gates.py`; on-time
+  accounting to `core/device_timing.py` (all re-exported, no API change). Removed dead
+  code and a duplicated helper; added an end-to-end config-flow test and fixed a stale
+  and a no-op test.
+- The journal/audit trail now logs at `DEBUG` (was `INFO`) so a per-cycle diagnostic
+  line no longer floods the log at normal levels; it reappears when the integration
+  logger is set to `debug`.
+
 ## [1.2.0] — 2026-06-29
 
 ### Added

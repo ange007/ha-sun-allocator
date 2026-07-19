@@ -21,6 +21,13 @@ from homeassistant.core import HomeAssistant
 from ..const import (
     CONF_DEVICES,
     CONF_DEVICE_ID,
+    CONF_ESPHOME_MODE_SELECT_ENTITY,
+    CONF_DEVICE_CONTROL_MODE,
+    CONTROL_MODE_ON_OFF,
+    CONTROL_MODE_PROPORTIONAL,
+    CONF_DEVICE_START_BATTERY_SOC,
+    CONF_DEVICE_STOP_BATTERY_SOC,
+    DEFAULT_DEVICE_STOP_BATTERY_SOC,
     CONF_DEVICE_SCHEDULE_MODE,
     CONF_MPPT_INPUTS,
     CONF_PV_POWER,
@@ -60,6 +67,9 @@ class ConfigEntryMigrator:
         data = self._migrate_schedule_enabled_to_mode(data)
         data = self._migrate_flat_solar_to_mppt_inputs(data)
         data = self._migrate_add_calculation_method(data)
+        data = self._migrate_add_control_mode(data)
+        data = self._migrate_soc_start_stop(data)
+        data = self._migrate_prune_dead_options(data)
 
         if self.changed:
             self.hass.config_entries.async_update_entry(self.entry, data=data)
@@ -122,6 +132,105 @@ class ConfigEntryMigrator:
             DEFAULT_CALCULATION_METHOD,
         )
         return data
+
+    def _migrate_add_control_mode(self, data: dict) -> dict:
+        """Added in v1.3.0.
+
+        The user-facing device-type selector was collapsed into a per-device
+        ``control_mode`` (``on_off`` / ``proportional``), now chosen via the
+        entity-picker mode suffix. Backfill existing devices: a device with a
+        paired ESPHome mode select is proportional; everything else is on/off.
+        No-op once ``control_mode`` is present on every device.
+        """
+        devices = data.get(CONF_DEVICES, []) or []
+        if not devices or all(CONF_DEVICE_CONTROL_MODE in dev for dev in devices):
+            return data
+
+        new_devices = []
+        for dev in devices:
+            if CONF_DEVICE_CONTROL_MODE in dev:
+                new_devices.append(dev)
+                continue
+            control_mode = (
+                CONTROL_MODE_PROPORTIONAL
+                if dev.get(CONF_ESPHOME_MODE_SELECT_ENTITY)
+                else CONTROL_MODE_ON_OFF
+            )
+            new_devices.append({**dev, CONF_DEVICE_CONTROL_MODE: control_mode})
+            self.changed = True
+            log_info(
+                "[migrate v1.3.0] device %s: control_mode=%s",
+                dev.get(CONF_DEVICE_ID),
+                control_mode,
+            )
+        return {**data, CONF_DEVICES: new_devices}
+
+    def _migrate_soc_start_stop(self, data: dict) -> dict:
+        """Added in v1.3.0.
+
+        Split the overloaded per-device ``min_battery_soc`` into an asymmetric pair:
+          * rename ``min_battery_soc`` → ``start_battery_soc`` (charge-side START gate;
+            unchanged meaning);
+          * backfill ``stop_battery_soc = 100`` (discharge-side STOP floor; safe default
+            = "never discharge the battery for this device" until the user lowers it).
+        No-op once every device already carries ``stop_battery_soc``.
+        """
+        old_key = "min_battery_soc"
+        devices = data.get(CONF_DEVICES, []) or []
+        if not devices or all(CONF_DEVICE_STOP_BATTERY_SOC in dev for dev in devices):
+            return data
+
+        new_devices = []
+        for dev in devices:
+            new_dev = dict(dev)
+            if old_key in new_dev and CONF_DEVICE_START_BATTERY_SOC not in new_dev:
+                new_dev[CONF_DEVICE_START_BATTERY_SOC] = new_dev.pop(old_key)
+                self.changed = True
+            elif old_key in new_dev:
+                # Both present (defensive): drop the legacy key, keep the new one.
+                new_dev.pop(old_key)
+                self.changed = True
+            if CONF_DEVICE_STOP_BATTERY_SOC not in new_dev:
+                new_dev[CONF_DEVICE_STOP_BATTERY_SOC] = DEFAULT_DEVICE_STOP_BATTERY_SOC
+                self.changed = True
+            new_devices.append(new_dev)
+            log_info(
+                "[migrate v1.3.0] device %s: start_battery_soc=%s stop_battery_soc=%s",
+                dev.get(CONF_DEVICE_ID),
+                new_dev.get(CONF_DEVICE_START_BATTERY_SOC),
+                new_dev.get(CONF_DEVICE_STOP_BATTERY_SOC),
+            )
+        return {**data, CONF_DEVICES: new_devices}
+
+    def _migrate_prune_dead_options(self, data: dict) -> dict:
+        """Added in v1.3.0.
+
+        Drop options that no logic reads: the legacy proportional-ramp tunables
+        (``ramp_up_step`` / ``ramp_down_step`` / ``ramp_deadband``, replaced by the
+        probe) at the top level, and the orphan per-device ``min_excess_power``.
+        Idempotent — no-op once none are present.
+        """
+        dead_top = ("ramp_up_step", "ramp_down_step", "ramp_deadband")
+        dead_dev = ("min_excess_power",)
+        devices = data.get(CONF_DEVICES, []) or []
+
+        has_top = any(k in data for k in dead_top)
+        has_dev = any(k in dev for dev in devices for k in dead_dev)
+        if not has_top and not has_dev:
+            return data
+
+        new_data = {k: v for k, v in data.items() if k not in dead_top}
+        if has_dev:
+            new_data[CONF_DEVICES] = [
+                {k: v for k, v in dev.items() if k not in dead_dev} for dev in devices
+            ]
+        self.changed = True
+        log_info(
+            "[migrate v1.3.0] pruned dead options: top=%s device=%s",
+            [k for k in dead_top if k in data],
+            [k for k in dead_dev if has_dev],
+        )
+        return new_data
 
     def _migrate_flat_solar_to_mppt_inputs(self, data: dict) -> dict:
         """Added in v1.0.8.

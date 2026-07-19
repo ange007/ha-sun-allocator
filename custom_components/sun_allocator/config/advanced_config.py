@@ -10,9 +10,6 @@ from .advanced_config_form import build_advanced_config_schema
 from ..const import (
     STEP_ADVANCED_SETTINGS,
     CONF_MIN_INVERTER_VOLTAGE,
-    CONF_RAMP_UP_STEP,
-    CONF_RAMP_DOWN_STEP,
-    CONF_RAMP_DEADBAND,
     CONF_HYSTERESIS_W,
     DEFAULT_HYSTERESIS_W,
     CONF_INVERTER_SELF_CONSUMPTION,
@@ -49,41 +46,7 @@ class AdvancedConfigMixin:
                 user_input.get(CONF_INVERTER_SELF_CONSUMPTION),
             )
             log_exception("advanced_config_inverter_self_consumption", e)
-        # Validate ramp/hysteresis tunables
-        try:
-            up = float(user_input.get(CONF_RAMP_UP_STEP, 10.0))
-            if not 0 < up <= 100:
-                errors[CONF_RAMP_UP_STEP] = "invalid_ramp_up_step"
-        except (ValueError, TypeError) as e:
-            errors[CONF_RAMP_UP_STEP] = "invalid_ramp_up_step"
-            log_error(
-                "[AdvancedConfigMixin] Invalid ramp up step: %s",
-                user_input.get(CONF_RAMP_UP_STEP),
-            )
-            log_exception("advanced_config_ramp_up_step", e)
-        try:
-            down = float(user_input.get(CONF_RAMP_DOWN_STEP, 20.0))
-            if not 0 < down <= 100:
-                errors[CONF_RAMP_DOWN_STEP] = "invalid_ramp_down_step"
-        except (ValueError, TypeError) as e:
-            errors[CONF_RAMP_DOWN_STEP] = "invalid_ramp_down_step"
-            log_error(
-                "[AdvancedConfigMixin] Invalid ramp down step: %s",
-                user_input.get(CONF_RAMP_DOWN_STEP),
-            )
-            log_exception("advanced_config_ramp_down_step", e)
-        try:
-            db = float(user_input.get(CONF_RAMP_DEADBAND, 1.0))
-            if not 0 <= db <= 10:
-                errors[CONF_RAMP_DEADBAND] = "invalid_ramp_deadband"
-        except (ValueError, TypeError) as e:
-            errors[CONF_RAMP_DEADBAND] = "invalid_ramp_deadband"
-            log_error(
-                "[AdvancedConfigMixin] Invalid ramp deadband: %s",
-                user_input.get(CONF_RAMP_DEADBAND),
-            )
-            log_exception("advanced_config_ramp_deadband", e)
-
+        # Validate hysteresis tunable
         try:
             hyst = float(user_input.get(CONF_HYSTERESIS_W, DEFAULT_HYSTERESIS_W))
             if not 0 <= hyst <= 5000:

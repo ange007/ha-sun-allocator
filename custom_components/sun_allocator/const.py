@@ -54,9 +54,16 @@ CONF_DEVICE_ENTITY = "device_entity"
 CONF_ESPHOME_MODE_SELECT_ENTITY = "esphome_mode_select_entity"
 CONF_DEVICE_ENTITY_FRIENDLY_NAME = "device_entity_friendly_name"
 CONF_AUTO_CONTROL_ENABLED = "auto_control_enabled"
-CONF_DEVICE_MIN_EXCESS_POWER = "min_excess_power"
 CONF_DEVICE_MIN_ON_TIME = "min_on_time"
+# LEGACY: no longer read by the runtime (superseded by CONF_DEVICE_CONTROL_MODE below).
+# Kept only so device dicts persisted by older versions still load; not written anymore.
 CONF_DEVICE_TYPE = "device_type"
+# How the device is driven: simple on/off relay vs proportional (dimmer /
+# ESPHome Proportional select). Replaces the user-facing device_type selector;
+# chosen via the entity-picker mode suffix (entity|on_off / entity|proportional).
+CONF_DEVICE_CONTROL_MODE = "control_mode"
+CONTROL_MODE_ON_OFF = "on_off"
+CONTROL_MODE_PROPORTIONAL = "proportional"
 CONF_DEVICE_MIN_EXPECTED_W = "min_expected_w"
 CONF_DEVICE_MAX_EXPECTED_W = "max_expected_w"
 CONF_DEVICE_DEBOUNCE_TIME = "debounce_time"
@@ -88,23 +95,36 @@ CONF_RESERVE_BATTERY_POWER = "reserve_battery_power"
 CONF_INVERTER_SELF_CONSUMPTION = "inverter_self_consumption"
 CONF_DEVICE_ALLOCATION_STRATEGY = "device_allocation_strategy"
 CONF_MIN_INVERTER_VOLTAGE = "min_inverter_voltage"
-CONF_RAMP_UP_STEP = "ramp_up_step"
-CONF_RAMP_DOWN_STEP = "ramp_down_step"
-CONF_RAMP_DEADBAND = "ramp_deadband"
 CONF_HYSTERESIS_W = "hysteresis_w"
 CONF_CURVE_FACTOR_K = "curve_factor_k"
 CONF_EFFICIENCY_CORRECTION_FACTOR = "efficiency_correction_factor"
 CONF_BATTERY_SOC_SENSOR = "battery_soc_sensor"
-CONF_DEVICE_MIN_BATTERY_SOC = "min_battery_soc"
+# Per-device SOC thresholds. Asymmetric by design (different battery phases):
+#   start_battery_soc — charge-side START gate: begin only when SOC >= this (0 = off).
+#   stop_battery_soc  — discharge-side STOP floor: while the battery is DISCHARGING, force
+#                       off a running device when SOC < this. Default 100 (0 treated as 100)
+#                       = "never discharge the battery for this device" until the user lowers
+#                       it. Never allowed below the global battery_protection_soc.
+CONF_DEVICE_START_BATTERY_SOC = "start_battery_soc"
+CONF_DEVICE_STOP_BATTERY_SOC = "stop_battery_soc"
+DEFAULT_DEVICE_STOP_BATTERY_SOC = 100.0
 CONF_DEVICE_TURN_OFF_ON_AUTO_CONTROL_DISABLE = "turn_off_on_auto_control_disable"
 # SOC threshold below which the battery takes absolute charge priority
 # (reserve becomes unlimited → all charge protected). 0 = disabled.
 CONF_BATTERY_SHARING_SOC = "battery_sharing_soc"
+# Absolute battery-protection floor (global). SOC below this forces EVERY controlled
+# device off regardless of charge direction, and is the hard minimum a per-device
+# stop_battery_soc may be set to. 0 = disabled.
+CONF_BATTERY_PROTECTION_SOC = "battery_protection_soc"
 # Max battery discharge (W) that does NOT block excess calculation.
 # Small oscillations ≤ this threshold are treated as neutral (battery neither
 # charges nor discharges for the purposes of excess). Default 20W absorbs typical
 # inverter self-draw jitter; 0 = strict (any discharge blocks excess).
 CONF_BATTERY_DISCHARGE_TOLERANCE_W = "battery_discharge_tolerance_w"
+# Consecutive excess-calc ticks a battery discharge (beyond tolerance) must persist
+# before it zeroes the excess. The raw battery reading is noisy (±80W around zero under
+# curtailment); without this, a single-tick dip flickers excess 400↔0 and flaps devices.
+DEFAULT_EXCESS_DISCHARGE_STREAK = 3
 
 # Excess-power calculation method (Phase B). Selects how available surplus is
 # estimated so it matches the inverter topology:
@@ -159,10 +179,6 @@ DEFAULT_DEBOUNCE_TIME = 15
 DEFAULT_HYSTERESIS_W = 40.0
 DEFAULT_BATTERY_SOC_HYSTERESIS = 2.0
 DEFAULT_ACTUAL_POWER_THRESHOLD_W = 10.0
-# A battery SOC reading older than this is treated as unavailable so SOC-based
-# logic follows its fail-open (sharing) / fail-safe (per-device gate) paths
-# instead of acting on stale data. SOC sensors often update only a few times/hour.
-DEFAULT_SOC_MAX_AGE_S = 1800.0
 DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W = 20.0
 DEFAULT_CALCULATION_METHOD = CALC_METHOD_MPPT
 DEFAULT_SIM_PV_POWER = 300.0
@@ -241,7 +257,6 @@ STRATEGY_DISTRIBUTE_EVENLY = "distribute"
 
 # Other internal constants
 MAX_BRIGHTNESS = 255
-MIN_BRIGHTNESS = 0
 MAX_PERCENTAGE = 100
 MIN_PERCENTAGE = 0
 
@@ -253,8 +268,8 @@ KEY_TEMP_DIFF = "temp_diff"
 KEY_VOC_COEF = "voc_coef"
 KEY_PMAX_COEF = "pmax_coef"
 
-# Device type options
-DEVICE_TYPE_NONE = "none"
+# Device type options (LEGACY — paired with CONF_DEVICE_TYPE; not read by the runtime,
+# retained for back-compat of stored config and as test fixtures).
 DEVICE_TYPE_STANDARD = "standard"
 DEVICE_TYPE_CUSTOM = "custom"
 DEVICE_TYPE_CLIMATE = "climate"
@@ -291,15 +306,14 @@ SIGNAL_POWER_DISTRIBUTION_UPDATED = "sunallocator_power_distribution_updated"
 
 # Configuration flow steps
 STEP_USER = "user"
-STEP_DEVICES = "devices"
-STEP_DEVICE_CONFIG = "device_config"
 STEP_DEVICE_NAME_TYPE = "device_name_type"
-STEP_DEVICE_SELECTION = "device_selection"
 STEP_DEVICE_BASIC_SETTINGS = "device_basic_settings"
+STEP_DEVICE_ADVANCED = "device_advanced"
 STEP_DEVICE_SCHEDULE = "device_schedule"
 STEP_DEVICE_SCHEDULE_HELPER = "device_schedule_helper"
 STEP_MAIN_MENU = "main_menu"
 STEP_SETTINGS = "settings"
+STEP_BATTERY = "battery"
 STEP_MANAGE_DEVICES = "manage_devices"
 STEP_TEMPERATURE_COMPENSATION = "temperature_compensation"
 STEP_ADVANCED_SETTINGS = "advanced_settings"

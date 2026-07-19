@@ -312,15 +312,17 @@ automation:
 
 ### Conditional картка на стан пристрою
 
-Показує попередження тільки коли пристрій у проблемному стані:
+Показує попередження тільки коли пристрій у проблемному стані. `manual_active` — це нормальний стан (липке ручне перемикання, що перекриває розклад і шаблон умови придатності), тож він виключений разом з іншими нормальними станами:
 
 ```yaml
 type: conditional
 conditions:
   - entity: sensor.sun_allocator_heater_device_status
     state_not: active
+    state_not: idle
     state_not: insufficient_power
     state_not: auto_control_off
+    state_not: manual_active
 card:
   type: markdown
   content: |

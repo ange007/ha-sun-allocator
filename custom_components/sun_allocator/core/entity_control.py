@@ -160,6 +160,11 @@ async def set_power_for_entity(hass: HomeAssistant, entity_id: str, power_percen
         entity_id = entity_id.strip()
         hvac_mode = hvac_mode.strip()
 
+    # Defensive clamp: an upstream miscalculation must never send out-of-range values.
+    if power_percent < 0 or power_percent > MAX_PERCENTAGE:
+        log_warning(f"set_power_for_entity({entity_id}): {power_percent}% out of range, clamping to [0,100]")
+        power_percent = max(0.0, min(float(power_percent), float(MAX_PERCENTAGE)))
+
     state = hass.states.get(entity_id)
     if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
         log_debug(
@@ -168,7 +173,7 @@ async def set_power_for_entity(hass: HomeAssistant, entity_id: str, power_percen
         )
         return
     domain = entity_id.split(".")[0]
-    brightness = int((power_percent / MAX_PERCENTAGE) * MAX_BRIGHTNESS)
+    brightness = max(0, min(int((power_percent / MAX_PERCENTAGE) * MAX_BRIGHTNESS), MAX_BRIGHTNESS))
     standard_domains = (DOMAIN_SWITCH, DOMAIN_INPUT_BOOLEAN, DOMAIN_AUTOMATION, DOMAIN_SCRIPT)
 
     if power_percent <= 0:

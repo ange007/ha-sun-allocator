@@ -57,17 +57,6 @@ def test_battery_net_charge_sign():
     assert probe.battery_net_charge_w(-50.0, False) == -50.0
 
 
-def test_has_growth_target():
-    assert probe.has_growth_target(["active", "insufficient_power"]) is True
-    assert probe.has_growth_target(["active", "idle"]) is False
-    assert probe.has_growth_target([]) is False
-
-
-def test_effective_excess():
-    assert probe.effective_excess(100.0, 300.0) == 400.0
-    assert probe.effective_excess(100.0, -5.0) == 100.0  # negative headroom ignored
-
-
 def test_growth_target_waiting_device():
     # not enabled, no refusals, not candidate → waiting only for power.
     waiting = {"is_enabled": False, "refusal_reasons": [], "is_active_candidate": False}

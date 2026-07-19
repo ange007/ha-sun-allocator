@@ -35,7 +35,7 @@ def test_invalid_template_is_rejected():
     fake.async_render.side_effect = TemplateError(Exception("undefined"))
     with patch("custom_components.sun_allocator.config.device_config.Template",
                return_value=fake):
-        errors = m._validate_basic_settings(_base_input("{{ sensor.x > 21.5 }}"))
+        errors = m._validate_advanced_settings(_base_input("{{ sensor.x > 21.5 }}"))
     assert errors.get(CONF_DEVICE_CHECK_USABLE_TEMPLATE) == "invalid_check_usable_template"
 
 
@@ -45,7 +45,7 @@ def test_valid_template_accepted():
     fake.async_render.return_value = True
     with patch("custom_components.sun_allocator.config.device_config.Template",
                return_value=fake):
-        errors = m._validate_basic_settings(
+        errors = m._validate_advanced_settings(
             _base_input("{{ states('sensor.x')|float(0) > 21.5 }}")
         )
     assert CONF_DEVICE_CHECK_USABLE_TEMPLATE not in errors
@@ -54,6 +54,6 @@ def test_valid_template_accepted():
 def test_no_template_no_check():
     m = _mixin()
     with patch("custom_components.sun_allocator.config.device_config.Template") as T:
-        errors = m._validate_basic_settings(_base_input(None))
+        errors = m._validate_advanced_settings(_base_input(None))
     assert CONF_DEVICE_CHECK_USABLE_TEMPLATE not in errors
     T.assert_not_called()
