@@ -129,6 +129,24 @@ async def _setup_entity_state_listeners(hass, config_entry, entry_data):
         old_state = event.data.get("old_state")
         if not new_state:
             return
+        # DIAGNOSTIC source-attribution: log every real state transition of a controlled
+        # entity together with its HA context, so an unexplained on/off can be traced to
+        # WHERE it came from:
+        #   user_id set    → a HA user / the UI toggled it,
+        #   parent_id set  → another HA automation/script triggered it,
+        #   both None      → the integration merely REPORTED the device's own change
+        #                    (i.e. the device/cloud itself did it — Tuya schedule, the
+        #                    thermostat/socket protection, a device countdown, etc.).
+        # DEBUG-level: a per-transition audit trail kept for future "why did X switch?"
+        # diagnosis (enable ``custom_components.sun_allocator: debug`` to surface it).
+        if old_state is not None and new_state.state != old_state.state:
+            ctx = getattr(event, "context", None)
+            log_debug(
+                "[source] %s: %s -> %s | user_id=%s parent_id=%s context_id=%s",
+                entity_id, old_state.state, new_state.state,
+                getattr(ctx, "user_id", None), getattr(ctx, "parent_id", None),
+                getattr(ctx, "id", None),
+            )
         try:
             percent = None
             is_on = None
@@ -161,17 +179,27 @@ async def _setup_entity_state_listeners(hass, config_entry, entry_data):
         now_unavailable = new_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
 
         if now_unavailable:
-            # Reset device_on_state and clear any manual override so that when the
-            # entity recovers it starts fresh without triggering a false override.
+            # Flap protection: do NOT wipe device_on_state / manual_overrides on a
+            # transient blip — a WiFi/Modbus hiccup would otherwise lose the user's
+            # force-on and flap the relay. Only stamp when the outage began; the control
+            # loop clears state exactly once the outage exceeds UNAVAILABLE_CLEAR_GRACE_S
+            # (see _clear_stale_unavailable in core/power_processor.py).
             for dev in config_entry.data.get(CONF_DEVICES, []):
                 dev_entity_id, _ = parse_relay_entity(dev.get(CONF_DEVICE_ENTITY))
                 if dev_entity_id and dev_entity_id == entity_id:
                     dev_id = dev.get(CONF_DEVICE_ID)
                     if dev_id:
-                        entry_data.get("device_on_state", {}).pop(dev_id, None)
-                        entry_data.get("manual_overrides", {}).pop(dev_id, None)
+                        entry_data.setdefault("unavailable_since", {}).setdefault(
+                            dev_id, new_state.last_changed
+                        )
 
         if was_unavailable and now_available:
+            # Recovered within (or after) grace: drop the outage stamp so the loop
+            # stops counting. State/override were held, so control resumes seamlessly.
+            for dev in config_entry.data.get(CONF_DEVICES, []):
+                dev_entity_id, _ = parse_relay_entity(dev.get(CONF_DEVICE_ENTITY))
+                if dev_entity_id == entity_id:
+                    entry_data.get("unavailable_since", {}).pop(dev.get(CONF_DEVICE_ID), None)
             await restore_entity_state(hass, config_entry, entity_id)
 
     relay_entities = set()
@@ -565,6 +593,9 @@ async def setup_auto_control(hass: HomeAssistant, config_entry: ConfigType):
         return
 
     log_info("Tracking excess sensor: %s", excess_sensor_id)
+    # Let the watchdog re-derive liveness straight from the sensor's own state (a flat
+    # numeric value at night is alive, not stale) instead of only the change-driven timestamp.
+    entry_data["excess_sensor_id"] = excess_sensor_id
     entry_data["unsub_auto_control"] = async_track_state_change_event(
         hass, [excess_sensor_id], handle_state_change
     )

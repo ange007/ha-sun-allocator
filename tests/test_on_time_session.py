@@ -178,3 +178,41 @@ async def test_auto_stop_floor_closes_running_session(monkeypatch):
     st = entry_data["device_on_time_state"]["d1"]
     assert st.get("last_on_time") is None
     assert st["on_time_accum_sec"] == pytest.approx(240.0)
+
+
+@pytest.mark.asyncio
+async def test_transient_unavailable_holds_auto_device(monkeypatch):
+    # Flap-guard for AUTO devices: an entity within its unavailable grace window (tracked
+    # in entry_data["unavailable_since"] by _clear_stale_unavailable) must NOT be shed by
+    # the filter — device_on_state stays True and the on-time session stays open, so the
+    # hysteresis re-evaluation on recovery doesn't turn the relay off (the flap).
+    _patch(monkeypatch)
+    device = _device()
+    on_time = {"d1": {"on_time_day": NOW.date(), "on_time_accum_sec": 0.0,
+                       "last_on_time": NOW - timedelta(minutes=5)}}
+    entry_data = _entry_data(device, device_on=True, on_time=on_time)
+    entry_data["unavailable_since"] = {"d1": NOW - timedelta(seconds=10)}  # sub-grace blip
+    hass = _Hass("unavailable")
+
+    await _run(hass, device, entry_data, battery_soc=None)
+
+    st = entry_data["device_on_time_state"]["d1"]
+    assert st.get("last_on_time") == NOW - timedelta(minutes=5)  # session HELD open
+    assert entry_data["device_on_state"]["d1"] is True           # state NOT wiped
+    pp.turn_off_entity.assert_not_awaited()                      # relay not commanded off
+
+
+@pytest.mark.asyncio
+async def test_sustained_unavailable_still_sheds(monkeypatch):
+    # With NO grace entry (outage already cleared past grace by _clear_stale_unavailable),
+    # an unavailable entity is shed normally — the hold is only for sub-grace blips.
+    _patch(monkeypatch)
+    device = _device()
+    on_time = {"d1": {"on_time_day": NOW.date(), "on_time_accum_sec": 0.0,
+                       "last_on_time": NOW - timedelta(minutes=5)}}
+    entry_data = _entry_data(device, device_on=True, on_time=on_time)  # no unavailable_since
+    hass = _Hass("unavailable")
+
+    await _run(hass, device, entry_data, battery_soc=None)
+
+    assert entry_data["device_on_time_state"]["d1"].get("last_on_time") is None  # shed

@@ -125,9 +125,13 @@ class SunAllocatorDeviceManualSwitch(SwitchEntity):
         silently drop the just-finished session. Delegates to the shared helper so the
         accounting is identical to every allocator-driven off-path."""
         from ..core.power_processor import _close_on_time_session
+        from ..const import CONF_DAILY_RESET_TIME, DEFAULT_DAILY_RESET_TIME
 
+        entry = self._hass.config_entries.async_get_entry(self._entry_id)
+        reset_time = (entry.data if entry else {}).get(
+            CONF_DAILY_RESET_TIME, DEFAULT_DAILY_RESET_TIME)
         on_time_state = entry_data.setdefault("device_on_time_state", {})
-        _close_on_time_session(on_time_state, self._device_id, now)
+        _close_on_time_session(on_time_state, self._device_id, now, reset_time)
 
     def _release_override_or_force_off(self) -> None:
         """OFF-button semantics (see module docstring): release an active forced-ON

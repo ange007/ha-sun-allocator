@@ -7,6 +7,8 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_OFF,
+    STATE_UNKNOWN,
+    STATE_UNAVAILABLE,
 )
 
 from .logger import log_error, log_info, log_warning
@@ -77,8 +79,37 @@ async def _enforce_all_off(hass, config_entry, reason: str):
 
 
 async def watchdog_check(hass, config_entry):
-    """Check if the excess power sensor is stale."""
+    """Fail-safe OFF when the excess-power pipeline has genuinely DIED.
+
+    ``watchdog_last_seen`` is refreshed by the excess sensor's state-change handler, which
+    HA fires only when the value MOVES. A live sensor holding a steady value — 0 W all
+    night with the PV dark, or a deadbanded flat reading during curtailment — would freeze
+    that timestamp and trip a false fail-safe (forcing every device, including manual ones,
+    OFF) exactly when nothing is wrong. So first re-derive liveness from the sensor's ACTUAL
+    state: a readable numeric value means the pipeline is alive → refresh and return. Only a
+    genuinely ``unavailable``/``unknown``/missing sensor (the real "inverter/integration
+    died" signal — the MUST inverter marks its sensors unavailable on comms loss, which
+    propagates to the excess sensor) is allowed to accrue staleness toward the fail-safe.
+    """
     entry_data = hass.data[config_entry.domain][config_entry.entry_id]
+
+    excess_sensor_id = entry_data.get("excess_sensor_id")
+    if excess_sensor_id:
+        st = hass.states.get(excess_sensor_id)
+        if st is not None and st.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            try:
+                float(st.state)
+            except (ValueError, TypeError):
+                pass  # non-numeric → not a healthy reading; fall through to staleness
+            else:
+                entry_data["watchdog_last_seen"] = dt_util.utcnow()
+                if entry_data.get("watchdog_alerted"):
+                    entry_data["watchdog_alerted"] = False
+                    log_info(
+                        "SunAllocator watchdog: excess sensor live again; normal operation resumed"
+                    )
+                return
+
     last_seen = entry_data.get("watchdog_last_seen")
     alerted = entry_data.get("watchdog_alerted", False)
     watchdog_stale_after = timedelta(minutes=WATCHDOG_STALE_AFTER_MINUTES)

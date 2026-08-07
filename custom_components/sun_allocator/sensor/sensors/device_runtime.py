@@ -55,10 +55,15 @@ class SunAllocatorDeviceRuntimeSensor(SensorEntity):
         # Deferred import: power_processor imports sensor.utils, so a module-level import
         # here would be circular during package initialization.
         from ...core.power_processor import _daily_on_time_sec
+        from ...const import CONF_DAILY_RESET_TIME, DEFAULT_DAILY_RESET_TIME
 
+        entry = self._hass.config_entries.async_get_entry(self._entry_id)
+        reset_time = (entry.data if entry else {}).get(
+            CONF_DAILY_RESET_TIME, DEFAULT_DAILY_RESET_TIME)
         on_time_state = data.get("device_on_time_state", {})
         currently_on = bool(data.get("device_on_state", {}).get(self._device_id))
-        secs = _daily_on_time_sec(on_time_state, self._device_id, dt_util.now(), currently_on)
+        secs = _daily_on_time_sec(on_time_state, self._device_id, dt_util.now(), currently_on,
+                                  reset_time=reset_time)
         self._attr_native_value = round(secs / 60.0, 1)
         self.async_write_ha_state()
 

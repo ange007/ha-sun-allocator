@@ -176,10 +176,35 @@ def test_daily_on_time_sec_excludes_in_progress_session_when_off():
     assert pp._daily_on_time_sec(state, "d1", now, currently_on=False) == 60.0
 
 
-def test_daily_on_time_sec_resets_on_new_day():
-    now = datetime(2026, 7, 3, 0, 5, 0, tzinfo=timezone.utc)
-    state = {"d1": {"on_time_day": now.date() - timedelta(days=1), "on_time_accum_sec": 500.0}}
+def test_logical_day_boundary_at_reset_time():
+    from datetime import date
+    # "06:00:00": 05:59 still belongs to the previous date; 06:00 flips to the new one.
+    assert pp._logical_day(datetime(2026, 7, 3, 5, 59, tzinfo=timezone.utc), "06:00:00") == date(2026, 7, 2)
+    assert pp._logical_day(datetime(2026, 7, 3, 6, 0, tzinfo=timezone.utc), "06:00:00") == date(2026, 7, 3)
+    # Minute granularity from the time-picker: boundary at 06:30.
+    assert pp._logical_day(datetime(2026, 7, 3, 6, 29, tzinfo=timezone.utc), "06:30:00") == date(2026, 7, 2)
+    assert pp._logical_day(datetime(2026, 7, 3, 6, 30, tzinfo=timezone.utc), "06:30:00") == date(2026, 7, 3)
+    # "00:00:00" == calendar day; legacy integer-hours still accepted.
+    assert pp._logical_day(datetime(2026, 7, 3, 0, 1, tzinfo=timezone.utc), "00:00:00") == date(2026, 7, 3)
+    assert pp._logical_day(datetime(2026, 7, 3, 5, 0, tzinfo=timezone.utc), 6) == date(2026, 7, 2)
+
+
+def test_daily_on_time_sec_resets_on_new_logical_day():
+    # 07:00 is past the default 06:00 reset boundary → yesterday's accum is dropped.
+    now = datetime(2026, 7, 3, 7, 0, 0, tzinfo=timezone.utc)
+    state = {"d1": {"on_time_day": (now - timedelta(days=1)).date(), "on_time_accum_sec": 500.0}}
     assert pp._daily_on_time_sec(state, "d1", now, currently_on=False) == 0.0
+
+
+def test_daily_on_time_sec_holds_before_reset_time():
+    # 00:05 is BEFORE the 06:00 reset → still the previous logical day, accum retained
+    # (this is the whole point of the shifted boundary: a late-night total survives midnight).
+    now = datetime(2026, 7, 3, 0, 5, 0, tzinfo=timezone.utc)
+    state = {"d1": {"on_time_day": pp._logical_day(now, "06:00:00"), "on_time_accum_sec": 500.0}}
+    assert pp._daily_on_time_sec(state, "d1", now, currently_on=False) == 500.0
+    # With reset_time="00:00:00" (calendar day) the same instant IS a new day → reset.
+    state2 = {"d1": {"on_time_day": now.date() - timedelta(days=1), "on_time_accum_sec": 500.0}}
+    assert pp._daily_on_time_sec(state2, "d1", now, currently_on=False, reset_time="00:00:00") == 0.0
 
 
 def test_accumulate_daily_on_time_folds_session_into_accumulator():
@@ -324,3 +349,33 @@ def test_stale_mismatch_after_long_dormant_gap_is_not_user_initiated():
     pp._detect_external_change(hass, device, "d1", entry_data, status_entry, device_on_state, now)
 
     assert "d1" not in entry_data.get("manual_overrides", {})
+
+
+def test_manual_on_external_off_logs_once_per_episode(monkeypatch):
+    """A forced-ON device switched OFF from outside HA (Tuya cloud / socket overload /
+    device schedule) keeps its override but is surfaced ONCE per episode — not every cycle,
+    and not silently. Realigning (entity back ON) resets the edge so a later drop logs again."""
+    warns = MagicMock()
+    journals = MagicMock()
+    monkeypatch.setattr(pp, "log_warning", warns)
+    monkeypatch.setattr(pp, "journal_event", journals)
+    now = datetime(2026, 8, 6, 19, 17, 0, tzinfo=timezone.utc)
+    device = {CONF_DEVICE_ENTITY: "switch.konditsioner_switch"}
+    entry_data = {  # forced ON, no last_controlled_at → the off is "unresponsive", not a user toggle
+        "manual_overrides": {"d1": {"state": True, "since": now - timedelta(minutes=5)}},
+    }
+    device_on_state = {"d1": True}
+
+    off = _hass_with_relay(_relay_state("off", now - timedelta(hours=3)))
+    pp._detect_external_change(off, device, "d1", entry_data, {}, device_on_state, now)
+    pp._detect_external_change(off, device, "d1", entry_data, {}, device_on_state, now)
+
+    assert warns.call_count == 1               # edge-logged once, not every cycle
+    assert journals.call_count == 1
+    assert "d1" in entry_data["_external_off_logged"]
+    assert entry_data["manual_overrides"]["d1"]["state"] is True  # override kept, not cleared
+
+    # Entity comes back ON (aligned) → flag resets so a future drop logs again.
+    on = _hass_with_relay(_relay_state("on", now))
+    pp._detect_external_change(on, device, "d1", entry_data, {}, device_on_state, now)
+    assert "d1" not in entry_data["_external_off_logged"]

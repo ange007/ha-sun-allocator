@@ -13,7 +13,7 @@ from homeassistant.const import (
 )
 
 # Local imports from the same 'core' directory
-from .logger import log_debug, log_warning
+from .logger import log_debug, log_warning, journal_event
 from .schedule import is_device_in_schedule
 from .settings import COUNTER_DEBOUNCE_FRACTION
 from .device_restore import persist_grace_state, persist_manual_overrides, persist_on_time_state
@@ -63,6 +63,12 @@ from ..const import (
     DEFAULT_STARTUP_GRACE_PERIOD,
     CONF_BATTERY_SOC_SENSOR,
     CONF_BATTERY_PROTECTION_SOC,
+    CONF_GRID_VOLTAGE_SENSOR,
+    CONF_GRID_MIN_VOLTAGE,
+    DEFAULT_GRID_MIN_VOLTAGE,
+    UNAVAILABLE_CLEAR_GRACE_S,
+    CONF_DAILY_RESET_TIME,
+    DEFAULT_DAILY_RESET_TIME,
     CONF_BATTERY_POWER,
     CONF_BATTERY_POWER_REVERSED,
     CONF_BATTERY_DISCHARGE_TOLERANCE_W,
@@ -94,7 +100,7 @@ def _initialize_run(entry_data, devices_config):
     for _key in (
         "device_debounce_state", "device_on_time_state", "battery_soc_gate_state",
         "battery_stop_gate_state", "manual_overrides", "command_retries",
-        "last_controlled_at",
+        "last_controlled_at", "unavailable_since",
     ):
         _d = entry_data.get(_key)
         if isinstance(_d, dict):
@@ -134,6 +140,64 @@ def _read_battery_soc(hass, cfg) -> float | None:
         return None
 
 
+def _grid_available(hass, cfg) -> bool:
+    """True when a configured grid-voltage sensor reads at/above the min voltage.
+
+    Used only to let a MANUALLY-forced (manual_on) device ignore the battery-protection
+    force-off: with the grid present the inverter's own low-SOC cutoff protects the
+    battery, so SunAllocator's software floor can stand down. Fails CLOSED (returns
+    False → protection stays in force) when unconfigured, unavailable, or unparsable.
+    """
+    grid_sensor = cfg.get(CONF_GRID_VOLTAGE_SENSOR)
+    if not grid_sensor:
+        return False
+    state = hass.states.get(grid_sensor)
+    if not state or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        return False
+    try:
+        min_v = float(cfg.get(CONF_GRID_MIN_VOLTAGE, DEFAULT_GRID_MIN_VOLTAGE))
+        return float(state.state) >= min_v
+    except (ValueError, TypeError):
+        return False
+
+
+def _clear_stale_unavailable(hass, entry_data, devices, now):
+    """Flap protection: clear a device's held state only after a SUSTAINED outage.
+
+    A controlled entity that momentarily reads ``unavailable`` (ESP WiFi / Modbus
+    hiccup) must not lose its manual override — otherwise a comms blip drops the
+    user's force-on and the relay flaps off/on. So the state listener no longer wipes
+    state on the blip; this loop-side authority does:
+
+    * entity available            → drop any outage stamp (recovered, state intact);
+    * unavailable < grace         → keep ``device_on_state`` + ``manual_overrides``;
+    * unavailable ≥ grace         → treat as genuinely gone: clear both so it starts
+      fresh on return (the original "reset on unavailable" behaviour, just debounced).
+    """
+    stamps = entry_data.setdefault("unavailable_since", {})
+    for dev in devices:
+        dev_id = dev.get(CONF_DEVICE_ID)
+        if not dev_id:
+            continue
+        relay_entity, _ = parse_relay_entity(dev.get(CONF_DEVICE_ENTITY))
+        state = hass.states.get(relay_entity) if relay_entity else None
+        unavailable = state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+        if not unavailable:
+            stamps.pop(dev_id, None)
+            continue
+        since = stamps.setdefault(dev_id, now)
+        if (now - since).total_seconds() < UNAVAILABLE_CLEAR_GRACE_S:
+            continue  # transient blip — hold last known state + override
+        # Sustained outage → fresh start on recovery.
+        entry_data.get("device_on_state", {}).pop(dev_id, None)
+        entry_data.get("manual_overrides", {}).pop(dev_id, None)
+        stamps.pop(dev_id, None)
+        log_debug(
+            f"[flap-guard] {dev_id}: entity unavailable > "
+            f"{UNAVAILABLE_CLEAR_GRACE_S:.0f}s — cleared held state/override"
+        )
+
+
 # Battery-SOC gates live in their own module; re-exported for import back-compat.
 from .battery_gates import (  # noqa: E402
     _apply_battery_soc_gate,
@@ -148,22 +212,25 @@ from .device_timing import (  # noqa: E402, F401
     _accumulate_daily_on_time,
     _close_on_time_session,
     _daily_on_time_sec,
+    _logical_day,
 )
 
 
 def _apply_max_on_time_gate(
-    device, device_id, is_active, prev_on, device_on_time_state, now, status_entry
+    device, device_id, is_active, prev_on, device_on_time_state, now, status_entry,
+    reset_time=DEFAULT_DAILY_RESET_TIME,
 ) -> bool:
     """Block (and turn off) a device that has hit its daily on-time budget.
 
     ``max_on_time_per_day`` is in minutes; 0 disables the limit. Unlike the SOC
     gate this also forces a RUNNING device off once the budget is exhausted, mirroring
-    schedule filtering. The accumulator resets at midnight.
+    schedule filtering. The accumulator resets on the ``reset_time`` logical-day boundary.
     """
     max_minutes = float(device.get(CONF_DEVICE_MAX_ON_TIME_PER_DAY, 0) or 0)
     if max_minutes <= 0:
         return is_active
-    on_sec = _daily_on_time_sec(device_on_time_state, device_id, now, currently_on=prev_on)
+    on_sec = _daily_on_time_sec(device_on_time_state, device_id, now, currently_on=prev_on,
+                                reset_time=reset_time)
     if on_sec >= max_minutes * 60.0:
         status_entry["refusal_reasons"].append(
             f"Daily on-time limit reached: {on_sec / 60.0:.0f}min >= {max_minutes:.0f}min"
@@ -176,7 +243,7 @@ def _apply_max_on_time_gate(
             # We force a running device off here, bypassing _apply_min_on_time's
             # turn-off branch — so close the session now, otherwise it would go
             # uncounted and the device could immediately restart.
-            _close_on_time_session(device_on_time_state, device_id, now)
+            _close_on_time_session(device_on_time_state, device_id, now, reset_time)
         return False
     return is_active
 
@@ -708,6 +775,7 @@ def _detect_external_change(
         if device_id in command_retries:
             command_retries.pop(device_id, None)
             _dismiss_retry_notification(hass, device_id)
+        entry_data.get("_external_off_logged", set()).discard(device_id)
         return None
 
     # last_controlled_at is purely in-memory (never persisted) — a HA restart wipes it
@@ -744,6 +812,34 @@ def _detect_external_change(
     # didn't touch it). Don't count / give up here — the control coroutine owns the
     # throttled re-send and the unreachable escalation, keeping the retry cadence next
     # to the actual service call.
+    #
+    # Special case worth a persistent record: a MANUAL/forced device (override state=True)
+    # that reads OFF here was switched off by something OUTSIDE HA (Tuya cloud, the socket's
+    # own overload protection, a device-side schedule/countdown) — HA never sees the reason,
+    # only the resulting off. The override is deliberately kept (manual_on doesn't re-command
+    # "the user's" relay), so surface it ONCE per episode (edge-logged; reset on realign
+    # above) instead of silently showing "Manual (on)" while the relay is physically off.
+    ov = manual_overrides.get(device_id)
+    if ov and ov.get("state") and not actual_on:
+        logged = entry_data.setdefault("_external_off_logged", set())
+        if device_id not in logged:
+            logged.add(device_id)
+            log_warning(
+                f"[manual] {device_id}: forced ON but entity {relay_entity} read OFF "
+                f"externally — source is outside HA (Tuya cloud / socket overload protection "
+                f"/ device schedule). Override kept, not re-commanded. Check the device's own "
+                f"app log for the reason."
+            )
+            journal_event(
+                "manual_device_external_off",
+                {
+                    "device_id": device_id,
+                    "entity": relay_entity,
+                    "expected": "on",
+                    "actual": "off",
+                    "at": now.isoformat(),
+                },
+            )
     return None
 
 
@@ -786,6 +882,7 @@ def _finalize_run(entry_data, excess_power, remaining_power):
 
 def _sync_initial_device_states(
     hass, devices, device_on_state, entry_data, device_on_time_state=None, now=None,
+    reset_time=DEFAULT_DAILY_RESET_TIME,
 ) -> None:
     """First-run-after-startup sync of ``device_on_state`` from actual HA entity states.
 
@@ -810,11 +907,25 @@ def _sync_initial_device_states(
         _domain = _relay.split(".")[0]
         _is_on = is_entity_on(_domain, _state)
         device_on_state[_dev_id] = _is_on
-        if (
-            _is_on and _dev_id and device_on_time_state is not None and now is not None
-            and device_on_time_state.get(_dev_id, {}).get("last_on_time") is None
-        ):
-            device_on_time_state.setdefault(_dev_id, {})["last_on_time"] = now
+        if _dev_id and device_on_time_state is not None and now is not None:
+            if _is_on:
+                # Continue the persisted in-progress session (so a long unbroken run
+                # survives restart) — but only if it belongs to today; a stale/previous-day
+                # or absent start is seeded fresh from now.
+                _entry = device_on_time_state.setdefault(_dev_id, {})
+                _restored = _entry.get("last_on_time")  # from load_on_time_state, if any
+                if not (isinstance(_restored, dt_stdlib.datetime)
+                        and _logical_day(_restored, reset_time) == _logical_day(now, reset_time)):
+                    _entry["last_on_time"] = now
+                elif _restored != now:
+                    log_debug(f"[init] Restored in-progress on-time session for {_dev_id} from {_restored}")
+            else:
+                # Off at restart → the pre-restart session ended during downtime (unknown
+                # when); drop the dangling start so it isn't counted from a stale time.
+                # Only touch an existing entry — don't materialise one for an idle device.
+                _existing = device_on_time_state.get(_dev_id)
+                if _existing is not None:
+                    _existing.pop("last_on_time", None)
         log_debug(f"[init] Synced device_on_state[{_dev_id}] = {_is_on} from actual state")
     entry_data["_device_on_state_initialized"] = True
 
@@ -869,7 +980,7 @@ def _clear_grace_deadline(hass, config_entry, device_on_time_state, device_id):
 
 def _apply_min_on_time(
     hass, config_entry, device, device_id, device_on_time_state, status_entry,
-    is_active, prev_on_before_calc, now, min_on_time,
+    is_active, prev_on_before_calc, now, min_on_time, reset_time=DEFAULT_DAILY_RESET_TIME,
 ):
     """Enforce min-on-time and close the on-time session on an off-transition.
 
@@ -892,7 +1003,7 @@ def _apply_min_on_time(
             return True
 
     # Off-transition: close the session and clear the (persisted) grace deadline.
-    _close_on_time_session(device_on_time_state, device_id, now)
+    _close_on_time_session(device_on_time_state, device_id, now, reset_time)
     device_on_time_state.setdefault(device_id, {}).pop("startup_until", None)
     hass.async_create_task(persist_grace_state(hass, config_entry, device_id, None))
     status_entry["last_off_time"] = now
@@ -974,7 +1085,7 @@ async def _control_one_device(
     hass, config_entry, device, *,
     cfg, entry_data, now, strategy, proportional_allocations, remaining_power, battery_soc,
     battery_soc_configured=False, device_sensor_cache=None,
-    discharging=False, protection_soc=0.0,
+    discharging=False, protection_soc=0.0, grid_available=False,
 ):
     """Run the full per-device control pipeline for one cycle.
 
@@ -983,6 +1094,8 @@ async def _control_one_device(
     """
     device_id = device.get(CONF_DEVICE_ID)
     log_debug(f"Looping for device: {device_id}")
+    # Logical-day boundary for the sticky manual overrides + on-time accumulators.
+    reset_time = cfg.get(CONF_DAILY_RESET_TIME, DEFAULT_DAILY_RESET_TIME)
 
     status_entry = entry_data["device_status"].get(device_id)
     if not status_entry:
@@ -1011,9 +1124,9 @@ async def _control_one_device(
     if (
         override
         and override.get("since") is not None
-        and now.date() != override["since"].date()
+        and _logical_day(now, reset_time) != _logical_day(override["since"], reset_time)
     ):
-        # Daily rollover → the manual choice expired; resume auto-control.
+        # Daily rollover (logical-day boundary at reset_time) → manual choice expired.
         log_debug(f"[manual] Daily rollover cleared manual state for {device_id}")
         del manual_overrides[device_id]
         override = None
@@ -1032,7 +1145,7 @@ async def _control_one_device(
     if decision == "manual_off":
         # Close out any in-progress on-time session — this path returns before the auto
         # gates (_apply_min_on_time) ever see the on→off transition, so nobody else will.
-        _close_on_time_session(device_on_time_state, device_id, now)
+        _close_on_time_session(device_on_time_state, device_id, now, reset_time)
         device_on_state[device_id] = False
         status_entry["manual_override"] = True
         status_entry["refusal_reasons"].append("Manual control (off)")
@@ -1044,7 +1157,9 @@ async def _control_one_device(
         # Battery protection can still force a manual ON off (discharge-side stop floor or
         # the absolute protection floor) — the only exception to a sticky manual choice.
         # A timed run with ignore_battery bypasses this entirely (full SOC override).
-        if not override.get("ignore_battery") and decide_battery_soc_stop(
+        # A configured, present grid also bypasses it: the grid carries the load, so the
+        # inverter's own low-SOC cutoff protects the battery (auto-control is unaffected).
+        if not override.get("ignore_battery") and not grid_available and decide_battery_soc_stop(
             battery_soc=battery_soc,
             soc_configured=battery_soc_configured,
             discharging=discharging,
@@ -1062,7 +1177,7 @@ async def _control_one_device(
             if relay_entity:
                 await turn_off_entity(hass, relay_entity, device.get(CONF_DEVICE_NAME, ""))
             manual_overrides.pop(device_id, None)
-            _close_on_time_session(device_on_time_state, device_id, now)
+            _close_on_time_session(device_on_time_state, device_id, now, reset_time)
             device_on_state[device_id] = False
             status_entry["refusal_reasons"].append(
                 f"Battery protection (SOC {float(battery_soc):.0f}% < {floor:.0f}%)"
@@ -1100,6 +1215,17 @@ async def _control_one_device(
     filter_reason = await _filter_device(hass, device, now)
     log_debug(f"Filter reason for {device_id}: {filter_reason}")
     if filter_reason:
+        # Transient-blip hold: a relay that just briefly read `unavailable` (< grace) is
+        # tracked in _clear_stale_unavailable's `unavailable_since` set — being present
+        # there means the outage is still inside the grace window. Hold WITHOUT wiping
+        # device_on_state or closing the on-time session: this is what makes the flap-guard
+        # protect AUTO devices too (manual overrides already return above). Without it a
+        # sub-grace blip flips prev_on to False and the hysteresis re-evaluation turns the
+        # relay off on recovery — the exact flap this feature exists to prevent. Only a
+        # sustained (>grace, then cleared) or non-unavailability filter reason sheds load.
+        if device_id and device_id in entry_data.get("unavailable_since", {}):
+            status_entry["refusal_reasons"].append(filter_reason)
+            return entry_data.get(CONF_POWER_ALLOCATION, {}).get(device_id, 0.0)
         if device_id:
             entry_data["device_filter_reasons"][device_id] = filter_reason
             status_entry["refusal_reasons"].append(filter_reason)
@@ -1108,7 +1234,7 @@ async def _control_one_device(
             # (this path returns before the auto gates that would otherwise close it),
             # and record that OFF as OUR command so a later user toggle is detected as
             # user-initiated (not a spurious manual OFF / "unresponsive device" fight).
-            _close_on_time_session(device_on_time_state, device_id, now)
+            _close_on_time_session(device_on_time_state, device_id, now, reset_time)
             device_on_state[device_id] = False
             entry_data.setdefault("last_controlled_at", {})[device_id] = now
         return 0.0
@@ -1129,7 +1255,7 @@ async def _control_one_device(
     min_on_time = status_entry.get(CONF_DEVICE_MIN_ON_TIME, 0)
     is_active = _apply_min_on_time(
         hass, config_entry, device, device_id, device_on_time_state, status_entry,
-        is_active, prev_on_before_calc, now, min_on_time,
+        is_active, prev_on_before_calc, now, min_on_time, reset_time,
     )
     is_active = _apply_startup_grace(
         hass, config_entry, device, device_id, device_on_time_state, status_entry,
@@ -1147,7 +1273,8 @@ async def _control_one_device(
         discharging, protection_soc, stop_gate, status_entry,
     )
     is_active = _apply_max_on_time_gate(
-        device, device_id, is_active, prev_on_before_calc, device_on_time_state, now, status_entry
+        device, device_id, is_active, prev_on_before_calc, device_on_time_state, now, status_entry,
+        reset_time,
     )
 
     # On-time session bookkeeping — AFTER every gate (so a start any gate vetoed records
@@ -1156,7 +1283,7 @@ async def _control_one_device(
     # running device shed by the discharge stop-floor (R1.1); the per-gate closes above are
     # idempotent with it.
     if prev_on_before_calc and not is_active:
-        _close_on_time_session(device_on_time_state, device_id, now)
+        _close_on_time_session(device_on_time_state, device_id, now, reset_time)
     elif is_active and not prev_on_before_calc:
         device_on_time_state.setdefault(device_id, {})["last_on_time"] = now
         status_entry["last_on_time"] = now
@@ -1200,8 +1327,12 @@ async def process_excess_power(
     device_on_time_state = entry_data.setdefault("device_on_time_state", {})
 
     auto_control_devices = _initialize_run(entry_data, cfg.get(CONF_DEVICES, []))
+    # Flap protection: debounce transient entity outages before anything reads
+    # device_on_state / manual_overrides this cycle (clears only on a sustained outage).
+    _clear_stale_unavailable(hass, entry_data, cfg.get(CONF_DEVICES, []), now)
     _sync_initial_device_states(
         hass, auto_control_devices, device_on_state, entry_data, device_on_time_state, now,
+        cfg.get(CONF_DAILY_RESET_TIME, DEFAULT_DAILY_RESET_TIME),
     )
     log_debug(f"auto_control_devices: {auto_control_devices}")
 
@@ -1251,6 +1382,8 @@ async def process_excess_power(
     battery_soc = _read_battery_soc(hass, cfg)
     battery_soc_configured = bool(cfg.get(CONF_BATTERY_SOC_SENSOR))
     protection_soc = float(cfg.get(CONF_BATTERY_PROTECTION_SOC, 0) or 0)
+    # Grid present (once per cycle) → manual_on devices ignore the protection force-off.
+    grid_available = _grid_available(hass, cfg)
     # Battery net charge → discharge flag for the discharge-side stop floor. Reuse the
     # excess discharge tolerance so minor jitter is not read as a real discharge.
     net_charge = 0.0
@@ -1298,6 +1431,7 @@ async def process_excess_power(
             device_sensor_cache=device_sensor_cache,
             discharging=battery_discharging,
             protection_soc=protection_soc,
+            grid_available=grid_available,
         )
         # Consume the real pool first, then (for probe-allowed devices) the extra.
         from_real = min(power_used, real_pool)
@@ -1333,9 +1467,15 @@ async def process_excess_power(
         did: (
             st.get("on_time_day").isoformat() if hasattr(st.get("on_time_day"), "isoformat") else None,
             round(float(st.get("on_time_accum_sec", 0.0) or 0.0), 1),
+            # Session start too: a long unbroken run doesn't change accum, so without this
+            # the persisted in-progress start would never flush and be lost on restart.
+            st.get("last_on_time").isoformat() if hasattr(st.get("last_on_time"), "isoformat") else None,
         )
         for did, st in device_on_time_state.items()
-        if st.get("on_time_day") is not None
+        # Include a device with an OPEN session even before its first close: on_time_day is
+        # only stamped on session close, so a first-ever continuous run would otherwise be
+        # excluded here and its last_on_time never persisted (lost on restart).
+        if st.get("on_time_day") is not None or st.get("last_on_time") is not None
     }
     if on_time_snapshot != entry_data.get("_on_time_persisted"):
         entry_data["_on_time_persisted"] = on_time_snapshot

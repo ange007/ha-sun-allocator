@@ -19,6 +19,7 @@ from ..const import (
     CONF_PANEL_COUNT,
     CONF_BATTERY_POWER,
     CONF_BATTERY_SOC_SENSOR,
+    CONF_GRID_VOLTAGE_SENSOR,
     STEP_BATTERY,
     NONE_OPTION,
 )
@@ -103,7 +104,10 @@ class SolarConfigMixin:
 
         Replaces NONE_OPTION / empty string with None for optional sensor fields.
         """
-        for field in [CONF_CONSUMPTION, CONF_BATTERY_POWER, CONF_BATTERY_SOC_SENSOR]:
+        for field in [
+            CONF_CONSUMPTION, CONF_BATTERY_POWER, CONF_BATTERY_SOC_SENSOR,
+            CONF_GRID_VOLTAGE_SENSOR,
+        ]:
             if field in user_input and (
                 not user_input[field]
                 or user_input[field] == NONE_OPTION

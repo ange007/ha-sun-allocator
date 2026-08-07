@@ -179,22 +179,35 @@ async def load_manual_overrides(hass: HomeAssistant, config_entry: ConfigEntry) 
 
 async def persist_on_time_state(hass: HomeAssistant, config_entry: ConfigEntry, on_time_state: dict) -> None:
     """Persist today's accumulated on-time per device (``on_time_day`` + ``on_time_accum_sec``)
-    so a HA restart mid-day doesn't reset the runtime sensor / ``max_on_time_per_day`` gate to 0.
+    plus the start of any IN-PROGRESS session (``last_on_time``) so a HA restart mid-day
+    doesn't reset the runtime sensor / ``max_on_time_per_day`` gate — including the time a
+    device has been running continuously (which lives only in ``now - last_on_time`` until
+    the session closes, so without this a long unbroken run is lost on restart).
 
-    Only the daily total is persisted. ``last_on_time``/``last_off_time``/``startup_until``
-    are live-session bookkeeping a restart legitimately resets — a device already running
-    across the restart gets a fresh session seeded from the restart moment instead (see
-    ``_sync_initial_device_states``), rather than restoring a stale pre-restart timestamp.
+    ``last_off_time``/``startup_until`` remain live bookkeeping a restart resets.
+    ``last_on_time`` is restored only for a device still physically ON at restart, and only
+    if it belongs to the same day (see ``_sync_initial_device_states``).
     """
     serial = {}
     for did, st in (on_time_state or {}).items():
         day = st.get("on_time_day")
+        last_on = st.get("last_on_time")
+        # on_time_day is only stamped on session CLOSE, so a device still in its first
+        # ever (never-closed) session has day=None but an open last_on_time. Derive the day
+        # from that start so the running session is still persisted (accum is 0 until close).
         if day is None:
-            continue
+            if isinstance(last_on, datetime):
+                day = last_on.date()
+            else:
+                continue
         serial[did] = {
             "on_time_day": day.isoformat(),
             "on_time_accum_sec": float(st.get("on_time_accum_sec", 0.0) or 0.0),
         }
+        # Only emit an in-progress session start when one is open — omitting it when absent
+        # keeps the serialized form identical to pre-1.3.1 stores (idempotent, no churn).
+        if isinstance(last_on, datetime):
+            serial[did]["last_on_time"] = last_on.isoformat()
     restore_data = await _load_restore_data(hass, config_entry)
     if restore_data.get(_ON_TIME_STORAGE_KEY) == serial:
         return
@@ -204,23 +217,33 @@ async def persist_on_time_state(hass: HomeAssistant, config_entry: ConfigEntry, 
 
 
 async def load_on_time_state(hass: HomeAssistant, config_entry: ConfigEntry) -> dict:
-    """Return ``{device_id: {"on_time_day": date, "on_time_accum_sec": float}}`` from storage.
+    """Return ``{device_id: {"on_time_day": date, "on_time_accum_sec": float,
+    "last_on_time"?: datetime}}`` from storage.
 
     Malformed entries are dropped. A restored day older than "today" is harmless — the
     existing day-rollover check in ``_daily_on_time_sec``/``_accumulate_daily_on_time``
-    resets it on first use.
+    resets it on first use. ``last_on_time`` is optional (absent in pre-1.3.1 stores) and
+    is only *applied* by ``_sync_initial_device_states`` when the device is still ON.
     """
     restore_data = await _load_restore_data(hass, config_entry)
     raw = restore_data.get(_ON_TIME_STORAGE_KEY, {}) or {}
     out: dict = {}
     for did, st in raw.items():
         try:
-            out[did] = {
+            entry = {
                 "on_time_day": date.fromisoformat(st["on_time_day"]),
                 "on_time_accum_sec": float(st["on_time_accum_sec"]),
             }
         except (TypeError, ValueError, KeyError):
             log_debug("[on_time] dropping malformed entry %s=%r", did, st)
+            continue
+        last_on_iso = st.get("last_on_time")
+        if last_on_iso:
+            try:
+                entry["last_on_time"] = datetime.fromisoformat(last_on_iso)
+            except (TypeError, ValueError):
+                pass  # keep the daily total, drop the unparsable session start
+        out[did] = entry
     return out
 
 

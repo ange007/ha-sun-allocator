@@ -116,6 +116,25 @@ CONF_BATTERY_SHARING_SOC = "battery_sharing_soc"
 # device off regardless of charge direction, and is the hard minimum a per-device
 # stop_battery_soc may be set to. 0 = disabled.
 CONF_BATTERY_PROTECTION_SOC = "battery_protection_soc"
+# Optional grid-availability guard for MANUAL control: when a grid-voltage sensor is
+# configured and reads at/above CONF_GRID_MIN_VOLTAGE, a manually-forced (manual_on)
+# device ignores the battery-protection force-off — the grid covers the load, so the
+# inverter's own low-SOC cutoff protects the battery. Auto-control is unaffected.
+CONF_GRID_VOLTAGE_SENSOR = "grid_voltage_sensor"
+CONF_GRID_MIN_VOLTAGE = "grid_min_voltage"
+DEFAULT_GRID_MIN_VOLTAGE = 200.0
+# Flap protection: a controlled entity that blips ``unavailable`` (WiFi/Modbus hiccup)
+# must NOT immediately wipe its manual override / on-state — that turns a momentary comms
+# glitch into a lost force-on and relay flapping. Hold the last known state through
+# outages shorter than this; only a SUSTAINED outage clears it (fresh start). Seconds.
+UNAVAILABLE_CLEAR_GRACE_S = 120.0
+# Local time of day at which per-day states reset — the sticky manual overrides and the
+# on-time / max_on_time_per_day accumulators roll over on this "logical day" boundary
+# instead of calendar midnight. Stored as an "HH:MM:SS" string (HA TimeSelector). Default
+# 06:00: a manual choice made late in the evening survives past midnight (people may still
+# be up) and only clears in the morning. "00:00:00" == calendar-midnight behaviour.
+CONF_DAILY_RESET_TIME = "daily_reset_time"
+DEFAULT_DAILY_RESET_TIME = "06:00:00"
 # Max battery discharge (W) that does NOT block excess calculation.
 # Small oscillations ≤ this threshold are treated as neutral (battery neither
 # charges nor discharges for the purposes of excess). Default 20W absorbs typical

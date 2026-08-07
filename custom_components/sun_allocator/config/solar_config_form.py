@@ -34,6 +34,9 @@ from ..const import (
     CONF_RESERVE_BATTERY_POWER,
     CONF_BATTERY_DISCHARGE_TOLERANCE_W,
     DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W,
+    CONF_GRID_VOLTAGE_SENSOR,
+    CONF_GRID_MIN_VOLTAGE,
+    DEFAULT_GRID_MIN_VOLTAGE,
     CONF_PV_FORECAST_SENSOR,
     MPPT_MAX_COUNT,
     PANEL_CONFIG_SERIES,
@@ -155,6 +158,22 @@ def build_battery_schema(defaults: Optional[Dict[str, Any]] = None) -> Schema:
                 CONF_BATTERY_DISCHARGE_TOLERANCE_W, DEFAULT_BATTERY_DISCHARGE_TOLERANCE_W
             ),
         ): NumberSelectorBuilder(0, 500, 10).build(),
+
+        # Optional grid-voltage sensor: when it reads at/above the min voltage below, a
+        # MANUALLY-forced device ignores the battery-protection floor (the grid covers
+        # the load). Leave empty to disable. Auto-control is never affected.
+        _opt_entity_key(CONF_GRID_VOLTAGE_SENSOR, defaults): selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                multiple=False,
+                filter=[{"device_class": ["voltage"]}],
+            )
+        ),
+
+        VolOptional(
+            CONF_GRID_MIN_VOLTAGE,
+            default=defaults.get(CONF_GRID_MIN_VOLTAGE, DEFAULT_GRID_MIN_VOLTAGE),
+        ): NumberSelectorBuilder(0, 300, 5, unit="V").build(),
     })
 
 

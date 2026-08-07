@@ -1,6 +1,7 @@
 """Advanced config form builders for Sun Allocator."""
 
 from voluptuous import Schema, Required
+from homeassistant.helpers import selector
 
 from ..config.ui_helpers import NumberSelectorBuilder, SelectSelectorBuilder, int_field
 
@@ -19,6 +20,8 @@ from ..const import (
     CALC_METHOD_MPPT,
     CALC_METHOD_MPPT_PROBE,
     CALC_METHOD_EXPORT,
+    CONF_DAILY_RESET_TIME,
+    DEFAULT_DAILY_RESET_TIME,
 )
 
 
@@ -75,5 +78,10 @@ def build_advanced_config_schema(defaults=None):
                     CONF_PROBE_BATTERY_ASSIST_W, DEFAULT_PROBE_BATTERY_ASSIST_W
                 ),
             ): NumberSelectorBuilder(0, 1000, 10).build(),
+
+            Required(
+                CONF_DAILY_RESET_TIME,
+                default=defaults.get(CONF_DAILY_RESET_TIME, DEFAULT_DAILY_RESET_TIME),
+            ): selector.TimeSelector(),
         }
     )
