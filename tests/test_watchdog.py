@@ -28,7 +28,6 @@ from custom_components.sun_allocator.const import (
     CONF_MIN_INVERTER_VOLTAGE,
     DEVICE_TYPE_STANDARD,
     CONF_HYSTERESIS_W,
-    SENSOR_EXCESS_SUFFIX,
 )
 from custom_components.sun_allocator.core.watchdog import watchdog_check
 
@@ -97,9 +96,9 @@ async def test_watchdog_enforces_off_on_stale_sensor(
     ) as mock_async_call:
         # A genuinely DEAD excess sensor (integration/inverter comms lost) is what now
         # trips the fail-safe — a live flat value is treated as fresh (watchdog liveness).
-        excess_sensor_id = (
-            f"sensor.{DOMAIN}_{SENSOR_EXCESS_SUFFIX}_{config_entry.entry_id}"
-        )
+        # Use the ACTUAL tracked entity id the integration resolved, not a guessed one.
+        entry_data = hass.data[DOMAIN][config_entry.entry_id]
+        excess_sensor_id = entry_data["excess_sensor_id"]
         hass.states.async_set(excess_sensor_id, STATE_UNAVAILABLE)
         await hass.async_block_till_done()
 
@@ -162,10 +161,10 @@ async def test_watchdog_resets_on_sensor_update(
         mock_async_call.reset_mock()
 
         # Mark the excess sensor dead so the (time-)stale watchdog trips the fail-safe —
-        # a live value would now be held as fresh (watchdog liveness).
-        excess_sensor_id = (
-            f"sensor.{DOMAIN}_{SENSOR_EXCESS_SUFFIX}_{config_entry.entry_id}"
-        )
+        # a live value would now be held as fresh (watchdog liveness). Use the actual
+        # tracked entity id the integration resolved.
+        entry_data = hass.data[DOMAIN][config_entry.entry_id]
+        excess_sensor_id = entry_data["excess_sensor_id"]
         hass.states.async_set(excess_sensor_id, STATE_UNAVAILABLE)
         await hass.async_block_till_done()
 

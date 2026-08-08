@@ -157,7 +157,8 @@ async def test_full_config_flow_creates_entry(hass: HomeAssistant) -> None:
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert result["data"][CONF_PANEL_VMP] == 36.0
+    # Panel specs are nested under mppt_inputs[0] in the multi-MPPT structure (not flat).
+    assert result["data"]["mppt_inputs"][0][CONF_PANEL_VMP] == 36.0
     assert result["data"][CONF_DEVICES] == []
 
 
