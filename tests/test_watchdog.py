@@ -183,17 +183,13 @@ async def test_watchdog_resets_on_sensor_update(
         hass.states.async_set("switch.test_switch", "off")
         assert hass.states.get("switch.test_switch").state == "off"
 
-        # Simulate sensor update — excess sensor recomputes to a live value, so the
-        # watchdog treats the pipeline as alive again and does NOT re-enforce OFF.
+        # Recovery: the excess sensor reads a live value again. Set it right before the
+        # check (no intervening block that could let the entity recompute back to
+        # unavailable) so the watchdog sees it live → holds fresh → does NOT re-enforce OFF.
         mock_async_call.reset_mock()
-        hass.states.async_set(excess_sensor_id, "150")
-        hass.states.async_set("sensor.test_pv_power", "260")
-        hass.states.async_set("sensor.test_pv_voltage", "36")
-        await hass.async_block_till_done()
-
-        # Advance time again, watchdog should not trigger OFF
         future_time = dt_util.utcnow() + timedelta(minutes=2)
         freezer.move_to(future_time)
+        hass.states.async_set(excess_sensor_id, "150")
         await watchdog_check(hass, config_entry)
         await hass.async_block_till_done()
 
