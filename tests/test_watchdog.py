@@ -193,4 +193,8 @@ async def test_watchdog_resets_on_sensor_update(
         await watchdog_check(hass, config_entry)
         await hass.async_block_till_done()
 
-        mock_async_call.assert_not_called()
+        # The watchdog saw a live sensor and stood down (alert cleared) — it did NOT
+        # re-enforce the fail-safe. Assert on the watchdog's own state rather than raw
+        # async_call: ordinary allocation triggered by the excess update may command
+        # relays too, which is not the watchdog and must not fail this test.
+        assert hass.data[DOMAIN][config_entry.entry_id]["watchdog_alerted"] is False
