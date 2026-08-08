@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.setup import async_setup_component
 import homeassistant.util.dt as dt_util
 
@@ -94,11 +95,12 @@ async def test_watchdog_enforces_off_on_stale_sensor(
     with patch(
         "homeassistant.core.ServiceRegistry.async_call", new_callable=AsyncMock
     ) as mock_async_call:
-        # Create excess sensor to be tracked
+        # A genuinely DEAD excess sensor (integration/inverter comms lost) is what now
+        # trips the fail-safe — a live flat value is treated as fresh (watchdog liveness).
         excess_sensor_id = (
             f"sensor.{DOMAIN}_{SENSOR_EXCESS_SUFFIX}_{config_entry.entry_id}"
         )
-        hass.states.async_set(excess_sensor_id, "100")
+        hass.states.async_set(excess_sensor_id, STATE_UNAVAILABLE)
         await hass.async_block_till_done()
 
         # Reset mocks as calls might have occurred during setup
@@ -159,6 +161,14 @@ async def test_watchdog_resets_on_sensor_update(
         assert hass.states.get("switch.test_switch").state == "on"
         mock_async_call.reset_mock()
 
+        # Mark the excess sensor dead so the (time-)stale watchdog trips the fail-safe —
+        # a live value would now be held as fresh (watchdog liveness).
+        excess_sensor_id = (
+            f"sensor.{DOMAIN}_{SENSOR_EXCESS_SUFFIX}_{config_entry.entry_id}"
+        )
+        hass.states.async_set(excess_sensor_id, STATE_UNAVAILABLE)
+        await hass.async_block_till_done()
+
         # Advance time beyond watchdog_stale_after
         future_time = dt_util.utcnow() + timedelta(minutes=3, seconds=10)
         freezer.move_to(future_time)
@@ -174,8 +184,10 @@ async def test_watchdog_resets_on_sensor_update(
         hass.states.async_set("switch.test_switch", "off")
         assert hass.states.get("switch.test_switch").state == "off"
 
-        # Simulate sensor update
+        # Simulate sensor update — excess sensor recomputes to a live value, so the
+        # watchdog treats the pipeline as alive again and does NOT re-enforce OFF.
         mock_async_call.reset_mock()
+        hass.states.async_set(excess_sensor_id, "150")
         hass.states.async_set("sensor.test_pv_power", "260")
         hass.states.async_set("sensor.test_pv_voltage", "36")
         await hass.async_block_till_done()

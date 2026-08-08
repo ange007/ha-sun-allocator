@@ -129,7 +129,7 @@ async def test_full_config_flow_creates_entry(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
-            "mppt_count": 1,
+            "mppt_count": "1",
             CONF_TEMPERATURE_COMPENSATION_ENABLED: False,
             CONF_ADVANCED_SETTINGS_ENABLED: False,
         },
