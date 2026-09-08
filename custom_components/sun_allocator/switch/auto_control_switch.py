@@ -92,13 +92,37 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
                 config_entry, data={**config_entry.data, CONF_DEVICES: devices}
             )
 
+    async def _reeval(self) -> None:
+        """Kick an immediate allocation run so an enable/disable takes effect at once,
+        not only on the next natural excess change (which may be far off — e.g. at night
+        when the excess sensor is a steady 0 W, leaving the toggle without effect for
+        minutes/hours)."""
+        entry_data = self._entry_data()
+        config_entry = self._hass.config_entries.async_get_entry(self._entry_id)
+        if entry_data is None or config_entry is None:
+            return
+        from ..core.timed_run import _trigger_reeval
+
+        await _trigger_reeval(self._hass, config_entry, entry_data)
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         self._is_on = True
         entry_data = self._entry_data()
         if entry_data:
-            entry_data.get("manual_overrides", {}).pop(self._device_id, None)
+            # Clean slate so re-entering auto-control is a FRESH evaluation, never misread
+            # as a user toggle: an autonomous state change WHILE auto was disabled (e.g. a
+            # climate thermostat cycling off) would otherwise stick a phantom manual
+            # override via _detect_external_change on the first cycle back, leaving the
+            # device permanently in `manual_override` and never auto-controlled again.
+            for key in (
+                "manual_overrides", "device_on_state", "last_controlled_at", "command_retries",
+            ):
+                d = entry_data.get(key)
+                if isinstance(d, dict):
+                    d.pop(self._device_id, None)
         self.async_write_ha_state()
         await self._persist_to_config(True)
+        await self._reeval()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         self._is_on = False
@@ -114,3 +138,4 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
                 relay_entity, _ = parse_relay_entity(dev_cfg.get(CONF_DEVICE_ENTITY))
                 if relay_entity:
                     await turn_off_entity(self._hass, relay_entity, dev_cfg.get("device_name", ""))
+        await self._reeval()

@@ -8,6 +8,18 @@ is approximate. This project tracks its version in
 `custom_components/sun_allocator/manifest.json` (used by HACS) and, from
 `1.1.0` onward, in matching `vX.Y.Z` git release tags.
 
+## [1.3.2] — 2026-09-08
+
+### Fixed
+- **Auto-control resumes cleanly after being re-enabled** — toggling a device's
+  **Automatic control** switch off and back on could leave it stuck in `manual_override`,
+  never auto-controlled again. A state change the device made on its own while auto-control
+  was off (e.g. a climate thermostat cycling) was misread as a user toggle on the first
+  cycle back, sticking a phantom manual override. Re-enabling now clears that device's stale
+  bookkeeping, and both toggles trigger an immediate re-evaluation, so the switch takes
+  effect at once instead of waiting for the excess sensor to move (which could be many
+  minutes when excess sits at a steady 0 W).
+
 ## [1.3.1] — 2026-08-03
 
 ### Added

@@ -194,3 +194,59 @@ async def test_sync_state_does_not_persist_to_config():
 
     assert sw.is_on is False
     hass.config_entries.async_update_entry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_turn_on_clears_phantom_state_and_reevals():
+    """Re-enabling auto-control must wipe stale per-device state so the device is not left
+    stuck in a phantom manual_override (produced by an autonomous change — e.g. a climate
+    thermostat cycling — while auto was disabled), and must kick an immediate re-eval so it
+    resumes without waiting for the excess sensor to move."""
+    hass = _make_hass()
+    devices = [{CONF_DEVICE_ID: "dev1", CONF_AUTO_CONTROL_ENABLED: False}]
+    entry_data = {
+        "manual_overrides": {"dev1": {"state": False, "since": None}},
+        "device_on_state": {"dev1": True},
+        "last_controlled_at": {"dev1": object()},
+        "command_retries": {"dev1": 2},
+    }
+    hass.data[DOMAIN]["entry_x"] = entry_data
+    hass.config_entries.async_get_entry.return_value = MagicMock(data={CONF_DEVICES: devices})
+
+    sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
+    sw.async_write_ha_state = MagicMock()
+
+    with patch(
+        "custom_components.sun_allocator.core.timed_run._trigger_reeval",
+        new_callable=AsyncMock,
+    ) as reeval:
+        await sw.async_turn_on()
+
+    assert sw.is_on is True
+    # Every phantom-inducing per-device entry is cleared → fresh auto evaluation next cycle.
+    assert "dev1" not in entry_data["manual_overrides"]
+    assert "dev1" not in entry_data["device_on_state"]
+    assert "dev1" not in entry_data["last_controlled_at"]
+    assert "dev1" not in entry_data["command_retries"]
+    reeval.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_turn_off_also_reevals():
+    """Disabling auto-control must take effect at once too — not only when the excess
+    sensor next moves (which can be minutes/hours at night)."""
+    hass = _make_hass()
+    devices = [{CONF_DEVICE_ID: "dev1", CONF_AUTO_CONTROL_ENABLED: True}]
+    hass.data[DOMAIN]["entry_x"] = {"manual_overrides": {}}
+    hass.config_entries.async_get_entry.return_value = MagicMock(data={CONF_DEVICES: devices})
+
+    sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
+    sw.async_write_ha_state = MagicMock()
+
+    with patch(
+        "custom_components.sun_allocator.core.timed_run._trigger_reeval",
+        new_callable=AsyncMock,
+    ) as reeval:
+        await sw.async_turn_off()
+
+    reeval.assert_awaited_once()

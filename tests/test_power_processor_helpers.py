@@ -379,3 +379,25 @@ def test_manual_on_external_off_logs_once_per_episode(monkeypatch):
     on = _hass_with_relay(_relay_state("on", now))
     pp._detect_external_change(on, device, "d1", entry_data, {}, device_on_state, now)
     assert "d1" not in entry_data["_external_off_logged"]
+
+
+def test_cleared_expected_state_cannot_create_phantom_override():
+    """Clean slate on auto-control re-enable: with device_on_state cleared the detector has
+    nothing to compare against and must NOT invent a manual override — even for an entity
+    that changed on its own (e.g. a climate cycling) while auto-control was disabled.
+    Without the clearing, that same reading is misread as a user toggle and sticks a phantom
+    override that leaves the device permanently in manual_override, never auto-controlled."""
+    now = datetime(2026, 9, 8, 19, 12, 0, tzinfo=timezone.utc)
+    hass = _hass_with_relay(_relay_state("heat_cool", now - timedelta(seconds=30)))
+    device = {CONF_DEVICE_ENTITY: "climate.x"}
+
+    # Cleared expected state (what the auto-control switch now does on re-enable).
+    entry_data = {"last_controlled_at": {"d1": now - timedelta(minutes=5)}}
+    pp._detect_external_change(hass, device, "d1", entry_data, {}, {}, now)
+    assert "d1" not in entry_data.get("manual_overrides", {})
+
+    # Contrast — the pre-fix path: a STALE expected state turns the same reading into a
+    # phantom sticky manual override.
+    entry_data_stale = {"last_controlled_at": {"d1": now - timedelta(minutes=5)}}
+    pp._detect_external_change(hass, device, "d1", entry_data_stale, {}, {"d1": False}, now)
+    assert entry_data_stale["manual_overrides"]["d1"]["state"] is True
