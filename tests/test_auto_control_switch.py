@@ -156,30 +156,32 @@ async def test_turn_on_clears_pending_manual_override():
     sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
     sw.async_write_ha_state = MagicMock()
 
-    await sw.async_turn_on()
+    with patch("custom_components.sun_allocator.setup_auto_control", new_callable=AsyncMock):
+        await sw.async_turn_on()
 
     assert sw.is_on is True
     assert "dev1" not in entry_data["manual_overrides"]
 
 
 @pytest.mark.asyncio
-async def test_restore_state_overrides_config_value_on_startup():
-    """RestoreEntity wins over the config value when both are available on startup."""
+async def test_config_is_the_single_source_of_truth_on_startup():
+    """The switch is NOT a RestoreEntity: its state comes from the config entry only.
+
+    Regression for the divergence that restore caused — the allocator reads
+    CONF_AUTO_CONTROL_ENABLED straight from config, so a restored "off" on a switch whose
+    config said "on" left the UI showing off while the loop kept controlling the device.
+    """
     hass = _make_hass()
     hass.data[DOMAIN]["entry_x"] = {}
     devices = [{CONF_DEVICE_ID: "dev1", CONF_AUTO_CONTROL_ENABLED: True}]
     sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
 
-    last_state = MagicMock()
-    last_state.state = "off"
+    assert not hasattr(sw, "async_get_last_state")
+    await sw.async_added_to_hass()
 
-    with patch.object(SunAllocatorDeviceAutoControlSwitch, "async_get_last_state",
-                      new_callable=AsyncMock, return_value=last_state):
-        with patch("homeassistant.helpers.restore_state.RestoreEntity.async_added_to_hass",
-                   new_callable=AsyncMock):
-            await sw.async_added_to_hass()
-
-    assert sw.is_on is False
+    assert sw.is_on is True
+    # Registered itself so the config flow can push state changes back in.
+    assert hass.data[DOMAIN]["entry_x"]["auto_control_switches"]["dev1"] is sw
 
 
 @pytest.mark.asyncio
@@ -219,7 +221,9 @@ async def test_turn_on_clears_phantom_state_and_reevals():
     with patch(
         "custom_components.sun_allocator.core.timed_run._trigger_reeval",
         new_callable=AsyncMock,
-    ) as reeval:
+    ) as reeval, patch(
+        "custom_components.sun_allocator.setup_auto_control", new_callable=AsyncMock
+    ):
         await sw.async_turn_on()
 
     assert sw.is_on is True
@@ -229,6 +233,76 @@ async def test_turn_on_clears_phantom_state_and_reevals():
     assert "dev1" not in entry_data["last_controlled_at"]
     assert "dev1" not in entry_data["command_retries"]
     reeval.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_turn_on_bootstraps_auto_control_when_it_was_never_set_up():
+    """If NO device had auto-control at startup, setup_auto_control returned early and the
+    excess-sensor listener / probe / watchdog timers were never created. Enabling the switch
+    later must bootstrap them, otherwise the toggle is a dead end until HA is restarted."""
+    hass = _make_hass()
+    devices = [{CONF_DEVICE_ID: "dev1", CONF_AUTO_CONTROL_ENABLED: False}]
+    entry_data = {"unsub_auto_control": None}
+    hass.data[DOMAIN]["entry_x"] = entry_data
+    config_entry = MagicMock(data={CONF_DEVICES: devices})
+    hass.config_entries.async_get_entry.return_value = config_entry
+
+    sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
+    sw.async_write_ha_state = MagicMock()
+
+    with patch(
+        "custom_components.sun_allocator.setup_auto_control", new_callable=AsyncMock
+    ) as setup, patch(
+        "custom_components.sun_allocator.core.timed_run._trigger_reeval",
+        new_callable=AsyncMock,
+    ):
+        await sw.async_turn_on()
+
+    setup.assert_awaited_once_with(hass, config_entry)
+
+
+@pytest.mark.asyncio
+async def test_turn_on_does_not_re_setup_a_live_auto_control():
+    """Infrastructure already running → no second subscription (would double-fire the loop)."""
+    hass = _make_hass()
+    devices = [{CONF_DEVICE_ID: "dev1", CONF_AUTO_CONTROL_ENABLED: False}]
+    hass.data[DOMAIN]["entry_x"] = {"unsub_auto_control": lambda: None}
+    hass.config_entries.async_get_entry.return_value = MagicMock(data={CONF_DEVICES: devices})
+
+    sw = SunAllocatorDeviceAutoControlSwitch(hass, "entry_x", devices[0])
+    sw.async_write_ha_state = MagicMock()
+
+    with patch(
+        "custom_components.sun_allocator.setup_auto_control", new_callable=AsyncMock
+    ) as setup, patch(
+        "custom_components.sun_allocator.core.timed_run._trigger_reeval",
+        new_callable=AsyncMock,
+    ):
+        await sw.async_turn_on()
+
+    setup.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_turn_on_survives_a_removed_config_entry():
+    """Entry deleted while the toggle was in flight → async_get_entry returns None. Must not
+    call setup_auto_control(hass, None)."""
+    hass = _make_hass()
+    hass.data[DOMAIN]["entry_x"] = {"unsub_auto_control": None}
+    hass.config_entries.async_get_entry.return_value = None
+
+    sw = SunAllocatorDeviceAutoControlSwitch(
+        hass, "entry_x", {CONF_DEVICE_ID: "dev1", CONF_AUTO_CONTROL_ENABLED: False}
+    )
+    sw.async_write_ha_state = MagicMock()
+
+    with patch(
+        "custom_components.sun_allocator.setup_auto_control", new_callable=AsyncMock
+    ) as setup:
+        await sw.async_turn_on()
+
+    setup.assert_not_awaited()
+    assert sw.is_on is True
 
 
 @pytest.mark.asyncio

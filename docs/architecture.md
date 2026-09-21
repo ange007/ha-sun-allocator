@@ -239,5 +239,5 @@ The migrator runs once at the start of every `async_setup_entry`. It is idempote
 - **Internal magic constants** live in `core/settings.py`; user-facing keys live in `const.py`.
 - **Entity IDs with hvac_mode** are stored as `climate.x|heat`. Always parse via `entity_control.parse_relay_entity` (returns `(entity_id, hvac_mode)`).
 - **Per-device entities** inherit from `sensor/sensors/base_device.BaseSunAllocatorDeviceSensor` to share `device_info` and the dispatcher subscription.
-- **Switch state precedence on startup**: `RestoreEntity` (last user action) > `CONF_AUTO_CONTROL_ENABLED` from config.
+- **Switch state on startup**: `CONF_AUTO_CONTROL_ENABLED` from the config entry, and nothing else. The auto-control switch is deliberately **not** a `RestoreEntity` — `power_processor` reads the flag from config, so a restored state that disagreed with config made the UI and the allocator diverge. Every toggle writes straight back to the config entry (`_persist_to_config`), which is what makes it survive a restart.
 - **Migrations**: never remove a migration method until you are confident every install has run it at least once (i.e. minimum supported integration version is past it).

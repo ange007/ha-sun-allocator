@@ -238,5 +238,5 @@ entity / device registry (`find_esphome_mode_select`).
 - **Внутрішні magic-константи** живуть у `core/settings.py`; user-facing ключі — у `const.py`.
 - **Entity ID з hvac_mode** зберігаються як `climate.x|heat`. Парсити завжди через `entity_control.parse_relay_entity` (повертає `(entity_id, hvac_mode)`).
 - **Per-device сутності** наслідують від `sensor/sensors/base_device.BaseSunAllocatorDeviceSensor` — спільне `device_info` та dispatcher subscription.
-- **Пріоритет стану світча на старті**: `RestoreEntity` (остання дія користувача) > `CONF_AUTO_CONTROL_ENABLED` з конфіга.
+- **Стан світча на старті**: лише `CONF_AUTO_CONTROL_ENABLED` з config entry. Світч авто-керування навмисно **не** є `RestoreEntity` — `power_processor` читає прапорець із конфіга, тож відновлений стан, що не збігався з конфігом, розводив UI та алокатор. Кожне перемикання одразу пишеться в config entry (`_persist_to_config`) — саме це і переживає перезапуск.
 - **Міграції**: ніколи не видаляйте метод міграції до того як упевнені що кожен інстал її виконав хоча б раз (тобто мінімальна підтримувана версія інтеграції вища за неї).

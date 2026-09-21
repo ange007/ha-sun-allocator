@@ -83,7 +83,7 @@ For every configured device the integration also creates:
 -   `sensor.sun_allocator_<device_name>_power` — current allocated power in W.
 -   `sensor.sun_allocator_<device_name>_power_percent` — proportional duty as %.
 -   `sensor.sun_allocator_<device_name>_device_status` — ENUM sensor with one of: `active`, `idle`, `insufficient_power`, `debouncing_on`, `debouncing_off`, `auto_control_off`, `manual_override`, `manual_active`, `filtered`, `trying_on`, `trying_off`, `failed_on`.
--   `switch.sun_allocator_<device_name>_auto_control` — runtime toggle for that device's auto-control. State persists across Home Assistant restarts (`RestoreEntity` + config sync). Turning it off immediately stops auto-control without removing the device from the config.
+-   `switch.sun_allocator_<device_name>_auto_control` — runtime toggle for that device's auto-control. State persists across Home Assistant restarts (every toggle is written straight to the config entry, which is the single source of truth). Turning it off immediately stops auto-control without removing the device from the config.
 -   `switch.sun_allocator_<device_name>_switch` — a **"Switch"** proxy that toggles the device's controlled entity on/off straight from the SunAllocator card and mirrors its live state. While auto-control is on, flipping it counts as a sticky manual toggle (`manual_active`). Only created for devices that control an entity.
 
 ### Example Automations

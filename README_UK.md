@@ -83,7 +83,7 @@ SunAllocator налаштовується виключно через інтер
 -   `sensor.sun_allocator_<device_name>_power` — поточна виділена потужність у Вт.
 -   `sensor.sun_allocator_<device_name>_power_percent` — пропорційне навантаження у %.
 -   `sensor.sun_allocator_<device_name>_device_status` — ENUM-сенсор зі станами: `active`, `idle`, `insufficient_power`, `debouncing_on`, `debouncing_off`, `auto_control_off`, `manual_override`, `manual_active`, `filtered`, `trying_on`, `trying_off`, `failed_on`.
--   `switch.sun_allocator_<device_name>_auto_control` — runtime-світч авто-керування пристроєм. Стан переживає перезапуск Home Assistant (`RestoreEntity` + синхронізація з конфігом). Вимикання миттєво зупиняє авто-керування без видалення пристрою з конфігу.
+-   `switch.sun_allocator_<device_name>_auto_control` — runtime-світч авто-керування пристроєм. Стан переживає перезапуск Home Assistant (кожне перемикання одразу пишеться в config entry — єдине джерело істини). Вимикання миттєво зупиняє авто-керування без видалення пристрою з конфігу.
 -   `switch.sun_allocator_<device_name>_switch` — проксі-**«Перемикач»**, що вмикає/вимикає керовану сутність пристрою прямо з картки SunAllocator і віддзеркалює її живий стан. Поки авто-керування ввімкнене, його перемикання рахується як липке ручне перемикання (`manual_active`). Створюється лише для пристроїв, які керують якоюсь сутністю.
 
 ### Приклади автоматизацій

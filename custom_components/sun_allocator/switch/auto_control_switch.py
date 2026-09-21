@@ -122,10 +122,10 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity):
         # had auto_control_enabled=True), set it up now so the excess sensor
         # listener, probe timer, and watchdog timer exist for future cycles.
         entry_data = self._entry_data()
-        if entry_data and not entry_data.get("unsub_auto_control"):
+        config_entry = self._hass.config_entries.async_get_entry(self._entry_id)
+        if entry_data and config_entry and not entry_data.get("unsub_auto_control"):
             from .. import setup_auto_control
-            await setup_auto_control(self._hass,
-                self._hass.config_entries.async_get_entry(self._entry_id))
+            await setup_auto_control(self._hass, config_entry)
 
         await self._reeval()
 
