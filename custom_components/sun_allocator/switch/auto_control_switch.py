@@ -4,9 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.const import STATE_OFF
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.restore_state import RestoreEntity
 
 from ..const import (
     DOMAIN,
@@ -20,12 +18,12 @@ from ..core.entity_control import turn_off_entity, parse_relay_entity
 from ..sensor.utils import get_device_info
 
 
-class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
+class SunAllocatorDeviceAutoControlSwitch(SwitchEntity):
     """Runtime toggle for auto-control of a single device.
 
-    State precedence on startup: RestoreEntity (last user state) > config value.
+    State is driven by config_entry data (``CONF_AUTO_CONTROL_ENABLED``).
     Toggling persists to the config entry without triggering a reload (via the
-    `_skip_reload` flag consumed by the entry update listener).
+    ``_skip_reload`` flag consumed by the entry update listener).
     """
 
     _attr_has_entity_name = True
@@ -55,9 +53,6 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state in ("on", STATE_OFF):
-            self._is_on = last_state.state != STATE_OFF
         entry_data = self._entry_data()
         if entry_data is not None:
             entry_data.setdefault("auto_control_switches", {})[self._device_id] = self
@@ -122,6 +117,16 @@ class SunAllocatorDeviceAutoControlSwitch(SwitchEntity, RestoreEntity):
                     d.pop(self._device_id, None)
         self.async_write_ha_state()
         await self._persist_to_config(True)
+
+        # If auto-control infrastructure was not set up at startup (no devices
+        # had auto_control_enabled=True), set it up now so the excess sensor
+        # listener, probe timer, and watchdog timer exist for future cycles.
+        entry_data = self._entry_data()
+        if entry_data and not entry_data.get("unsub_auto_control"):
+            from .. import setup_auto_control
+            await setup_auto_control(self._hass,
+                self._hass.config_entries.async_get_entry(self._entry_id))
+
         await self._reeval()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
