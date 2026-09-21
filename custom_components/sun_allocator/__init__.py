@@ -415,6 +415,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigType):
         "config": config_entry.data,
         "unsub_update_listener": None,
         "unsub_auto_control": None,
+        CONF_POWER_ALLOCATION: {},
     }
     hass.data[DOMAIN][config_entry.entry_id] = entry_data
     rebuild_device_index(hass)
